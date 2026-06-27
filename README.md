@@ -7,7 +7,7 @@ Config-driven video editor. AI agent proposes diffs to `config.json`; preview an
 ```sh
 cp .env.example .env   # add OPENAI_API_KEY
 npm install
-npm run electron:dev   # server + Vite + Electron
+npm run electron:dev   # Vite + Electron
 ```
 
 ## Docs
