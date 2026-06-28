@@ -1,6 +1,6 @@
 {
   "name": "ctrlb-ai",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "ctrlb.ai - AI-powered video creation tool",
   "author": "sparky0520",
   "private": true,
@@ -16,7 +16,10 @@
   "build": {
     "appId": "ai.ctrlb.app",
     "productName": "ctrlb.ai",
-    "icon": "icon.png",
+    "icon": "public/icon.png",
+    "directories": {
+      "output": "release"
+    },
     "extraMetadata": {
       "main": "electron/main.cjs"
     },

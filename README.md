@@ -21,6 +21,14 @@ git push origin v0.1.0
 
 The GitHub Actions workflow builds the `.exe` and publishes it to GitHub Releases automatically.
 
+To build locally:
+
+```sh
+npm run electron:build
+```
+
+The installer is output to `release/ctrlb.ai Setup <version>.exe`.
+
 ## Docs
 
 - [`docs/human/README.html`](docs/human/README.html) — visual project overview (open in browser)
