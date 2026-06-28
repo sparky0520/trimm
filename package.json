@@ -1,6 +1,8 @@
 {
   "name": "ctrlb-ai",
   "version": "0.1.0",
+  "description": "ctrlb.ai - AI-powered video creation tool",
+  "author": "sparky0520",
   "private": true,
   "type": "module",
   "main": "electron/main.cjs",
@@ -14,6 +16,7 @@
   "build": {
     "appId": "ai.ctrlb.app",
     "productName": "ctrlb.ai",
+    "icon": "icon.png",
     "extraMetadata": {
       "main": "electron/main.cjs"
     },
@@ -34,6 +37,11 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "sparky0520",
+      "repo": "ctrlb-app"
     }
   },
   "devDependencies": {
