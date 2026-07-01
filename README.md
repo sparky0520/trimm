@@ -1,8 +1,8 @@
-# ctrlb.ai
+# ctrlb
 
 Config-driven video editor. AI agent proposes diffs to `config.json`; preview and timeline derive from it. Electron + React 19 + Vite + OpenAI.
 
-**Landing page:** [sparky0520.github.io/ctrlb-app](https://sparky0520.github.io/ctrlb-app/)
+**Landing page:** [sparky0520.github.io/ctrlb](https://sparky0520.github.io/ctrlb/)
 
 ## Quick start
 
@@ -27,7 +27,7 @@ To build locally:
 npm run electron:build
 ```
 
-The installer is output to `release/ctrlb.ai Setup <version>.exe`.
+The installer is output to `release/ctrlb Setup <version>.exe`.
 
 ## Docs
 

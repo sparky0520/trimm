@@ -1,7 +1,7 @@
 {
-  "name": "ctrlb-ai",
+  "name": "ctrlb",
   "version": "0.2.0",
-  "description": "ctrlb.ai - AI-powered video creation tool",
+  "description": "ctrlb - AI-powered video creation tool",
   "author": "sparky0520",
   "private": true,
   "type": "module",
@@ -15,7 +15,7 @@
   },
   "build": {
     "appId": "ai.ctrlb.app",
-    "productName": "ctrlb.ai",
+    "productName": "ctrlb",
     "icon": "public/icon.png",
     "directories": {
       "output": "release"
@@ -44,7 +44,7 @@
     "publish": {
       "provider": "github",
       "owner": "sparky0520",
-      "repo": "ctrlb-app"
+      "repo": "ctrlb"
     }
   },
   "devDependencies": {
