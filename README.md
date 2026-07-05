@@ -19,7 +19,18 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The GitHub Actions workflow builds the `.exe` and publishes it to GitHub Releases automatically.
+The GitHub Actions workflow builds the Windows installer and publishes the public binary to `sparky0520/ctrlb-releases`.
+
+One-time setup:
+
+1. Create a public repository named `ctrlb-releases`.
+2. Add a fine-grained personal access token as the private repo secret `PUBLIC_RELEASES_TOKEN`.
+3. Give that token `Contents: Read and write` access to `sparky0520/ctrlb-releases`.
+
+Public download URLs:
+
+- `https://github.com/sparky0520/ctrlb-releases/releases/latest`
+- `https://github.com/sparky0520/ctrlb-releases/releases/latest/download/ctrlb-Setup-Windows.exe`
 
 To build locally:
 
