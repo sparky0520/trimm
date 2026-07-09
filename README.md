@@ -1,8 +1,6 @@
 # ctrlb
 
-Config-driven video editor. AI agent proposes diffs to `config.json`; preview and timeline derive from it. Electron + React 19 + Vite + OpenAI.
-
-**Landing page:** [sparky0520.github.io/ctrlb](https://sparky0520.github.io/ctrlb/)
+**Cursor for video editing** - AI-powered video editor with a minimal interface. Just a video preview (like a code editor window) and a chatbox (like Cursor's AI agent chat).
 
 ## Quick start
 
@@ -12,38 +10,21 @@ npm install
 npm run electron:dev   # Vite + Electron
 ```
 
-## Release
+## How it works
 
-```sh
-git tag v0.1.0
-git push origin v0.1.0
-```
+1. **Import** a video clip via the Import button
+2. **Chat** with the AI agent to make edits: "Trim dead air", "Add text overlay", "Speed up section"
+3. The AI proposes edits to the config, and you can **Apply** or **Reject** them
+4. **Save** your project to continue editing later
 
-The GitHub Actions workflow builds the Windows installer and publishes the public binary to `sparky0520/ctrlb-releases`.
+## Features
 
-One-time setup:
+- Video preview with play/pause/scrub controls
+- AI chat interface for natural language video editing
+- Inline diff cards showing proposed changes
+- Project save/load functionality
+- Basic video editing: trim, speed, zoom, text overlays, color cards
 
-1. Create a public repository named `ctrlb-releases`.
-2. Add a fine-grained personal access token as the private repo secret `PUBLIC_RELEASES_TOKEN`.
-3. Give that token `Contents: Read and write` access to `sparky0520/ctrlb-releases`.
+## Export
 
-Public download URLs:
-
-- `https://github.com/sparky0520/ctrlb-releases/releases/latest`
-- `https://github.com/sparky0520/ctrlb-releases/releases/latest/download/ctrlb-Setup-Windows.exe`
-
-To build locally:
-
-```sh
-npm run electron:build
-```
-
-The installer is output to `release/ctrlb Setup <version>.exe`.
-
-## Docs
-
-- [`docs/human/README.html`](docs/human/README.html) — visual project overview (open in browser)
-- [`docs/ai/Architecture.md`](docs/ai/Architecture.md) — state shape, edit flows, file map
-- [`docs/ai/Design.md`](docs/ai/Design.md) — component specs, design tokens
-- [`docs/ai/Tickets.md`](docs/ai/Tickets.md) — open work items
-- [`docs/ai/AGENTS.md`](docs/ai/AGENTS.md) — invariants, AI agent rules, definition of done
+Currently in development - video export functionality coming soon.

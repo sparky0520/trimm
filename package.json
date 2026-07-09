@@ -1,7 +1,7 @@
 {
   "name": "ctrlb",
-  "version": "0.2.0",
-  "description": "ctrlb - AI-powered video creation tool",
+  "version": "0.3.0",
+  "description": "Cursor for video editing - AI-powered video editor with minimal interface",
   "author": "sparky0520",
   "private": true,
   "type": "module",
@@ -10,8 +10,7 @@
     "dev": "vite",
     "preview": "vite preview",
     "electron:dev": "concurrently -n vite,electron -c green,blue \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "vite build && electron-builder --win",
-    "electron:build:mac": "vite build && electron-builder --mac"
+    "electron:build": "vite build && electron-builder --win"
   },
   "build": {
     "appId": "ai.ctrlb.app",
@@ -27,12 +26,8 @@
       "dist/**/*",
       "electron/**/*",
       "remotion/**/*",
-      "server/**/*",
       "package.json",
       "node_modules/**/*"
-    ],
-    "asarUnpack": [
-      "node_modules/@remotion/compositor-*/**/*"
     ],
     "win": {
       "target": "nsis"
@@ -51,17 +46,13 @@
     "concurrently": "^9.0.0",
     "electron": "^42.5.0",
     "electron-builder": "^26.15.3",
-    "playwright": "^1.60.0",
     "vite": "^6.0.0",
     "wait-on": "^9.0.10"
   },
   "dependencies": {
-    "@remotion/bundler": "^4.0.484",
     "@remotion/player": "^4.0.484",
-    "@remotion/renderer": "^4.0.484",
     "@vitejs/plugin-react": "^5.2.0",
     "dotenv": "^17.4.2",
-    "express": "^4.21.0",
     "openai": "^6.42.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
