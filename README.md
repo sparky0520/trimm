@@ -27,4 +27,4 @@ npm run electron:dev   # Vite + Electron
 
 ## Export
 
-Currently in development - video export functionality coming soon.
+Click **Export MP4** after importing a video. Choose a destination in the native save dialog; ctrlb renders the current composition and edits to an H.264 MP4.
