@@ -51,6 +51,7 @@
   },
   "dependencies": {
     "@fontsource/jetbrains-mono": "^5.2.8",
+    "@fontsource/manrope": "^5.2.8",
     "@remotion/bundler": "^4.0.484",
     "@remotion/player": "^4.0.484",
     "@remotion/renderer": "^4.0.484",
