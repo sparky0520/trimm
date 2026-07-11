@@ -23,13 +23,13 @@ npm install
 cp .env.example .env
 ```
 
-Set `OPENAI_API_KEY` in `.env`, then run:
+Set `OPENAI_API_KEY` and `ASSEMBLYAI_API_KEY` in `.env`, then run:
 
 ```sh
 npm run electron:dev
 ```
 
-The key is loaded only by the Electron main process. It is not placed in the renderer or production web assets. AI planning and audio transcription currently use OpenAI; see [Media analysis and privacy](docs/user-guide.md#media-analysis-and-privacy) before importing sensitive footage.
+The keys are loaded only by the Electron main process. They are not placed in the renderer or production web assets. AI planning uses OpenAI and audio transcription uses AssemblyAI; see [Media analysis and privacy](docs/user-guide.md#media-analysis-and-privacy) before importing sensitive footage.
 
 ## Documentation
 
@@ -39,4 +39,4 @@ The key is loaded only by the Electron main process. It is not placed in the ren
 
 ## Current limits
 
-ctrlB supports one source video per project and is designed around narrated developer recordings. It does not currently provide multi-camera editing, a timeline/inspector, complex motion graphics, automatic B-roll, generative media, music selection, style imitation, collaboration, cloud sharing, or mobile workflows. Legacy unversioned project files are rejected rather than migrated. Audio transcription accepts files up to 25 MB.
+ctrlB supports one source video per project and is designed around narrated developer recordings. It does not currently provide multi-camera editing, a timeline/inspector, complex motion graphics, automatic B-roll, generative media, music selection, style imitation, collaboration, cloud sharing, or mobile workflows. Legacy unversioned project files are rejected rather than migrated. AssemblyAI transcription accepts local media files up to 2.2 GB.
