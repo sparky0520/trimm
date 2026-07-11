@@ -8,7 +8,13 @@
   "main": "electron/main.cjs",
   "scripts": {
     "test": "node --test",
+    "test:unit": "node --test test/schema.test.js test/apply-operations.test.js test/proposals.test.js",
+    "test:contracts": "node --test test/operations.test.js test/ai-response.test.js test/ai-planner.test.cjs",
+    "test:render-smoke": "node --test test/build.test.js test/render-timing.test.js test/packaged-workflow.test.js && node scripts/render-mp4-smoke.cjs",
     "test:ai-evals": "node --test test/ai-evaluations.test.js",
+    "verify:production": "node scripts/verify-production-build.cjs dist release/win-unpacked",
+    "verify:ci": "npm run test:unit && npm run test:contracts && npm run test:render-smoke && npm test && npm run build && npm run verify:production",
+    "build": "vite build",
     "dev": "vite",
     "preview": "vite preview",
     "electron:dev": "concurrently -n vite,electron -c green,blue \"vite\" \"wait-on http://localhost:5173 && electron .\"",
