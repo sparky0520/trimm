@@ -8,6 +8,7 @@
   "main": "electron/main.cjs",
   "scripts": {
     "test": "node --test",
+    "test:ai-evals": "node --test test/ai-evaluations.test.js",
     "dev": "vite",
     "preview": "vite preview",
     "electron:dev": "concurrently -n vite,electron -c green,blue \"vite\" \"wait-on http://localhost:5173 && electron .\"",
