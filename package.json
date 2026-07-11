@@ -1,6 +1,6 @@
 {
   "name": "ctrlb",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Cursor for video editing - AI-powered video editor with minimal interface",
   "author": "sparky0520",
   "private": true,
@@ -15,6 +15,7 @@
     "verify:production": "node scripts/verify-production-build.cjs dist release/win-unpacked",
     "verify:ci": "npm run test:unit && npm run test:contracts && npm run test:render-smoke && npm test && npm run build && npm run verify:production",
     "build": "vite build",
+    "build:icon": "electron scripts/build-electron-icon.cjs",
     "dev": "vite",
     "preview": "vite preview",
     "electron:dev": "concurrently -n vite,electron -c green,blue \"vite\" \"wait-on http://localhost:5173 && electron .\"",
@@ -23,7 +24,7 @@
   "build": {
     "appId": "ai.ctrlb.app",
     "productName": "ctrlb",
-    "icon": "public/icon.png",
+    "icon": "public/ctrlb-mark.png",
     "directories": {
       "output": "release"
     },
@@ -33,6 +34,7 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
+      "public/ctrlb-mark.png",
       "remotion/**/*",
       "package.json",
       "node_modules/**/*"
