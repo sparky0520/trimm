@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: ctrlb-backend
+    runtime: docker
+    dockerfilePath: ./services/backend/Dockerfile
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: ASSEMBLYAI_API_KEY
+        sync: false
+      - key: MOONSHOT_API_KEY
+        sync: false
+      - key: MOONSHOT_BASE_URL
+        value: https://api.moonshot.ai/v1
+      - key: MOONSHOT_MODEL
+        value: kimi-k3
+      - key: CTRLB_DESKTOP_AI_PROVIDER
+        value: kimi
+      - key: CTRLB_PLANNER_CLIENT_TOKEN
+        sync: false

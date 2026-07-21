@@ -21,6 +21,8 @@
     "dev": "vite apps/desktop --config apps/desktop/vite.config.js",
     "preview": "vite preview apps/desktop --config apps/desktop/vite.config.js",
     "planner:serve": "node services/backend/server/mobile-planner.cjs",
+    "streaming:serve": "node services/backend/server/mobile-planner.cjs",
+    "backend:serve": "node services/backend/server/mobile-planner.cjs",
     "audio:ingest": "node services/backend/scripts/ingest-audio.cjs --output services/backend/public/audio",
     "electron:dev": "concurrently -n vite,electron -c green,blue \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:build": "npm run build && electron-builder --win"

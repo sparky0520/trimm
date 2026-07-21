@@ -6,6 +6,7 @@ const http = require('node:http');
 const crypto = require('node:crypto');
 const OpenAI = require('openai').default;
 const transcriptionCore = require('./transcription-core.cjs');
+const desktopPlanner = require('./desktop-planner-core.cjs');
 
 const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.MOONSHOT_API_KEY;
@@ -41,22 +42,49 @@ function validateProposal(value, revision) {
   return value;
 }
 
-async function collect(request) {
+async function collect(request, maxBytes = MAX_BODY_BYTES) {
   const chunks = []; let size = 0;
-  for await (const chunk of request) { size += chunk.length; if (size > MAX_BODY_BYTES) throw Object.assign(new Error('Request too large'), { status: 413 }); chunks.push(chunk); }
+  for await (const chunk of request) { size += chunk.length; if (size > maxBytes) throw Object.assign(new Error('Request too large'), { status: 413 }); chunks.push(chunk); }
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+async function planDesktop(payload) {
+  const frames = Array.isArray(payload?.frameImages) ? payload.frameImages : [];
+  if (!payload || !desktopPlanner.validateRequest(payload.request) || frames.length > 6 || frames.some((frame) =>
+    !frame || typeof frame.id !== 'string' || typeof frame.data !== 'string' || frame.data.length > 1_000_000 || !/^[a-zA-Z0-9+/=]+$/.test(frame.data))) {
+    throw Object.assign(new Error('Invalid desktop planner request'), { status: 400 });
+  }
+  const provider = String(process.env.CTRLB_DESKTOP_AI_PROVIDER || 'kimi').toLowerCase();
+  if (!['kimi', 'openai'].includes(provider)) throw Object.assign(new Error('Unsupported desktop AI provider configuration'), { status: 503 });
+  return desktopPlanner.createAiPlanner({
+    provider,
+    apiKey: provider === 'openai' ? process.env.OPENAI_API_KEY : process.env.MOONSHOT_API_KEY,
+    baseURL: provider === 'kimi' ? baseURL : undefined,
+    model: provider === 'openai' ? process.env.CTRLB_DESKTOP_OPENAI_MODEL : model,
+    frameDataById: Object.fromEntries(frames.map((frame) => [frame.id, frame.data])),
+  })(payload.request);
 }
 
 const server = http.createServer(async (request, response) => {
   if (request.method === 'GET' && request.url === '/health') return json(response, 200, { ok: true, model });
-  if (request.method === 'POST' && request.url === '/v1/mobile/transcribe') {
+  if (request.method === 'POST' && request.url === '/v1/transcribe') {
     if (!authorized(request)) return json(response, 401, { error: 'Unauthorized' });
     try {
       transcriptionCore.validateUpload(request.headers);
       return json(response, 200, await transcriptionCore.transcribe(request));
     } catch (error) {
-      console.error('[mobile-transcribe] request failed', { message: error?.message, status: error?.status });
+      console.error('[transcribe] request failed', { message: error?.message, status: error?.status });
       return json(response, error?.status && Number.isInteger(error.status) ? error.status : 502, { error: error?.message || 'Transcription failed' });
+    }
+  }
+  if (request.method === 'POST' && request.url === '/v1/desktop/plan') {
+    if (!authorized(request)) return json(response, 401, { error: 'Unauthorized' });
+    try {
+      const result = await planDesktop(await collect(request, 7 * 1024 * 1024));
+      return json(response, result.ok ? 200 : result.error?.category === 'authentication' ? 503 : 502, result);
+    } catch (error) {
+      console.error('[desktop-planner] request failed', { message: error?.message, status: error?.status });
+      return json(response, Number.isInteger(error?.status) ? error.status : 502, { error: error?.message || 'Planner failed' });
     }
   }
   if (request.method !== 'POST' || request.url !== '/v1/mobile/plan') return json(response, 404, { error: 'Not found' });
@@ -84,4 +112,9 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
-server.listen(port, () => console.log(`[mobile-planner] listening on :${port} with ${model}`));
+// A transcription request includes both a potentially slow mobile upload and
+// the provider wait. Keep it streaming instead of terminating it at Node's
+// default whole-request timeout.
+server.requestTimeout = 0;
+server.keepAliveTimeout = 65_000;
+server.listen(port, () => console.log(`[ctrlb-backend] listening on :${port} with ${model}`));

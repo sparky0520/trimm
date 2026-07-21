@@ -10,7 +10,7 @@ export default async function mobileTranscribe(request, response) {
     transcriptionCore.validateUpload(request.headers);
     return response.status(200).json(await transcriptionCore.transcribe(request));
   } catch (error) {
-    console.error('[mobile-transcribe] request failed', { message: error?.message, status: error?.status });
+    console.error('[transcribe] request failed', { message: error?.message, status: error?.status });
     return response.status(Number.isInteger(error?.status) ? error.status : 502).json({ error: error?.message || 'Transcription failed' });
   }
 }
