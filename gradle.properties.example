@@ -1,0 +1,7 @@
+# Copy these values into ~/.gradle/gradle.properties for local builds or inject them in CI.
+# Do not commit real credentials.
+CTRLB_PLANNER_URL=https://planner.example.com/v1/mobile/plan
+# Development bootstrap token only. Replace this shared-token scheme with user-scoped JWTs before public release.
+CTRLB_PLANNER_TOKEN=1234567890
+CTRLB_TRANSCRIPTION_URL=https://planner.example.com/v1/mobile/transcribe
+CTRLB_AUDIO_CATALOG_URL=https://cdn.example.com/ctrlb/audio/catalog.v1.json
