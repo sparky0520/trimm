@@ -40,3 +40,7 @@ The keys are loaded only by the Electron main process. They are not placed in th
 ## Current limits
 
 ctrlB supports one source video per project and is designed around narrated developer recordings. It does not currently provide multi-camera editing, a timeline/inspector, complex motion graphics, automatic B-roll, generative media, music selection, style imitation, collaboration, cloud sharing, or mobile workflows. Legacy unversioned project files are rejected rather than migrated. AssemblyAI transcription accepts local media files up to 2.2 GB.
+
+## Android editor
+
+An Android-first talking-head editor is under active development in [`android/`](android/README.md). It contains the native Compose workflow, versioned operation model, on-device analysis boundaries, conservative fumble detection, capability-aware export planning, and privacy contract while leaving the desktop application intact.
