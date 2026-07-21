@@ -17,7 +17,7 @@ import java.util.UUID
     val pace: Pace = Pace.NATURAL,
     val style: VisualStyle = VisualStyle.NATURAL,
     val captions: Boolean = true,
-    val music: MusicChoice = MusicChoice.AUTOMATIC,
+    val music: MusicChoice = MusicChoice.NONE,
     val mustKeep: String = ""
 )
 @Serializable enum class Platform { YOUTUBE, INSTAGRAM, TIKTOK, LINKEDIN }

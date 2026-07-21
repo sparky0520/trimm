@@ -64,7 +64,13 @@ npm run audio:ingest -- --id calm-ambient-01 --url "https://www.youtube.com/watc
 
 Add `--attribution-required --attribution "Artist — Track (license)"` when required. The command refuses unconfirmed rights, non-HTTPS and non-YouTube sources, generates an MP3 and SHA-256 checksum, and atomically updates `public/audio/catalog.v1.json`. Run ingestion outside the APK; never ship browser cookies or `yt-dlp` in Android.
 
-Use `SOUND_EFFECT` for effects. The generated default draft currently refers to `bundled-soft-rise`, so either include that ID or change the recipe. The app rejects blank licenses, non-HTTPS downloads, and checksum mismatches. Assets are downloaded before rendering and retained in private app storage.
+Use `SOUND_EFFECT` for effects. The app rejects blank licenses, non-HTTPS downloads, and checksum mismatches. Assets are downloaded before rendering and retained in private app storage.
+
+The catalog is intentionally optional during initial testing. New projects default to no background music and do not add a sound effect, so preview and export work while `CTRLB_AUDIO_CATALOG_URL` is empty. Music and sound-effect selection remain unavailable until a licensed catalog and CDN are configured; this follow-up is tracked as AI-042.
+
+### Known transcription limit
+
+The current Vercel transcription route accepts direct media uploads, but Vercel's request-body limit is much lower than the app's 1 GiB local validation limit. Small test clips can use the route; typical or large phone recordings need presigned object storage or the streaming Node service before this flow is production-ready. This follow-up is tracked as AI-041.
 
 ## Current rendering behavior
 

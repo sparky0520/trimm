@@ -80,7 +80,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             if (current.preferences.music == MusicChoice.AUTOMATIC) add(SetBackgroundMusic(catalogId = "automatic"))
             if (current.preferences.captions && words.isNotEmpty()) add(AddCaptions(cues = CaptionSegmenter.segment(words)))
             add(AddMotionPreset(range = TimeRange(0, minOf(2_400, durationMs)), preset = "talking-head-title", intensity = .45f))
-            add(AddSoundEffect(atSourceMs = 0, catalogId = "bundled-soft-rise", gainDb = -16f))
             automatic.take(3).forEach { candidate -> add(AddTransition(atSourceMs = candidate.range.endMs, preset = "dip", durationMs = 220)) }
         }
         val capability = DeviceCapability.evaluate(getApplication())
