@@ -69,22 +69,27 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun generateDraft(words: List<TranscriptWord> = emptyList()) {
         val current = mutable.value; val sources = current.sources
+        val preferences = current.preferences.copy(captions = false)
         val source = requireNotNull(sources.firstOrNull())
         val durationMs = sources.sumOf { it.durationMs }
-        val candidates = FumbleDetector.detect(words, durationMs, current.preferences.pace)
+        val candidates = FumbleDetector.detect(words, durationMs, preferences.pace)
         val automatic = FumbleDetector.automatic(candidates)
         val operations = buildList<EditOperation> {
             if (automatic.isNotEmpty()) add(RemoveFumbles(ranges = automatic.map { it.range }, confidence = automatic.minOf { it.confidence }, reasons = automatic.map { it.reason }.distinct()))
-            add(SetColorGrade(grade = GradeEngine.natural(emptyList(), current.preferences.style)))
+            add(SetColorGrade(grade = GradeEngine.natural(emptyList(), preferences.style)))
             if (source.hasAudio) { add(SetAudioCleanup()); add(SetAudioLevels()) }
-            if (current.preferences.music == MusicChoice.AUTOMATIC) add(SetBackgroundMusic(catalogId = "automatic"))
-            if (current.preferences.captions && words.isNotEmpty()) add(AddCaptions(cues = CaptionSegmenter.segment(words)))
+            if (preferences.music == MusicChoice.AUTOMATIC) add(SetBackgroundMusic(catalogId = "automatic"))
             add(AddMotionPreset(range = TimeRange(0, minOf(2_400, durationMs)), preset = "talking-head-title", intensity = .45f))
             automatic.take(3).forEach { candidate -> add(AddTransition(atSourceMs = candidate.range.endMs, preset = "dip", durationMs = 220)) }
         }
         val capability = DeviceCapability.evaluate(getApplication())
-        val project = MobileProject(title = "Talking head edit", source = source, sources = sources, preferences = current.preferences, analysis = Analysis(words = words, lowConfidenceFumbles = candidates.filter { it.confidence < .93f }), operations = operations,
-            export = ExportSettings(capability.recommendedWidth, capability.recommendedHeight, if (capability.allow4k) "video/hevc" else "video/avc", if (capability.allow4k) 45_000_000 else 16_000_000))
+        val (exportWidth, exportHeight) = when (preferences.aspectRatio) {
+            AspectRatio.LANDSCAPE -> capability.recommendedWidth to capability.recommendedHeight
+            AspectRatio.PORTRAIT -> capability.recommendedHeight to capability.recommendedWidth
+            AspectRatio.SQUARE -> capability.recommendedHeight to capability.recommendedHeight
+        }
+        val project = MobileProject(title = "Talking head edit", source = source, sources = sources, preferences = preferences, analysis = Analysis(words = words, lowConfidenceFumbles = candidates.filter { it.confidence < .93f }), operations = operations,
+            export = ExportSettings(exportWidth, exportHeight, if (capability.allow4k) "video/hevc" else "video/avc", if (capability.allow4k) 45_000_000 else 16_000_000))
         mutable.value = current.copy(project = project, wizardStep = 4, capabilityMessage = capability.reasons.takeIf { it.isNotEmpty() }?.joinToString(". "))
         viewModelScope.launch { store.save(project) }
         val request = OneTimeWorkRequestBuilder<AnalysisWorker>().setInputData(Data.Builder().putString("projectId", project.id).build()).addTag("analysis:${project.id}").build()

@@ -14,6 +14,7 @@ import androidx.work.Data
 import androidx.work.WorkerParameters
 import android.content.ContentValues
 import android.provider.MediaStore
+import android.util.Log
 
 abstract class ProgressWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     suspend fun progress(stage: String, percent: Int) = setProgress(Data.Builder().putString("stage", stage).putInt("percent", percent).build())
@@ -81,7 +82,16 @@ class ExportWorker(context: Context, params: WorkerParameters) : ProgressWorker(
         val project = AudioAssetRepository(applicationContext).prepare(store.load(projectId))
         store.save(project)
         val capability = DeviceCapability.evaluate(applicationContext, inputData.getLong("estimatedBytes", 0))
-        val renderProject = if (capability.allow4k) project else project.copy(export = project.export.copy(width = 1920, height = 1080, codec = "video/avc", bitrate = 16_000_000))
+        val (width, height) = project.preferences.aspectRatio.outputSize(
+            if (capability.allow4k) 3840 else 1920,
+            if (capability.allow4k) 2160 else 1080
+        )
+        val renderProject = project.copy(export = project.export.copy(
+            width = width,
+            height = height,
+            codec = if (capability.allow4k) project.export.codec else "video/avc",
+            bitrate = if (capability.allow4k) project.export.bitrate else 16_000_000
+        ))
         progress(if (capability.allow4k) "export-4k" else "export-1080p-fallback", 1)
         val output = java.io.File(applicationContext.filesDir, "exports/${project.id}.mp4")
         ExportCoordinator.export(applicationContext, renderProject, output)
@@ -98,7 +108,10 @@ class ExportWorker(context: Context, params: WorkerParameters) : ProgressWorker(
         } catch (error: Throwable) { applicationContext.contentResolver.delete(published, null, null); throw error }
         progress("complete", 100)
         Result.success(Data.Builder().putString("outputUri", published.toString()).putBoolean("used4k", capability.allow4k).putStringArray("fallbackReasons", capability.reasons.toTypedArray()).build())
-    }.getOrElse { Result.failure(Data.Builder().putString("error", it.message).build()) }
+    }.getOrElse { error ->
+        Log.e("ExportWorker", "Video export failed", error)
+        Result.failure(Data.Builder().putString("error", error.detailedMessage("Video export failed")).build())
+    }
 }
 
 class PreviewWorker(context: Context, params: WorkerParameters) : ProgressWorker(context, params) {
@@ -112,8 +125,25 @@ class PreviewWorker(context: Context, params: WorkerParameters) : ProgressWorker
         }
         progress("preview", 5)
         val output = java.io.File(applicationContext.cacheDir, "previews/${prepared.id}-${prepared.revision}.mp4")
-        ExportCoordinator.export(applicationContext, prepared.copy(export = prepared.export.copy(width = 1280, height = 720, codec = "video/avc", bitrate = 5_000_000)), output)
+        val (previewWidth, previewHeight) = prepared.preferences.aspectRatio.outputSize(1280, 720)
+        ExportCoordinator.export(applicationContext, prepared.copy(export = prepared.export.copy(width = previewWidth, height = previewHeight, codec = "video/avc", bitrate = 5_000_000)), output)
         progress("complete", 100)
         Result.success(Data.Builder().putString("previewUri", Uri.fromFile(output).toString()).putString("warning", warning).build())
-    }.getOrElse { Result.failure(Data.Builder().putString("error", it.message ?: "Preview render failed").build()) }
+    }.getOrElse { error ->
+        Log.e("PreviewWorker", "Preview rendering failed", error)
+        Result.failure(Data.Builder().putString("error", error.detailedMessage("Preview render failed")).build())
+    }
+}
+
+private fun Throwable.detailedMessage(fallback: String): String =
+    generateSequence(this) { it.cause }
+        .mapNotNull { it.message?.takeIf(String::isNotBlank) }
+        .distinct()
+        .joinToString(" → ")
+        .ifBlank { fallback }
+
+private fun AspectRatio.outputSize(longSide: Int, shortSide: Int): Pair<Int, Int> = when (this) {
+    AspectRatio.LANDSCAPE -> longSide to shortSide
+    AspectRatio.PORTRAIT -> shortSide to longSide
+    AspectRatio.SQUARE -> shortSide to shortSide
 }

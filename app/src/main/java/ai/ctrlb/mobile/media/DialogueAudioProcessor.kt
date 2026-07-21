@@ -8,7 +8,6 @@ import androidx.media3.common.util.UnstableApi
 import java.nio.ByteBuffer
 import kotlin.math.abs
 import kotlin.math.pow
-import kotlin.math.sign
 import ai.ctrlb.mobile.domain.TimeRange
 
 /** A conservative speech gate, compressor and make-up gain for local dialogue processing. */
@@ -17,7 +16,9 @@ class DialogueAudioProcessor(
     private val cleanupStrength: Float,
     targetLufs: Float
 ) : BaseAudioProcessor() {
-    private val makeupGain = 10f.pow(((targetLufs + 20f) / 20f).coerceIn(-.2f, .4f))
+    // Without a measured loudness pass, large make-up gain can amplify room
+    // noise and make the limiter audibly distort speech. Keep leveling subtle.
+    private val makeupGain = 10f.pow(((targetLufs + 20f) / 20f).coerceIn(-.05f, .05f))
     private var envelope = 0f
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
@@ -40,12 +41,9 @@ class DialogueAudioProcessor(
     private fun process(sample: Float): Float {
         val magnitude = abs(sample)
         envelope = if (magnitude > envelope) envelope * .82f + magnitude * .18f else envelope * .995f + magnitude * .005f
-        val gateThreshold = .003f + cleanupStrength.coerceIn(0f, 1f) * .009f
-        val gate = if (envelope >= gateThreshold) 1f else (envelope / gateThreshold).coerceIn(.15f, 1f)
-        var value = sample * gate * makeupGain
-        val threshold = .32f
-        if (abs(value) > threshold) value = sign(value) * (threshold + (abs(value) - threshold) / 3.2f)
-        return value.coerceIn(-.98f, .98f)
+        val gateThreshold = .002f + cleanupStrength.coerceIn(0f, 1f) * .004f
+        val gate = if (envelope >= gateThreshold) 1f else (envelope / gateThreshold).coerceIn(.6f, 1f)
+        return (sample * gate * makeupGain).coerceIn(-.98f, .98f)
     }
 
     override fun onReset() { envelope = 0f }

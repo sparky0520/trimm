@@ -77,7 +77,7 @@ class MainActivity : ComponentActivity() {
             when (state.wizardStep) {
                 1 -> { Choice("Where will you publish?", Platform.entries, p.platform) { update(p.copy(platform = it, aspectRatio = if (it == Platform.YOUTUBE) AspectRatio.LANDSCAPE else AspectRatio.PORTRAIT)) }; Choice("Framing", AspectRatio.entries, p.aspectRatio) { update(p.copy(aspectRatio = it)) } }
                 2 -> { Choice("Pacing", Pace.entries, p.pace) { update(p.copy(pace = it)) }; Choice("Visual style", VisualStyle.entries, p.style) { update(p.copy(style = it)) } }
-                else -> { Choice("Music", MusicChoice.entries, p.music) { update(p.copy(music = it)) }; Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(p.captions, { update(p.copy(captions = it)) }); Text("Add captions") }; Text("Must-keep moments can be refined after the first edit.") }
+                else -> { Choice("Music", MusicChoice.entries, p.music) { update(p.copy(music = it)) }; Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(false, null, enabled = false); Text("Captions temporarily unavailable") }; Text("Must-keep moments can be refined after the first edit.") }
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -97,18 +97,26 @@ class MainActivity : ComponentActivity() {
     val project = requireNotNull(state.project)
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
-        Box {
-            VideoPreview(state.previewUri?.let(::listOf) ?: project.orderedSources.map { it.uri }, Modifier.fillMaxWidth().aspectRatio(project.source.width.toFloat() / project.source.height))
-            FilledTonalButton(onClick = { fullscreen = true }, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) { Text("Fullscreen") }
-        }
-        state.capabilityMessage?.let { Text("4K unavailable: $it. Export will use 1080p.", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(12.dp)) }
-        state.jobMessage?.let { Text(it, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.bodySmall) }
-        Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) { Text("Your edit", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f)); TextButton(onClick = undo, enabled = project.undo.isNotEmpty()) { Text("Undo") } }
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(12.dp)) {
-            item { ClipOrder(project.orderedSources, moveClip) }
+        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 12.dp)) {
+            item {
+                Box {
+                    val previewAspectRatio = when (project.preferences.aspectRatio) {
+                        AspectRatio.LANDSCAPE -> 16f / 9f
+                        AspectRatio.PORTRAIT -> 9f / 16f
+                        AspectRatio.SQUARE -> 1f
+                    }
+                    VideoPreview(state.previewUri?.let(::listOf) ?: project.orderedSources.map { it.uri }, Modifier.fillMaxWidth().aspectRatio(previewAspectRatio))
+                    FilledTonalButton(onClick = { fullscreen = true }, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) { Text("Fullscreen") }
+                }
+            }
+            state.capabilityMessage?.let { message -> item { Text("4K unavailable: $message. Export will use 1080p.", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(12.dp)) } }
+            state.jobMessage?.let { message -> item { Text(message, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.bodySmall) } }
+            item { Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) { Text("Your edit", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f)); TextButton(onClick = undo, enabled = project.undo.isNotEmpty()) { Text("Undo") } } }
+            item { Box(Modifier.padding(horizontal = 12.dp)) { ClipOrder(project.orderedSources, moveClip) } }
             items(project.operations, key = { it.id }) { op ->
-            Card(Modifier.fillMaxWidth().padding(vertical = 5.dp)) { Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(operationTitle(op), style = MaterialTheme.typography.titleMedium); Text(operationDetail(op), style = MaterialTheme.typography.bodySmall) }; Switch(op.enabled, { toggle(op.id) }) } }
-        } }
+                Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp)) { Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(operationTitle(op), style = MaterialTheme.typography.titleMedium); Text(operationDetail(op), style = MaterialTheme.typography.bodySmall) }; Switch(op.enabled, { toggle(op.id) }) } }
+            }
+        }
         Button(onClick = export, modifier = Modifier.fillMaxWidth().padding(16.dp)) { Text("Export ${project.export.height}p") }
     }
     if (fullscreen) FullscreenPreview(state.previewUri?.let(::listOf) ?: project.orderedSources.map { it.uri }) { fullscreen = false }

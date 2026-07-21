@@ -3,6 +3,8 @@ package ai.ctrlb.mobile.media
 import ai.ctrlb.mobile.domain.*
 import android.content.Context
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import androidx.media3.common.C
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
@@ -60,7 +62,13 @@ object ExportCoordinator {
             }
         }
         val sequence = if (project.orderedSources.all { it.hasAudio }) EditedMediaItemSequence.withAudioAndVideoFrom(clips) else EditedMediaItemSequence.withVideoFrom(clips)
-        val videoEffects = mutableListOf<Effect>(Presentation.createForHeight(project.export.height))
+        val videoEffects = mutableListOf<Effect>(
+            Presentation.createForWidthAndHeight(
+                project.export.width,
+                project.export.height,
+                Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP
+            )
+        )
         project.operations.filterIsInstance<SetColorGrade>().lastOrNull { it.enabled }?.grade?.let { grade ->
             videoEffects += HslAdjustment.Builder().adjustSaturation((grade.saturation - 1f) * 100f).adjustLightness(grade.exposure * 22f).build()
             videoEffects += RgbAdjustment.Builder()
@@ -74,7 +82,9 @@ object ExportCoordinator {
                 val end = timelineMapper.sourceToOutput(cue.range.endMs)
                 if (end > start) CaptionCue(cue.text, TimeRange(start, end)) else null
             }
-            if (mapped.isNotEmpty()) videoEffects += OverlayEffect(listOf(CaptionOverlay(mapped)))
+            if (mapped.isNotEmpty()) {
+                videoEffects += OverlayEffect(listOf(CaptionOverlay(mapped, project.export.height > project.export.width)))
+            }
         }
         val sequences = mutableListOf(sequence)
         val audioRepository = AudioAssetRepository(context)
@@ -107,7 +117,14 @@ object ExportCoordinator {
                     override fun onCompleted(composition: Composition, exportResult: ExportResult) { if (continuation.isActive) continuation.resume(output) }
                     override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) { output.delete(); if (continuation.isActive) continuation.resumeWithException(exportException) }
                 }).build()
-            continuation.invokeOnCancellation { transformer.cancel(); output.delete() }
+            continuation.invokeOnCancellation {
+                // WorkManager may cancel from a worker thread, while Transformer
+                // requires all calls on the application looper it was created on.
+                Handler(Looper.getMainLooper()).post {
+                    transformer.cancel()
+                    output.delete()
+                }
+            }
             transformer.start(composition, output.absolutePath)
         }
     }
