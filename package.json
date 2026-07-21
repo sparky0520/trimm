@@ -5,39 +5,41 @@
   "author": "sparky0520",
   "private": true,
   "type": "module",
-  "main": "electron/main.cjs",
+  "main": "apps/desktop/electron/main.cjs",
   "scripts": {
-    "test": "node --test",
-    "test:unit": "node --test test/schema.test.js test/apply-operations.test.js test/proposals.test.js",
-    "test:contracts": "node --test test/operations.test.js test/ai-response.test.js test/ai-planner.test.cjs",
-    "test:render-smoke": "node --test test/build.test.js test/render-timing.test.js test/packaged-workflow.test.js && node scripts/render-mp4-smoke.cjs",
-    "test:ai-evals": "node --test test/ai-evaluations.test.js",
-    "fixtures:prepare": "node scripts/prepare-representative-fixtures.cjs",
-    "benchmark:render": "node scripts/benchmark-render.cjs",
-    "verify:production": "node scripts/verify-production-build.cjs dist release/win-unpacked",
+    "test": "node --test \"apps/desktop/test/*.test.js\" \"apps/desktop/test/*.test.cjs\" \"services/backend/test/*.test.cjs\"",
+    "test:unit": "node --test apps/desktop/test/schema.test.js apps/desktop/test/apply-operations.test.js apps/desktop/test/proposals.test.js",
+    "test:contracts": "node --test apps/desktop/test/operations.test.js apps/desktop/test/ai-response.test.js apps/desktop/test/ai-planner.test.cjs services/backend/test/mobile-planner.test.cjs services/backend/test/mobile-transcription.test.cjs",
+    "test:render-smoke": "node --test apps/desktop/test/build.test.js apps/desktop/test/render-timing.test.js apps/desktop/test/packaged-workflow.test.js && node apps/desktop/scripts/render-mp4-smoke.cjs",
+    "test:ai-evals": "node --test apps/desktop/test/ai-evaluations.test.js",
+    "fixtures:prepare": "node apps/desktop/scripts/prepare-representative-fixtures.cjs",
+    "benchmark:render": "node apps/desktop/scripts/benchmark-render.cjs",
+    "verify:production": "node apps/desktop/scripts/verify-production-build.cjs apps/desktop/dist apps/desktop/release/win-unpacked",
     "verify:ci": "npm run test:unit && npm run test:contracts && npm run test:render-smoke && npm test && npm run build && npm run verify:production",
-    "build": "vite build",
-    "build:icon": "electron scripts/build-electron-icon.cjs",
-    "dev": "vite",
-    "preview": "vite preview",
-    "electron:dev": "concurrently -n vite,electron -c green,blue \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "vite build && electron-builder --win"
+    "build": "vite build apps/desktop --config apps/desktop/vite.config.js",
+    "build:icon": "electron apps/desktop/scripts/build-electron-icon.cjs",
+    "dev": "vite apps/desktop --config apps/desktop/vite.config.js",
+    "preview": "vite preview apps/desktop --config apps/desktop/vite.config.js",
+    "planner:serve": "node services/backend/server/mobile-planner.cjs",
+    "audio:ingest": "node services/backend/scripts/ingest-audio.cjs --output services/backend/public/audio",
+    "electron:dev": "concurrently -n vite,electron -c green,blue \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:build": "npm run build && electron-builder --win"
   },
   "build": {
     "appId": "ai.ctrlb.app",
     "productName": "ctrlb",
-    "icon": "public/ctrlb-mark.png",
+    "icon": "apps/desktop/public/ctrlb-mark.png",
     "directories": {
-      "output": "release"
+      "output": "apps/desktop/release"
     },
     "extraMetadata": {
-      "main": "electron/main.cjs"
+      "main": "apps/desktop/electron/main.cjs"
     },
     "files": [
-      "dist/**/*",
-      "electron/**/*",
-      "public/ctrlb-mark.png",
-      "remotion/**/*",
+      "apps/desktop/dist/**/*",
+      "apps/desktop/electron/**/*",
+      "apps/desktop/public/ctrlb-mark.png",
+      "apps/desktop/remotion/**/*",
       "package.json",
       "node_modules/**/*"
     ],

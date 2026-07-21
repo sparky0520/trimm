@@ -23,13 +23,20 @@ npm install
 cp .env.example .env
 ```
 
-Set `OPENAI_API_KEY` and `ASSEMBLYAI_API_KEY` in `.env`, then run:
+Set the shared backend URLs and `CTRLB_PLANNER_CLIENT_TOKEN` in `.env.local`, then run:
 
 ```sh
 npm run electron:dev
 ```
 
-The keys are loaded only by the Electron main process. They are not placed in the renderer or production web assets. AI planning uses OpenAI and audio transcription uses AssemblyAI; see [Media analysis and privacy](docs/user-guide.md#media-analysis-and-privacy) before importing sensitive footage.
+Provider keys remain in the shared backend and are not placed in the Electron renderer or Android app. Both planners default to Kimi, while `CTRLB_DESKTOP_AI_PROVIDER=openai` enables the optional desktop OpenAI adapter. Desktop and mobile share the authenticated AssemblyAI transcription route.
+
+## Repository layout
+
+- `apps/desktop/` — Electron, React/Vite, Remotion, desktop tests, and build scripts.
+- `apps/mobile/` — native Android/Compose editor and Gradle project.
+- `services/backend/` — authenticated AssemblyAI, desktop planner, and mobile Kimi planner implementations.
+- `api/` — thin Vercel adapters for the shared backend service.
 
 ## Documentation
 
@@ -39,8 +46,8 @@ The keys are loaded only by the Electron main process. They are not placed in th
 
 ## Current limits
 
-ctrlB supports one source video per project and is designed around narrated developer recordings. It does not currently provide multi-camera editing, a timeline/inspector, complex motion graphics, automatic B-roll, generative media, music selection, style imitation, collaboration, cloud sharing, or mobile workflows. Legacy unversioned project files are rejected rather than migrated. AssemblyAI transcription accepts local media files up to 2.2 GB.
+The desktop editor is designed around narrated developer recordings. Large transcription uploads should use the streaming Node backend because serverless platforms impose smaller request-body limits.
 
 ## Android editor
 
-An Android-first talking-head editor is under active development in [`android/`](android/README.md). It contains the native Compose workflow, versioned operation model, on-device analysis boundaries, conservative fumble detection, capability-aware export planning, and privacy contract while leaving the desktop application intact.
+The Android-first talking-head editor lives in [`apps/mobile/`](apps/mobile/README.md).
