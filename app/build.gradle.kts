@@ -22,11 +22,16 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        val plannerUrl = providers.gradleProperty("CTRLB_PLANNER_URL").orElse("").get()
+        val backendUrl = providers.gradleProperty("CTRLB_BACKEND_URL").orElse("").get().trimEnd('/')
+        val plannerUrl = providers.gradleProperty("CTRLB_PLANNER_URL").orElse(
+            backendUrl.takeIf { it.isNotEmpty() }?.let { "$it/v1/mobile/plan" } ?: ""
+        ).get()
         val plannerToken = providers.gradleProperty("CTRLB_PLANNER_TOKEN")
             .orElse(providers.environmentVariable("CTRLB_PLANNER_CLIENT_TOKEN"))
             .orElse(rootLocalEnv["CTRLB_PLANNER_CLIENT_TOKEN"] ?: "").get()
-        val transcriptionUrl = providers.gradleProperty("CTRLB_TRANSCRIPTION_URL").orElse("").get()
+        val transcriptionUrl = providers.gradleProperty("CTRLB_TRANSCRIPTION_URL").orElse(
+            backendUrl.takeIf { it.isNotEmpty() }?.let { "$it/v1/transcribe" } ?: ""
+        ).get()
         val catalogUrl = providers.gradleProperty("CTRLB_AUDIO_CATALOG_URL").orElse("").get()
         buildConfigField("String", "PLANNER_URL", "\"${plannerUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "PLANNER_TOKEN", "\"${plannerToken.replace("\\", "\\\\").replace("\"", "\\\"")}\"")

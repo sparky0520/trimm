@@ -14,7 +14,35 @@ Copy `gradle.properties.example` values into the user-level Gradle properties fi
 
 ### AssemblyAI transcription
 
-Set `CTRLB_TRANSCRIPTION_URL` to the authenticated backend route `/v1/mobile/transcribe`. Android streams each selected media source to this endpoint using the same development bearer token as the planner. The backend owns `ASSEMBLYAI_API_KEY`, uploads the stream to AssemblyAI, and returns normalized word timestamps; the provider key is never embedded in the APK.
+Set `CTRLB_BACKEND_URL` to the single backend HTTPS origin. The app derives both
+`/v1/mobile/plan` and `/v1/transcribe` from it. Android streams each
+selected media source to the transcription route using the same development
+bearer token as the planner. The backend owns `ASSEMBLYAI_API_KEY`, uploads the
+stream to AssemblyAI, and returns normalized word timestamps; the provider key
+is never embedded in the APK.
+
+Do not point this setting at the Vercel deployment for normal phone videos. Run
+the long-lived Node service on a host that accepts streaming request bodies:
+
+```shell
+docker build -f services/backend/Dockerfile -t ctrlb-streaming .
+docker run --rm -p 8787:8787 \
+  -e ASSEMBLYAI_API_KEY=... \
+  -e MOONSHOT_API_KEY=... \
+  -e CTRLB_PLANNER_CLIENT_TOKEN=... \
+  ctrlb-streaming
+```
+
+Expose port 8787 through HTTPS and configure the app, for example:
+
+```properties
+CTRLB_BACKEND_URL=https://api.example.com
+```
+
+The Android client uses HTTP chunked transfer and the Node service pipes those
+chunks to AssemblyAI without buffering the file. The service enforces a 1 GiB
+streaming limit. Any load balancer in front of it must allow bodies at least
+that large and must not buffer the entire request.
 
 Analysis persists the returned words and caption cues, detects high-confidence fumbles, and then calls the Kimi planner with the existing bounded transcript-only payload. The Android worker no longer invokes or packages the native Whisper build.
 
@@ -29,7 +57,7 @@ MOONSHOT_MODEL=kimi-k3 \
 npm run planner:serve
 ```
 
-Deploy it behind HTTPS and point `CTRLB_PLANNER_URL` to `/v1/mobile/plan`. The static Android token is a development bootstrap mechanism only; production must issue short-lived, user-scoped JWTs through the product's authentication service. The Moonshot key always remains server-side.
+Deploy it behind HTTPS and use the same `CTRLB_BACKEND_URL` described above. The static Android token is a development bootstrap mechanism only; production must issue short-lived, user-scoped JWTs through the product's authentication service. The Moonshot key always remains server-side.
 
 ### Licensed audio catalog
 
@@ -68,9 +96,12 @@ Use `SOUND_EFFECT` for effects. The app rejects blank licenses, non-HTTPS downlo
 
 The catalog is intentionally optional during initial testing. New projects default to no background music and do not add a sound effect, so preview and export work while `CTRLB_AUDIO_CATALOG_URL` is empty. Music and sound-effect selection remain unavailable until a licensed catalog and CDN are configured; this follow-up is tracked as AI-042.
 
-### Known transcription limit
+### Vercel transcription limit
 
-The current Vercel transcription route accepts direct media uploads, but Vercel's request-body limit is much lower than the app's 1 GiB local validation limit. Small test clips can use the route; typical or large phone recordings need presigned object storage or the streaming Node service before this flow is production-ready. This follow-up is tracked as AI-041.
+The Vercel transcription adapter is suitable only for tiny diagnostics because
+the platform rejects normal phone videos before application code runs. Production
+mobile builds must use the streaming Node service URL above (or a future
+presigned-object-storage flow). This follow-up is tracked as AI-041.
 
 ## Current rendering behavior
 
