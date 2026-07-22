@@ -10,7 +10,7 @@ Use JDK 17 and Android SDK 37. Open this directory in Android Studio and run the
 
 Set `CTRLB_BACKEND_URL` to the HTTPS origin of the long-lived Node backend. Android derives `/v1/mobile/plan` and `/v1/transcribe` from it.
 
-The app streams each selected media source to the transcription route. The backend owns the AssemblyAI and model-provider credentials. Normal phone videos should not use the Vercel transcription adapter because platform request-body limits apply before application code can stream the upload.
+The app uploads each selected media source in resumable 4 MB chunks, reports progress through WorkManager, retries interrupted chunks, and explicitly cancels abandoned sessions. The long-lived backend offset-checks every chunk, limits uploads to 1 GB, removes completed/cancelled media, and expires abandoned temporary files after six hours. The backend owns the AssemblyAI and model-provider credentials. Normal phone videos should not use the Vercel transcription adapter because platform request-body limits apply before application code can accept the upload.
 
 Development example:
 
@@ -29,7 +29,7 @@ Point Android at the deployed HTTPS origin:
 CTRLB_BACKEND_URL=https://api.example.com
 ```
 
-The static planner token is a development bootstrap only. Production requires short-lived, user-scoped authentication.
+The static planner token is a development bootstrap only and works only when the backend explicitly sets `CTRLB_ALLOW_BOOTSTRAP_AUTH=true`. Production uses OIDC access tokens verified against `CTRLB_AUTH_ISSUER`, `CTRLB_AUTH_AUDIENCE`, and `CTRLB_AUTH_JWKS_URL`. The verified token subject—not a caller-provided ID—owns transcription upload sessions and is the identity boundary for future projects and subscription entitlements.
 
 ## Audio catalog
 

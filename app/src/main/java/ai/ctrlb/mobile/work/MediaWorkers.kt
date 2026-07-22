@@ -34,7 +34,10 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
             if (isStopped) return Result.failure()
             progress("transcript-${index + 1}-of-${project.orderedSources.size}", 10 + index * 45 / project.orderedSources.size)
             if (source.hasAudio) {
-                words += transcriber.transcribe(applicationContext, Uri.parse(source.uri)).map { word ->
+                words += transcriber.transcribe(applicationContext, Uri.parse(source.uri)) { uploaded, total ->
+                    val sourceShare = ((uploaded * 45L / total) / project.orderedSources.size).toInt()
+                    progress("upload-${index + 1}-of-${project.orderedSources.size}", 10 + index * 45 / project.orderedSources.size + sourceShare)
+                }.map { word ->
                     word.copy(range = TimeRange(word.range.startMs + offset, word.range.endMs + offset))
                 }
             }

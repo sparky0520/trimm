@@ -4,36 +4,56 @@ import ai.ctrlb.mobile.domain.*
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 
+private val Ink = Color(0xFF17131F)
+private val Workspace = Color(0xFF211A2B)
+private val Raised = Color(0xFF292135)
+private val Border = Color(0xFF4A3B5A)
+private val Cream = Color(0xFFF7F2EA)
+private val CreamRaised = Color(0xFFFFFAF3)
+private val DarkText = Color(0xFF241D2C)
+private val Muted = Color(0xFF9B8FA5)
+private val Coral = Color(0xFFFF6F61)
+private val Lavender = Color(0xFFBDA7FF)
+private val Green = Color(0xFF6FD49A)
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState); enableEdgeToEdge()
-        setContent { CtrlBTheme { Surface(Modifier.fillMaxSize()) { CtrlBApp() } } }
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent { CtrlBTheme { Surface(Modifier.fillMaxSize(), color = Ink) { CtrlBApp() } } }
     }
 }
 
@@ -46,106 +66,193 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@Composable private fun BrandBar(
+    actionLabel: String? = null,
+    actionEnabled: Boolean = true,
+    onAction: (() -> Unit)? = null,
+    secondaryLabel: String? = null,
+    onSecondary: (() -> Unit)? = null,
+) {
+    Row(
+        Modifier.fillMaxWidth().background(Workspace).statusBarsPadding().height(58.dp).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(30.dp).background(Lavender, RoundedCornerShape(9.dp)), contentAlignment = Alignment.Center) {
+            Text("B", color = Ink, fontWeight = FontWeight.Black)
+        }
+        Spacer(Modifier.width(9.dp))
+        Text("ctrlB", color = CreamRaised, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Spacer(Modifier.width(8.dp))
+        Text("STUDIO", color = Muted, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 1.2.sp,
+            modifier = Modifier.border(1.dp, Border, RoundedCornerShape(20.dp)).padding(horizontal = 7.dp, vertical = 4.dp))
+        Spacer(Modifier.weight(1f))
+        if (secondaryLabel != null && onSecondary != null) {
+            TextButton(onClick = onSecondary) { Text(secondaryLabel, color = Cream) }
+        }
+        if (actionLabel != null && onAction != null) {
+            Button(onClick = onAction, enabled = actionEnabled, shape = RoundedCornerShape(9.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText)) {
+                Text(actionLabel, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
 @Composable private fun ImportScreen(onImport: (List<Uri>) -> Unit) {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { if (it.isNotEmpty()) onImport(it) }
-    Column(Modifier.fillMaxSize().padding(28.dp), verticalArrangement = Arrangement.Center) {
-        Text("Turn a rough take into a finished video", style = MaterialTheme.typography.headlineLarge)
-        Spacer(Modifier.height(12.dp)); Text("Your footage stays on this device. Import any supported video to begin.")
-        Spacer(Modifier.height(28.dp)); Button(onClick = { launcher.launch(arrayOf("video/*")) }) { Text("Choose clips") }
-        Spacer(Modifier.height(8.dp)); Text("Select one or several clips. You can arrange them before creating the edit.", style = MaterialTheme.typography.bodySmall)
+    Column(Modifier.fillMaxSize().background(Ink)) {
+        BrandBar()
+        Box(Modifier.fillMaxSize().padding(12.dp).background(Workspace, RoundedCornerShape(20.dp)).border(1.dp, Border, RoundedCornerShape(20.dp))) {
+            Column(Modifier.align(Alignment.Center).padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.size(82.dp).background(Lavender, RoundedCornerShape(24.dp)), contentAlignment = Alignment.Center) {
+                    Text("▶", color = Ink, fontSize = 27.sp)
+                    Box(Modifier.size(10.dp).align(Alignment.TopEnd).offset(12.dp, (-10).dp).background(Coral))
+                }
+                Spacer(Modifier.height(30.dp))
+                Text("YOUR NEXT STORY STARTS HERE", color = Coral, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
+                Spacer(Modifier.height(10.dp))
+                Text("Turn a rough recording\ninto something worth sharing.", color = CreamRaised, fontSize = 27.sp,
+                    lineHeight = 32.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(12.dp))
+                Text("Bring in your talking-head and product clips, then shape them naturally with AI.", color = Muted, lineHeight = 21.sp)
+                Spacer(Modifier.height(28.dp))
+                Button(onClick = { launcher.launch(arrayOf("video/*")) }, modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText)) {
+                    Text("Import your clips  →", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 5.dp))
+                }
+                Spacer(Modifier.height(12.dp))
+                Text("MP4  •  MOV  •  WEBM    |    ON-DEVICE WORKSPACE", color = Muted, fontSize = 9.sp, letterSpacing = .8.sp)
+            }
+        }
     }
 }
 
 @Composable private fun WizardScreen(state: EditorState, update: (WizardPreferences) -> Unit, next: () -> Unit, back: () -> Unit, finish: () -> Unit, moveClip: (Int, Int) -> Unit) {
     val p = state.preferences
     var fullscreen by rememberSaveable { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().padding(24.dp)) {
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            Text("Quick edit brief", style = MaterialTheme.typography.headlineMedium); Text("Step ${state.wizardStep} of 3")
-            Spacer(Modifier.height(24.dp))
+    Column(Modifier.fillMaxSize().background(Ink)) {
+        BrandBar(secondaryLabel = if (state.wizardStep > 1) "Back" else null, onSecondary = if (state.wizardStep > 1) back else null,
+            actionLabel = if (state.wizardStep == 3) "Create edit" else "Continue", onAction = if (state.wizardStep == 3) finish else next)
+        Column(Modifier.weight(1f).padding(12.dp).background(Workspace, RoundedCornerShape(18.dp)).border(1.dp, Border, RoundedCornerShape(18.dp)).verticalScroll(rememberScrollState())) {
+            Column(Modifier.padding(18.dp)) {
+                Text("QUICK EDIT BRIEF  •  ${state.wizardStep}/3", color = Coral, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
+                Spacer(Modifier.height(7.dp))
+                Text(when (state.wizardStep) { 1 -> "Set the canvas"; 2 -> "Choose the feel"; else -> "Finish the sound" }, color = CreamRaised, style = MaterialTheme.typography.headlineMedium)
+                Text("A few choices help ctrlB build a first cut that feels like yours.", color = Muted)
+            }
             if (state.wizardStep == 1) {
-                Text("Preview clip order", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
-                Box {
+                Box(Modifier.padding(horizontal = 12.dp).background(Ink, RoundedCornerShape(14.dp)).border(1.dp, Border, RoundedCornerShape(14.dp)).padding(10.dp)) {
                     val first = state.sources.first()
-                    VideoPreview(state.sources.map { it.uri }, Modifier.fillMaxWidth().aspectRatio(first.width.toFloat() / first.height))
-                    FilledTonalButton(onClick = { fullscreen = true }, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) { Text("Fullscreen") }
+                    VideoPreview(state.sources.map { it.uri }, Modifier.fillMaxWidth().aspectRatio(first.width.toFloat() / first.height).background(Color.Black, RoundedCornerShape(10.dp)))
+                    SmallAction("Expand", Modifier.align(Alignment.TopEnd).padding(8.dp)) { fullscreen = true }
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(12.dp))
                 ClipOrder(state.sources, moveClip)
             }
-            when (state.wizardStep) {
-                1 -> { Choice("Where will you publish?", Platform.entries, p.platform) { update(p.copy(platform = it, aspectRatio = if (it == Platform.YOUTUBE) AspectRatio.LANDSCAPE else AspectRatio.PORTRAIT)) }; Choice("Framing", AspectRatio.entries, p.aspectRatio) { update(p.copy(aspectRatio = it)) } }
-                2 -> { Choice("Pacing", Pace.entries, p.pace) { update(p.copy(pace = it)) }; Choice("Visual style", VisualStyle.entries, p.style) { update(p.copy(style = it)) } }
-                else -> { Choice("Music", MusicChoice.entries, p.music) { update(p.copy(music = it)) }; Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(false, null, enabled = false); Text("Captions temporarily unavailable") }; Text("Must-keep moments can be refined after the first edit.") }
+            Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
+                when (state.wizardStep) {
+                    1 -> { Choice("Where will you publish?", Platform.entries, p.platform) { update(p.copy(platform = it, aspectRatio = if (it == Platform.YOUTUBE) AspectRatio.LANDSCAPE else AspectRatio.PORTRAIT)) }; Choice("Framing", AspectRatio.entries, p.aspectRatio) { update(p.copy(aspectRatio = it)) } }
+                    2 -> { Choice("Pacing", Pace.entries, p.pace) { update(p.copy(pace = it)) }; Choice("Visual style", VisualStyle.entries, p.style) { update(p.copy(style = it)) } }
+                    else -> { Choice("Music", MusicChoice.entries, p.music) { update(p.copy(music = it)) }; Text("Captions", color = Cream, fontWeight = FontWeight.Bold); Text("Temporarily unavailable", color = Muted, fontSize = 12.sp) }
+                }
             }
-            Spacer(Modifier.height(16.dp))
         }
-        Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(onClick = back, enabled = state.wizardStep > 1) { Text("Back") }
-            Button(onClick = if (state.wizardStep == 3) finish else next) { Text(if (state.wizardStep == 3) "Create edit" else "Continue") }
-        }
+        Spacer(Modifier.navigationBarsPadding())
     }
     if (fullscreen) FullscreenPreview(state.sources.map { it.uri }) { fullscreen = false }
 }
 
 @Composable private fun <T> Choice(label: String, values: List<T>, selected: T, select: (T) -> Unit) {
-    Text(label, style = MaterialTheme.typography.titleMedium); values.forEach { value -> Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(value == selected, { select(value) }); Text(value.toString().lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }) } }; Spacer(Modifier.height(14.dp))
+    Text(label, color = Cream, fontWeight = FontWeight.Bold)
+    Spacer(Modifier.height(8.dp))
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        values.forEach { value ->
+            val chosen = value == selected
+            FilterChip(selected = chosen, onClick = { select(value) }, label = { Text(value.toString().lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }) },
+                shape = RoundedCornerShape(9.dp), colors = FilterChipDefaults.filterChipColors(containerColor = Raised, labelColor = Muted, selectedContainerColor = Coral.copy(alpha = .18f), selectedLabelColor = Cream),
+                border = FilterChipDefaults.filterChipBorder(enabled = true, selected = chosen, borderColor = Border, selectedBorderColor = Coral))
+        }
+    }
+    Spacer(Modifier.height(20.dp))
 }
 
 @Composable private fun EditorScreen(state: EditorState, toggle: (String) -> Unit, undo: () -> Unit, export: () -> Unit, moveClip: (Int, Int) -> Unit) {
     val project = requireNotNull(state.project)
     var fullscreen by rememberSaveable { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 12.dp)) {
+    Column(Modifier.fillMaxSize().background(Ink)) {
+        BrandBar(actionLabel = "Export ${project.export.height}p", onAction = export, secondaryLabel = "Undo", onSecondary = undo)
+        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item {
-                Box {
-                    val previewAspectRatio = when (project.preferences.aspectRatio) {
-                        AspectRatio.LANDSCAPE -> 16f / 9f
-                        AspectRatio.PORTRAIT -> 9f / 16f
-                        AspectRatio.SQUARE -> 1f
+                Column(Modifier.fillMaxWidth().background(Workspace, RoundedCornerShape(18.dp)).border(1.dp, Border, RoundedCornerShape(18.dp))) {
+                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) { Text("PREVIEW", color = Coral, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp); Text("Your edit", color = CreamRaised, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
+                        SmallAction("Expand") { fullscreen = true }
                     }
-                    VideoPreview(state.previewUri?.let(::listOf) ?: project.orderedSources.map { it.uri }, Modifier.fillMaxWidth().aspectRatio(previewAspectRatio))
-                    FilledTonalButton(onClick = { fullscreen = true }, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) { Text("Fullscreen") }
+                    val ratio = when (project.preferences.aspectRatio) { AspectRatio.LANDSCAPE -> 16f / 9f; AspectRatio.PORTRAIT -> 9f / 16f; AspectRatio.SQUARE -> 1f }
+                    Box(Modifier.fillMaxWidth().padding(10.dp).background(Ink, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                        VideoPreview(state.previewUri?.let(::listOf) ?: project.orderedSources.map { it.uri }, Modifier.fillMaxWidth().aspectRatio(ratio))
+                    }
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("00:00", color = Muted, fontSize = 10.sp)
+                        Text("${project.orderedSources.size} CLIPS  •  ${project.preferences.aspectRatio}", color = Muted, fontSize = 9.sp, letterSpacing = .6.sp)
+                    }
                 }
             }
-            state.capabilityMessage?.let { message -> item { Text("4K unavailable: $message. Export will use 1080p.", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(12.dp)) } }
-            state.jobMessage?.let { message -> item { Text(message, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.bodySmall) } }
-            item { Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) { Text("Your edit", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f)); TextButton(onClick = undo, enabled = project.undo.isNotEmpty()) { Text("Undo") } } }
-            item { Box(Modifier.padding(horizontal = 12.dp)) { ClipOrder(project.orderedSources, moveClip) } }
+            state.capabilityMessage?.let { message -> item { StatusCard("4K unavailable", "$message. Export will use 1080p.", MaterialTheme.colorScheme.error) } }
+            state.jobMessage?.let { message -> item { StatusCard("PROCESSING", message, Lavender) } }
+            item { ClipOrder(project.orderedSources, moveClip) }
+            item { Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) { Text("EDIT DECISIONS", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp); HorizontalDivider(Modifier.padding(start = 10.dp), color = Border) } }
             items(project.operations, key = { it.id }) { op ->
-                Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp)) { Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(operationTitle(op), style = MaterialTheme.typography.titleMedium); Text(operationDetail(op), style = MaterialTheme.typography.bodySmall) }; Switch(op.enabled, { toggle(op.id) }) } }
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(13.dp), colors = CardDefaults.cardColors(containerColor = Cream), border = BorderStroke(1.dp, Color.White.copy(alpha = .08f))) {
+                    Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(34.dp).background(if (op.enabled) Coral.copy(alpha = .18f) else DarkText.copy(alpha = .07f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { Text(if (op.enabled) "✓" else "–", color = if (op.enabled) Coral else Muted, fontWeight = FontWeight.Bold) }
+                        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) { Text(operationTitle(op), color = DarkText, fontWeight = FontWeight.Bold); Text(operationDetail(op), color = DarkText.copy(alpha = .58f), fontSize = 12.sp) }
+                        Switch(op.enabled, { toggle(op.id) }, colors = SwitchDefaults.colors(checkedThumbColor = DarkText, checkedTrackColor = Coral))
+                    }
+                }
             }
         }
-        Button(onClick = export, modifier = Modifier.fillMaxWidth().padding(16.dp)) { Text("Export ${project.export.height}p") }
+        Spacer(Modifier.navigationBarsPadding())
     }
     if (fullscreen) FullscreenPreview(state.previewUri?.let(::listOf) ?: project.orderedSources.map { it.uri }) { fullscreen = false }
 }
 
+@Composable private fun StatusCard(title: String, detail: String, accent: Color) {
+    Row(Modifier.fillMaxWidth().background(Raised, RoundedCornerShape(10.dp)).border(1.dp, Border, RoundedCornerShape(10.dp)).padding(12.dp)) {
+        Box(Modifier.size(8.dp).background(accent, RoundedCornerShape(50)).align(Alignment.CenterVertically))
+        Column(Modifier.padding(start = 10.dp)) { Text(title, color = Cream, fontWeight = FontWeight.Bold, fontSize = 11.sp); Text(detail, color = Muted, fontSize = 11.sp) }
+    }
+}
+
 @Composable private fun ClipOrder(clips: List<SourceMedia>, moveClip: (Int, Int) -> Unit) {
     if (clips.size <= 1) return
-    Text("Clip order", style = MaterialTheme.typography.titleMedium)
-    clips.forEachIndexed { index, clip ->
-        Card(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
-            Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("${index + 1}", style = MaterialTheme.typography.titleMedium)
-                Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-                    Text("Clip ${index + 1}")
-                    Text(formatDuration(clip.durationMs), style = MaterialTheme.typography.bodySmall)
+    Column(Modifier.fillMaxWidth().background(Workspace, RoundedCornerShape(14.dp)).border(1.dp, Border, RoundedCornerShape(14.dp)).padding(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) { Text("Story order", color = Cream, fontWeight = FontWeight.Bold); Spacer(Modifier.width(8.dp)); Text("${clips.size} clips", color = Muted, fontSize = 10.sp) }
+        Spacer(Modifier.height(9.dp))
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            clips.forEachIndexed { index, clip ->
+                Column(Modifier.width(142.dp).background(Raised, RoundedCornerShape(9.dp)).border(1.dp, if (index == 0) Coral else Border, RoundedCornerShape(9.dp)).padding(9.dp)) {
+                    Text("${index + 1}  Clip ${index + 1}", color = Cream, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(formatDuration(clip.durationMs), color = Muted, fontSize = 10.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        TextButton(onClick = { moveClip(index, -1) }, enabled = index > 0, contentPadding = PaddingValues(0.dp)) { Text("← Earlier", fontSize = 10.sp) }
+                        TextButton(onClick = { moveClip(index, 1) }, enabled = index < clips.lastIndex, contentPadding = PaddingValues(0.dp)) { Text("Later →", fontSize = 10.sp) }
+                    }
                 }
-                TextButton(onClick = { moveClip(index, -1) }, enabled = index > 0) { Text("Up") }
-                TextButton(onClick = { moveClip(index, 1) }, enabled = index < clips.lastIndex) { Text("Down") }
             }
         }
     }
-    Spacer(Modifier.height(14.dp))
+}
+
+@Composable private fun SmallAction(label: String, modifier: Modifier = Modifier, action: () -> Unit) {
+    OutlinedButton(onClick = action, modifier = modifier, shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, Border), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp), colors = ButtonDefaults.outlinedButtonColors(contentColor = Cream)) { Text(label, fontSize = 11.sp) }
 }
 
 @Composable private fun FullscreenPreview(uris: List<String>, close: () -> Unit) {
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             VideoPreview(uris, Modifier.fillMaxSize())
-            Button(onClick = close, modifier = Modifier.align(Alignment.TopEnd).padding(20.dp)) { Text("Close") }
+            SmallAction("Close", Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(20.dp), close)
         }
     }
 }
@@ -154,10 +261,18 @@ class MainActivity : ComponentActivity() {
     val context = androidx.compose.ui.platform.LocalContext.current
     val player = remember(uris) { ExoPlayer.Builder(context).build().apply { setMediaItems(uris.map(MediaItem::fromUri)); prepare() } }
     DisposableEffect(player) { onDispose { player.release() } }
-    AndroidView(factory = { PlayerView(it).apply { this.player = player } }, modifier = modifier)
+    AndroidView(factory = { PlayerView(it).apply { this.player = player; setBackgroundColor(android.graphics.Color.BLACK) } }, modifier = modifier)
 }
+
 private fun formatDuration(ms: Long): String = "%d:%02d".format(ms / 60_000, (ms / 1_000) % 60)
 private fun operationTitle(op: EditOperation) = when (op) { is RemoveFumbles -> "Fumble removal"; is SetColorGrade -> "Automatic color"; is SetAudioCleanup -> "Background noise cleanup"; is SetAudioLevels -> "Dialogue leveling"; is AddTransition -> "Transition"; is AddMotionPreset -> "Motion preset"; is AddSoundEffect -> "Sound effect"; is SetBackgroundMusic -> "Background music"; is AddCaptions -> "Captions" }
 private fun operationDetail(op: EditOperation) = when (op) { is RemoveFumbles -> "${op.ranges.size} high-confidence cuts"; is SetColorGrade -> "Natural, skin-safe grade"; is SetAudioCleanup -> "Local speech-safe processing"; is SetAudioLevels -> "${op.dialogueLufs.toInt()} LUFS dialogue"; is AddTransition -> op.preset; is AddMotionPreset -> op.preset; is AddSoundEffect -> op.catalogId; is SetBackgroundMusic -> op.catalogId; is AddCaptions -> "${op.cues.size} timed caption cards" }
 
-@Composable private fun CtrlBTheme(content: @Composable () -> Unit) = MaterialTheme(colorScheme = lightColorScheme(primary = Color(0xFF3157D5), background = Color(0xFFF5F2EA), surface = Color(0xFFFFFCF5)), content = content)
+@Composable private fun CtrlBTheme(content: @Composable () -> Unit) = MaterialTheme(
+    colorScheme = darkColorScheme(primary = Coral, secondary = Lavender, background = Ink, surface = Workspace, onSurface = CreamRaised, outline = Border),
+    typography = Typography(
+        headlineMedium = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = (-1).sp),
+        bodyLarge = MaterialTheme.typography.bodyLarge.copy(lineHeight = 22.sp),
+    ),
+    content = content,
+)
