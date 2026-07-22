@@ -3,29 +3,24 @@
 require('dotenv').config({ path: require('node:path').join(__dirname, '..', '..', '..', '.env.local') });
 require('dotenv').config({ path: require('node:path').join(__dirname, '..', '..', '..', '.env') });
 const http = require('node:http');
-const crypto = require('node:crypto');
 const OpenAI = require('openai').default;
 const transcriptionCore = require('./transcription-core.cjs');
+const { TranscriptionUploads } = require('./transcription-uploads.cjs');
+const { fromEnvironment: authenticationFromEnvironment } = require('./authentication.cjs');
 const desktopPlanner = require('./desktop-planner-core.cjs');
 
 const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.MOONSHOT_API_KEY;
-const clientToken = process.env.CTRLB_PLANNER_CLIENT_TOKEN;
 const baseURL = process.env.MOONSHOT_BASE_URL || 'https://api.moonshot.ai/v1';
 const model = process.env.MOONSHOT_MODEL || 'kimi-k3';
 const MAX_BODY_BYTES = 512 * 1024;
+const transcriptionUploads = new TranscriptionUploads();
+const authentication = authenticationFromEnvironment();
 
 function json(response, status, body) {
   const encoded = Buffer.from(JSON.stringify(body));
   response.writeHead(status, { 'content-type': 'application/json', 'content-length': encoded.length, 'cache-control': 'no-store' });
   response.end(encoded);
-}
-
-function authorized(request) {
-  if (!clientToken) return false;
-  const supplied = String(request.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  const expected = Buffer.from(clientToken); const actual = Buffer.from(supplied);
-  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
 }
 
 function validateRequest(value) {
@@ -66,9 +61,38 @@ async function planDesktop(payload) {
 }
 
 const server = http.createServer(async (request, response) => {
-  if (request.method === 'GET' && request.url === '/health') return json(response, 200, { ok: true, model });
+  const requestUrl = new URL(request.url, 'http://localhost');
+  if (request.method === 'GET' && requestUrl.pathname === '/health') return json(response, 200, { ok: true, model, authentication: authentication.configured() });
+  let principal;
+  if (requestUrl.pathname.startsWith('/v1/')) {
+    try { principal = await authentication.authenticate(request); }
+    catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 401, { error: error?.message || 'Unauthorized', code: error?.code || 'unauthorized' }); }
+  }
+  const uploadMatch = requestUrl.pathname.match(/^\/v1\/transcribe\/uploads\/([0-9a-f-]{36})(\/complete)?$/i);
+  if (request.method === 'POST' && requestUrl.pathname === '/v1/transcribe/uploads') {
+    try {
+      transcriptionUploads.cleanup();
+      const upload = transcriptionUploads.create({ ...(await collect(request, 4096)), owner: principal.id });
+      return json(response, 201, { id: upload.id, offset: upload.offset, chunkSize: 4 * 1024 * 1024 });
+    } catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 400, { error: error?.message || 'Could not create upload' }); }
+  }
+  if (uploadMatch && request.method === 'HEAD' && !uploadMatch[2]) {
+    try { const upload = transcriptionUploads.read(uploadMatch[1], principal.id); response.writeHead(204, { 'upload-offset': upload.offset, 'cache-control': 'no-store' }); return response.end(); }
+    catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message }); }
+  }
+  if (uploadMatch && request.method === 'PUT' && !uploadMatch[2]) {
+    try { const upload = await transcriptionUploads.append(uploadMatch[1], principal.id, request.headers['upload-offset'], request); return json(response, 200, { offset: upload.offset }); }
+    catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message, offset: error?.offset }); }
+  }
+  if (uploadMatch && request.method === 'DELETE' && !uploadMatch[2]) {
+    try { transcriptionUploads.read(uploadMatch[1], principal.id); transcriptionUploads.remove(uploadMatch[1]); response.writeHead(204); return response.end(); }
+    catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message }); }
+  }
+  if (uploadMatch && request.method === 'POST' && uploadMatch[2]) {
+    try { const upload = transcriptionUploads.complete(uploadMatch[1], principal.id); const result = await transcriptionCore.transcribe(upload.stream); transcriptionUploads.remove(uploadMatch[1]); return json(response, 200, result); }
+    catch (error) { console.error('[transcribe-upload] request failed', { message: error?.message, status: error?.status }); return json(response, Number.isInteger(error?.status) ? error.status : 502, { error: error?.message || 'Transcription failed', offset: error?.offset }); }
+  }
   if (request.method === 'POST' && request.url === '/v1/transcribe') {
-    if (!authorized(request)) return json(response, 401, { error: 'Unauthorized' });
     try {
       transcriptionCore.validateUpload(request.headers);
       return json(response, 200, await transcriptionCore.transcribe(request));
@@ -78,7 +102,6 @@ const server = http.createServer(async (request, response) => {
     }
   }
   if (request.method === 'POST' && request.url === '/v1/desktop/plan') {
-    if (!authorized(request)) return json(response, 401, { error: 'Unauthorized' });
     try {
       const result = await planDesktop(await collect(request, 7 * 1024 * 1024));
       return json(response, result.ok ? 200 : result.error?.category === 'authentication' ? 503 : 502, result);
@@ -88,7 +111,6 @@ const server = http.createServer(async (request, response) => {
     }
   }
   if (request.method !== 'POST' || request.url !== '/v1/mobile/plan') return json(response, 404, { error: 'Not found' });
-  if (!authorized(request)) return json(response, 401, { error: 'Unauthorized' });
   try {
     if (!apiKey) throw Object.assign(new Error('MOONSHOT_API_KEY is not configured'), { status: 503 });
     const payload = await collect(request);
