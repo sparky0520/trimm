@@ -42,8 +42,7 @@ Provider keys remain in the shared backend and are not placed in the Electron re
 
 - [Product vision](docs/ai/ProductVision.md) - footage-specific editorial direction and architecture
 - [Active tickets](docs/ai/Tickets.md) - future work and acceptance criteria
-- [User guide](docs/user-guide.md) — questions, proposal review, privacy, compatibility, and limitations
-- [Developer guide](docs/developer-guide.md) — schema v1, edit-operation contracts, architecture, and test commands
+- [Internal visual handbook](docs/human/index.html) — product workflow, evidence model, architecture, and contributor runbook
 - [Implementation status](docs/ai/ProjectStatus.md) — verified capabilities and code map
 
 ## Current limits
