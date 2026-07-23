@@ -14,6 +14,8 @@ test('billing routes and database secrets belong to the Render backend only', ()
   assert.match(backend, /\/v1\/billing\/catalog/);
   assert.match(backend, /\/v1\/billing\/status/);
   assert.match(backend, /\/v1\/billing\/webhook/);
+  assert.match(backend, /\/v1\/billing\/google-play\/verify/);
+  assert.match(render, /key: CTRLB_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON/);
   assert.match(render, /key: SUPABASE_DB_URL/);
   assert.doesNotMatch(vercel, /\/v1\/billing/);
   assert.equal(fs.existsSync(path.join(root, 'api', 'billing.js')), false);

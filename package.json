@@ -23,6 +23,7 @@
     "planner:serve": "node services/backend/server/mobile-planner.cjs",
     "streaming:serve": "node services/backend/server/mobile-planner.cjs",
     "backend:serve": "node services/backend/server/mobile-planner.cjs",
+    "billing:verify-db": "node services/backend/scripts/verify-billing-db.cjs",
     "audio:ingest": "node services/backend/scripts/ingest-audio.cjs --output services/backend/public/audio",
     "electron:dev": "concurrently -n vite,electron -c green,blue \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:build": "npm run build && electron-builder --win"
@@ -69,12 +70,14 @@
   "dependencies": {
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@fontsource/manrope": "^5.2.8",
+    "@paddle/paddle-node-sdk": "^3.8.0",
     "@remotion/bundler": "^4.0.484",
     "@remotion/player": "^4.0.484",
     "@remotion/renderer": "^4.0.484",
     "@vitejs/plugin-react": "^5.2.0",
     "assemblyai": "^4.35.4",
     "dotenv": "^17.4.2",
+    "google-auth-library": "^10.9.0",
     "jose": "^6.2.4",
     "openai": "^6.42.0",
     "postgres": "3.4.9",

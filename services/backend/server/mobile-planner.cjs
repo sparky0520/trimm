@@ -9,8 +9,10 @@ const { TranscriptionUploads } = require('./transcription-uploads.cjs');
 const { fromEnvironment: authenticationFromEnvironment } = require('./authentication.cjs');
 const desktopPlanner = require('./desktop-planner-core.cjs');
 const { IdentityRateLimiter, auditEvent, correlationId, requireScope } = require('./authorization.cjs');
-const { BillingService, VolatileBillingStore, hmacWebhookVerifier } = require('./billing-core.cjs');
+const { BillingService, VolatileBillingStore } = require('./billing-core.cjs');
 const { PostgresBillingStore } = require('./postgres-billing-store.cjs');
+const { createPaddleWebhookVerifier } = require('./paddle-billing.cjs');
+const { GooglePlayPurchaseVerifier } = require('./google-play-billing.cjs');
 
 const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.MOONSHOT_API_KEY;
@@ -28,16 +30,19 @@ const billing = new BillingService({
     ? new PostgresBillingStore({ databaseUrl: process.env.SUPABASE_DB_URL })
     : new VolatileBillingStore(),
   verifiers: {
-    paddle: hmacWebhookVerifier({ secret: process.env.CTRLB_PADDLE_WEBHOOK_SECRET }),
-    google_play: hmacWebhookVerifier({ secret: process.env.CTRLB_GOOGLE_PLAY_WEBHOOK_SECRET }),
+    paddle: createPaddleWebhookVerifier({ secret: process.env.CTRLB_PADDLE_WEBHOOK_SECRET }),
   },
 });
+const googlePlay = process.env.CTRLB_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
+  ? new GooglePlayPurchaseVerifier()
+  : null;
 authentication.assertProductionConfigured();
 
 function policyFor(request, pathname) {
   if (pathname.startsWith('/v1/transcribe')) return { scope: 'transcribe:create', action: request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'update' : 'create', resourceType: 'transcription' };
   if (pathname === '/v1/desktop/plan' || pathname === '/v1/mobile/plan') return { scope: 'plan:create', action: 'create', resourceType: 'plan' };
   if (pathname === '/v1/billing/catalog' || pathname === '/v1/billing/status') return { action: 'read', resourceType: 'billing' };
+  if (pathname === '/v1/billing/google-play/verify') return { action: 'verify', resourceType: 'billing' };
   return null;
 }
 
@@ -107,7 +112,9 @@ const server = http.createServer(async (request, response) => {
       const provider = requestUrl.searchParams.get('provider') || '';
       const result = await billing.ingest(provider, {
         body: await collectBuffer(request),
-        signature: request.headers['x-ctrlb-signature'],
+        signature: provider === 'paddle'
+          ? request.headers['paddle-signature']
+          : request.headers['x-ctrlb-signature'],
       });
       audit({ action: 'billing.webhook', resourceType: 'billing', outcome: 'allowed', requestId });
       return json(response, 200, { accepted: true, duplicate: result.duplicate, requestId });
@@ -142,6 +149,40 @@ const server = http.createServer(async (request, response) => {
     catch (error) {
       return json(response, Number.isInteger(error?.status) ? error.status : 503, {
         error: error?.message || 'Billing status failed.', code: error?.code || 'billing_status_failed', requestId,
+      });
+    }
+  }
+  if (request.method === 'POST' && requestUrl.pathname === '/v1/billing/google-play/verify') {
+    try {
+      if (!googlePlay) throw Object.assign(new Error('Google Play purchase verification is not configured.'), {
+        status: 503, code: 'billing_unconfigured',
+      });
+      const submission = await collect(request, 8 * 1024);
+      const verified = await googlePlay.verify({
+        purchaseToken: submission.purchaseToken,
+        productId: submission.productId,
+        canonicalUserId: principal.id,
+      });
+      const [result] = await billing.reconcile('google_play', [verified]);
+      if (verified.acknowledgementPending) {
+        await googlePlay.acknowledge({
+          purchaseToken: submission.purchaseToken,
+          productId: submission.productId,
+        });
+      }
+      audit({ principal, action: 'billing.verify', resourceType: 'billing', outcome: 'allowed', requestId });
+      return json(response, 200, {
+        accepted: true,
+        duplicate: result.duplicate,
+        access: await billing.accessFor(principal.id),
+        requestId,
+      });
+    } catch (error) {
+      audit({ principal, action: 'billing.verify', resourceType: 'billing', outcome: 'denied', reason: error?.code, requestId });
+      return json(response, Number.isInteger(error?.status) ? error.status : 503, {
+        error: error?.message || 'Purchase verification failed.',
+        code: error?.code || 'purchase_verification_failed',
+        requestId,
       });
     }
   }
