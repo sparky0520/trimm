@@ -11,6 +11,11 @@ val rootLocalEnv: Map<String, String> = rootProject.file("../../.env.local").tak
         else trimmed.substringBefore("=").trim() to trimmed.substringAfter("=").trim()
     }?.toMap().orEmpty()
 
+val uploadStorePath = rootLocalEnv["CTRLB_ANDROID_UPLOAD_STORE_FILE"].orEmpty()
+val uploadStorePassword = rootLocalEnv["CTRLB_ANDROID_UPLOAD_STORE_PASSWORD"].orEmpty()
+val uploadKeyAlias = rootLocalEnv["CTRLB_ANDROID_UPLOAD_KEY_ALIAS"].orEmpty()
+val uploadKeyPassword = rootLocalEnv["CTRLB_ANDROID_UPLOAD_KEY_PASSWORD"].orEmpty()
+
 android {
     namespace = "ai.ctrlb.mobile"
     compileSdk = 37
@@ -38,6 +43,16 @@ android {
         buildConfigField("String", "AUDIO_CATALOG_URL", "\"${catalogUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "CLERK_PUBLISHABLE_KEY", "\"${clerkPublishableKey.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
     }
+    signingConfigs {
+        create("release") {
+            if (uploadStorePath.isNotEmpty()) {
+                storeFile = rootProject.file("../../$uploadStorePath")
+                storePassword = uploadStorePassword
+                keyAlias = uploadKeyAlias
+                keyPassword = uploadKeyPassword
+            }
+        }
+    }
     buildTypes {
         debug {
             val allowBootstrap = providers.gradleProperty("CTRLB_ALLOW_BOOTSTRAP_AUTH")
@@ -51,6 +66,7 @@ android {
             buildConfigField("String", "PLANNER_TOKEN", "\"${bootstrapToken.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         }
         release {
+            signingConfig = signingConfigs.getByName("release")
             buildConfigField("String", "PLANNER_TOKEN", "\"\"")
         }
     }
