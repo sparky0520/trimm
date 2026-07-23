@@ -8,6 +8,7 @@ const transcriptionCore = require('./transcription-core.cjs');
 const { TranscriptionUploads } = require('./transcription-uploads.cjs');
 const { fromEnvironment: authenticationFromEnvironment } = require('./authentication.cjs');
 const desktopPlanner = require('./desktop-planner-core.cjs');
+const { IdentityRateLimiter, auditEvent, correlationId, requireScope } = require('./authorization.cjs');
 
 const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.MOONSHOT_API_KEY;
@@ -16,7 +17,16 @@ const model = process.env.MOONSHOT_MODEL || 'kimi-k3';
 const MAX_BODY_BYTES = 512 * 1024;
 const transcriptionUploads = new TranscriptionUploads();
 const authentication = authenticationFromEnvironment();
+const rateLimiter = new IdentityRateLimiter({ limit: Number(process.env.CTRLB_RATE_LIMIT_PER_MINUTE) || 120 });
 authentication.assertProductionConfigured();
+
+function policyFor(request, pathname) {
+  if (pathname.startsWith('/v1/transcribe')) return { scope: 'transcribe:create', action: request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'update' : 'create', resourceType: 'transcription' };
+  if (pathname === '/v1/desktop/plan' || pathname === '/v1/mobile/plan') return { scope: 'plan:create', action: 'create', resourceType: 'plan' };
+  return null;
+}
+
+function audit(entry) { console.info('[audit]', auditEvent(entry)); }
 
 function json(response, status, body) {
   const encoded = Buffer.from(JSON.stringify(body));
@@ -65,9 +75,22 @@ const server = http.createServer(async (request, response) => {
   const requestUrl = new URL(request.url, 'http://localhost');
   if (request.method === 'GET' && requestUrl.pathname === '/health') return json(response, 200, { ok: true, model, authentication: authentication.configured() });
   let principal;
+  const requestId = correlationId(request);
   if (requestUrl.pathname.startsWith('/v1/')) {
-    try { principal = await authentication.authenticate(request); }
-    catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 401, { error: error?.message || 'Unauthorized', code: error?.code || 'unauthorized' }); }
+    const policy = policyFor(request, requestUrl.pathname);
+    try {
+      principal = await authentication.authenticate(request);
+      if (policy) requireScope(principal, policy.scope);
+      rateLimiter.consume(request, principal);
+      if (policy) audit({ principal, ...policy, outcome: 'allowed', requestId });
+    } catch (error) {
+      if (!principal) {
+        try { rateLimiter.consume(request, null); }
+        catch (rateError) { error = rateError; }
+      }
+      if (policy) audit({ principal, ...policy, outcome: 'denied', reason: error?.code, requestId });
+      return json(response, Number.isInteger(error?.status) ? error.status : 401, { error: error?.message || 'Unauthorized', code: error?.code || 'unauthorized', requestId });
+    }
   }
   const uploadMatch = requestUrl.pathname.match(/^\/v1\/transcribe\/uploads\/([0-9a-f-]{36})(\/complete)?$/i);
   if (request.method === 'POST' && requestUrl.pathname === '/v1/transcribe/uploads') {
@@ -78,7 +101,7 @@ const server = http.createServer(async (request, response) => {
     } catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 400, { error: error?.message || 'Could not create upload' }); }
   }
   if (uploadMatch && request.method === 'HEAD' && !uploadMatch[2]) {
-    try { const upload = transcriptionUploads.read(uploadMatch[1], principal.id); response.writeHead(204, { 'upload-offset': upload.offset, 'cache-control': 'no-store' }); return response.end(); }
+    try { const upload = transcriptionUploads.readForPrincipal(uploadMatch[1], principal); response.writeHead(204, { 'upload-offset': upload.offset, 'cache-control': 'no-store' }); return response.end(); }
     catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message }); }
   }
   if (uploadMatch && request.method === 'PUT' && !uploadMatch[2]) {
@@ -86,7 +109,7 @@ const server = http.createServer(async (request, response) => {
     catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message, offset: error?.offset }); }
   }
   if (uploadMatch && request.method === 'DELETE' && !uploadMatch[2]) {
-    try { transcriptionUploads.read(uploadMatch[1], principal.id); transcriptionUploads.remove(uploadMatch[1]); response.writeHead(204); return response.end(); }
+    try { transcriptionUploads.readForPrincipal(uploadMatch[1], principal); transcriptionUploads.remove(uploadMatch[1]); response.writeHead(204); return response.end(); }
     catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message }); }
   }
   if (uploadMatch && request.method === 'POST' && uploadMatch[2]) {

@@ -1,5 +1,6 @@
 import transcriptionCore from '../server/transcription-core.cjs';
 import authenticationModule from '../server/authentication.cjs';
+import requestPolicy from '../server/request-policy.cjs';
 
 const authentication = authenticationModule.fromEnvironment();
 
@@ -7,8 +8,8 @@ export const config = { api: { bodyParser: false } };
 
 export default async function mobileTranscribe(request, response) {
   if (request.method !== 'POST') return response.status(405).json({ error: 'Method not allowed' });
-  try { request.principal = await authentication.authenticate(request); }
-  catch (error) { return response.status(Number.isInteger(error?.status) ? error.status : 401).json({ error: error?.message || 'Unauthorized', code: error?.code || 'unauthorized' }); }
+  try { request.principal = (await requestPolicy.authorizeRequest(request, authentication, { scope: 'transcribe:create', action: 'create', resourceType: 'transcription' })).principal; }
+  catch (error) { return requestPolicy.authorizationResponse(response, error); }
   try {
     transcriptionCore.validateUpload(request.headers);
     return response.status(200).json(await transcriptionCore.transcribe(request));

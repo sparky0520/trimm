@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { Transform } = require('node:stream');
 const { DEFAULT_MAX_BYTES } = require('./transcription-core.cjs');
+const { requireAuthentication, requireOwner } = require('./authorization.cjs');
 
 const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000;
 
@@ -21,6 +22,7 @@ class TranscriptionUploads {
   mediaPath(id) { return path.join(this.directory, `${id}.media`); }
 
   create({ contentType, size, owner }) {
+    if (typeof owner !== 'string' || owner.length === 0) throw Object.assign(new Error('Authentication required.'), { status: 401 });
     const normalizedSize = Number(size);
     if (!Number.isSafeInteger(normalizedSize) || normalizedSize <= 0 || normalizedSize > this.maxBytes) {
       throw Object.assign(new Error('Media upload exceeds the configured limit.'), { status: 413 });
@@ -40,9 +42,14 @@ class TranscriptionUploads {
     let metadata;
     try { metadata = JSON.parse(fs.readFileSync(this.metadataPath(id), 'utf8')); }
     catch { throw Object.assign(new Error('Upload not found.'), { status: 404 }); }
-    if (metadata.owner !== owner) throw Object.assign(new Error('Upload not found.'), { status: 404 });
+    requireOwner({ id: owner }, metadata.owner);
     if (Date.now() - metadata.updatedAt > this.ttlMs) { this.remove(id); throw Object.assign(new Error('Upload expired.'), { status: 410 }); }
     return metadata;
+  }
+
+  readForPrincipal(id, principal) {
+    requireAuthentication(principal);
+    return this.read(id, principal.id);
   }
 
   async append(id, owner, expectedOffset, input) {
