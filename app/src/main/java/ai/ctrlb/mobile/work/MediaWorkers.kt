@@ -6,6 +6,7 @@ import ai.ctrlb.mobile.data.ProjectStore
 import ai.ctrlb.mobile.domain.*
 import ai.ctrlb.mobile.media.AudioAssetRepository
 import ai.ctrlb.mobile.BuildConfig
+import ai.ctrlb.mobile.auth.AuthTokenProvider
 import ai.ctrlb.mobile.planner.*
 import android.net.Uri
 import android.content.Context
@@ -26,8 +27,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
         val store = ProjectStore(applicationContext)
         val project = store.load(projectId)
         check(BuildConfig.TRANSCRIPTION_URL.isNotBlank()) { "AssemblyAI transcription endpoint is not configured." }
-        check(BuildConfig.PLANNER_TOKEN.isNotBlank()) { "Backend authentication token is not configured." }
-        val transcriber = TranscriptionClient(BuildConfig.TRANSCRIPTION_URL) { BuildConfig.PLANNER_TOKEN }
+        val transcriber = TranscriptionClient(BuildConfig.TRANSCRIPTION_URL, AuthTokenProvider::currentToken)
         val words = mutableListOf<TranscriptWord>()
         var offset = 0L
         project.orderedSources.forEachIndexed { index, source ->
@@ -60,8 +60,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
         if (BuildConfig.PLANNER_URL.isNotBlank()) {
             progress("planner", 94)
             val planning = runCatching {
-                check(BuildConfig.PLANNER_TOKEN.isNotBlank()) { "Planner authentication token is not configured." }
-                PlannerClient(BuildConfig.PLANNER_URL) { BuildConfig.PLANNER_TOKEN }.plan(
+                PlannerClient(BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken).plan(
                     PlannerPrivacyBoundary.create("Create a polished, conservative first cut using the supplied transcript and preferences.", words, analyzed.source, analyzed.preferences, analyzed.operations, analyzed.revision)
                 )
             }

@@ -26,17 +26,33 @@ android {
         val plannerUrl = providers.gradleProperty("CTRLB_PLANNER_URL").orElse(
             backendUrl.takeIf { it.isNotEmpty() }?.let { "$it/v1/mobile/plan" } ?: ""
         ).get()
-        val plannerToken = providers.gradleProperty("CTRLB_PLANNER_TOKEN")
-            .orElse(providers.environmentVariable("CTRLB_PLANNER_CLIENT_TOKEN"))
-            .orElse(rootLocalEnv["CTRLB_PLANNER_CLIENT_TOKEN"] ?: "").get()
         val transcriptionUrl = providers.gradleProperty("CTRLB_TRANSCRIPTION_URL").orElse(
             backendUrl.takeIf { it.isNotEmpty() }?.let { "$it/v1/transcribe" } ?: ""
         ).get()
         val catalogUrl = providers.gradleProperty("CTRLB_AUDIO_CATALOG_URL").orElse("").get()
+        val clerkPublishableKey = providers.gradleProperty("CTRLB_CLERK_PUBLISHABLE_KEY")
+            .orElse(providers.environmentVariable("CTRLB_CLERK_PUBLISHABLE_KEY"))
+            .orElse(rootLocalEnv["CTRLB_CLERK_PUBLISHABLE_KEY"] ?: rootLocalEnv["VITE_CLERK_PUBLISHABLE_KEY"] ?: "").get()
         buildConfigField("String", "PLANNER_URL", "\"${plannerUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
-        buildConfigField("String", "PLANNER_TOKEN", "\"${plannerToken.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "TRANSCRIPTION_URL", "\"${transcriptionUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "AUDIO_CATALOG_URL", "\"${catalogUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+        buildConfigField("String", "CLERK_PUBLISHABLE_KEY", "\"${clerkPublishableKey.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+    }
+    buildTypes {
+        debug {
+            val allowBootstrap = providers.gradleProperty("CTRLB_ALLOW_BOOTSTRAP_AUTH")
+                .orElse(providers.environmentVariable("CTRLB_ALLOW_BOOTSTRAP_AUTH"))
+                .orElse(rootLocalEnv["CTRLB_ALLOW_BOOTSTRAP_AUTH"] ?: "false").get().equals("true", ignoreCase = true)
+            val bootstrapToken = if (allowBootstrap) {
+                providers.gradleProperty("CTRLB_PLANNER_TOKEN")
+                    .orElse(providers.environmentVariable("CTRLB_PLANNER_CLIENT_TOKEN"))
+                    .orElse(rootLocalEnv["CTRLB_PLANNER_CLIENT_TOKEN"] ?: "").get()
+            } else ""
+            buildConfigField("String", "PLANNER_TOKEN", "\"${bootstrapToken.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+        }
+        release {
+            buildConfigField("String", "PLANNER_TOKEN", "\"\"")
+        }
     }
     buildFeatures { compose = true; buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
@@ -60,6 +76,7 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.2.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("com.clerk:clerk-android-ui:1.0.28")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")

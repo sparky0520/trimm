@@ -3,6 +3,7 @@ package ai.ctrlb.mobile
 import ai.ctrlb.mobile.domain.*
 import android.net.Uri
 import android.os.Bundle
+import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -32,10 +33,15 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import com.clerk.api.Clerk
+import com.clerk.ui.auth.AuthView
+import com.clerk.ui.userbutton.UserButton
+import kotlinx.coroutines.launch
 
 private val Ink = Color(0xFF17131F)
 private val Workspace = Color(0xFF211A2B)
@@ -52,8 +58,19 @@ private val Green = Color(0xFF6FD49A)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (BuildConfig.CLERK_PUBLISHABLE_KEY.isNotBlank()) {
+            lifecycleScope.launch { Clerk.auth.handle(intent.data) }
+        }
         enableEdgeToEdge()
         setContent { CtrlBTheme { Surface(Modifier.fillMaxSize(), color = Ink) { CtrlBApp() } } }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (BuildConfig.CLERK_PUBLISHABLE_KEY.isNotBlank()) {
+            lifecycleScope.launch { Clerk.auth.handle(intent.data) }
+        }
     }
 }
 
@@ -86,6 +103,7 @@ class MainActivity : ComponentActivity() {
         Text("STUDIO", color = Muted, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 1.2.sp,
             modifier = Modifier.border(1.dp, Border, RoundedCornerShape(20.dp)).padding(horizontal = 7.dp, vertical = 4.dp))
         Spacer(Modifier.weight(1f))
+        AccountControl()
         if (secondaryLabel != null && onSecondary != null) {
             TextButton(onClick = onSecondary) { Text(secondaryLabel, color = Cream) }
         }
@@ -93,6 +111,37 @@ class MainActivity : ComponentActivity() {
             Button(onClick = onAction, enabled = actionEnabled, shape = RoundedCornerShape(9.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText)) {
                 Text(actionLabel, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable private fun AccountControl() {
+    if (BuildConfig.CLERK_PUBLISHABLE_KEY.isBlank()) return
+    val initialized by Clerk.isInitialized.collectAsStateWithLifecycle()
+    val user by Clerk.userFlow.collectAsStateWithLifecycle()
+    var showSignIn by rememberSaveable { mutableStateOf(false) }
+
+    when {
+        !initialized -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Lavender)
+        user != null -> UserButton()
+        else -> TextButton(onClick = { showSignIn = true }) { Text("Sign in", color = Cream) }
+    }
+
+    if (showSignIn && user == null) {
+        Dialog(onDismissRequest = { showSignIn = false }) {
+            Surface(
+                Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                color = CreamRaised,
+            ) {
+                Box(Modifier.padding(12.dp)) {
+                    AuthView()
+                    TextButton(
+                        onClick = { showSignIn = false },
+                        modifier = Modifier.align(Alignment.TopEnd),
+                    ) { Text("Close", color = DarkText) }
+                }
             }
         }
     }
