@@ -16,6 +16,7 @@ const model = process.env.MOONSHOT_MODEL || 'kimi-k3';
 const MAX_BODY_BYTES = 512 * 1024;
 const transcriptionUploads = new TranscriptionUploads();
 const authentication = authenticationFromEnvironment();
+authentication.assertProductionConfigured();
 
 function json(response, status, body) {
   const encoded = Buffer.from(JSON.stringify(body));

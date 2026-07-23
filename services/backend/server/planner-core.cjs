@@ -1,14 +1,6 @@
 'use strict';
 
-const crypto = require('node:crypto');
 const OpenAI = require('openai').default;
-
-function authorized(header, expectedToken = process.env.CTRLB_PLANNER_CLIENT_TOKEN) {
-  if (!expectedToken) return false;
-  const supplied = String(header || '').replace(/^Bearer\s+/i, '');
-  const expected = Buffer.from(expectedToken); const actual = Buffer.from(supplied);
-  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
-}
 
 function validateRequest(value) {
   if (!value || typeof value !== 'object' || typeof value.prompt !== 'string' || value.prompt.length > 2000) return false;
@@ -38,4 +30,4 @@ async function plan(payload) {
   return validateProposal(JSON.parse(completion.choices?.[0]?.message?.content), payload.projectRevision);
 }
 
-module.exports = { authorized, plan, validateProposal, validateRequest };
+module.exports = { plan, validateProposal, validateRequest };

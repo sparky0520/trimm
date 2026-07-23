@@ -66,6 +66,7 @@
     "wait-on": "^9.0.10"
   },
   "dependencies": {
+    "@clerk/react": "^6.12.6",
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@fontsource/manrope": "^5.2.8",
     "@remotion/bundler": "^4.0.484",
