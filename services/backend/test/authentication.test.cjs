@@ -43,7 +43,7 @@ test('OIDC authentication verifies signature, issuer, audience, expiry, and cano
   auth.assertProductionConfigured({ NODE_ENV: 'production' });
   const sign = (tokenIssuer = issuer, tokenAudience = audience, tokenId = 'active-token', authorizedParty = 'ctrlb://desktop') => new SignJWT({ scope: 'transcribe projects:write', entitlements: ['pro'], azp: authorizedParty }).setProtectedHeader({ alg: 'RS256', kid: 'test-key' }).setSubject('user-123').setIssuer(tokenIssuer).setAudience(tokenAudience).setJti(tokenId).setIssuedAt().setExpirationTime('5m').sign(privateKey);
   const principal = await auth.authenticate(request(await sign()));
-  assert.deepEqual(principal, { id: 'user-123', scopes: ['transcribe', 'projects:write'], entitlements: ['pro'], authentication: 'oidc' });
+  assert.deepEqual(principal, { id: 'user-123', scopes: ['transcribe', 'projects:write'], entitlements: [], authentication: 'oidc' });
   await assert.rejects(auth.authenticate(request(await sign('https://attacker.test/'))), (error) => error.code === 'invalid_token');
   await assert.rejects(auth.authenticate(request(await sign(issuer, 'wrong-api'))), (error) => error.code === 'invalid_token');
   const expired = await new SignJWT({}).setProtectedHeader({ alg: 'RS256', kid: 'test-key' }).setSubject('user-123').setIssuer(issuer).setAudience(audience).setIssuedAt().setExpirationTime('0s').sign(privateKey);

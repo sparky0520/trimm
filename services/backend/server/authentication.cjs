@@ -67,7 +67,9 @@ class Authenticator {
       return Object.freeze({
         id: payload.sub,
         scopes: Object.freeze(boundedStrings(payload.scope || payload.permissions)),
-        entitlements: Object.freeze(boundedStrings(payload.entitlements)),
+        // Paid access is resolved from ctrlB's billing store. Identity-provider
+        // custom claims are intentionally not an authorization source.
+        entitlements: Object.freeze([]),
         authentication: 'oidc',
       });
     } catch {

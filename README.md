@@ -51,12 +51,12 @@ The desktop editor is designed around narrated developer recordings. Large
 transcription uploads must use the streaming Node backend because serverless
 platforms impose smaller request-body limits. Build it with
 `services/backend/Dockerfile`, then point both clients at the service's HTTPS
-origin using `CTRLB_BACKEND_URL`. That one Node deployment
-serves `/v1/mobile/plan`, `/v1/desktop/plan`, and
-`/v1/transcribe`; Vercel is not required for these routes.
+origin using `CTRLB_BACKEND_URL`. That one Render Node deployment serves
+`/v1/mobile/plan`, `/v1/desktop/plan`, `/v1/transcribe`, and the authenticated
+billing routes; Vercel is not required for these routes.
 
 For a managed deployment, connect this repository to Render and apply the
-included `render.yaml` Blueprint. Configure the three unsynced secrets in the
+included `render.yaml` Blueprint. Configure the unsynced secrets in the
 Render dashboard, then use the generated `https://<service>.onrender.com` URL as
 `CTRLB_BACKEND_URL`.
 

@@ -18,3 +18,15 @@ services:
         value: kimi
       - key: CTRLB_PLANNER_CLIENT_TOKEN
         sync: false
+      - key: CTRLB_CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: CTRLB_AUTH_AUDIENCE
+        sync: false
+      - key: CTRLB_AUTH_AUTHORIZED_PARTIES
+        sync: false
+      - key: SUPABASE_DB_URL
+        sync: false
+      - key: CTRLB_PADDLE_WEBHOOK_SECRET
+        sync: false
+      - key: CTRLB_GOOGLE_PLAY_WEBHOOK_SECRET
+        sync: false

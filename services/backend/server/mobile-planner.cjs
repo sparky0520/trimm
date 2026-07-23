@@ -9,6 +9,8 @@ const { TranscriptionUploads } = require('./transcription-uploads.cjs');
 const { fromEnvironment: authenticationFromEnvironment } = require('./authentication.cjs');
 const desktopPlanner = require('./desktop-planner-core.cjs');
 const { IdentityRateLimiter, auditEvent, correlationId, requireScope } = require('./authorization.cjs');
+const { BillingService, VolatileBillingStore, hmacWebhookVerifier } = require('./billing-core.cjs');
+const { PostgresBillingStore } = require('./postgres-billing-store.cjs');
 
 const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.MOONSHOT_API_KEY;
@@ -18,11 +20,24 @@ const MAX_BODY_BYTES = 512 * 1024;
 const transcriptionUploads = new TranscriptionUploads();
 const authentication = authenticationFromEnvironment();
 const rateLimiter = new IdentityRateLimiter({ limit: Number(process.env.CTRLB_RATE_LIMIT_PER_MINUTE) || 120 });
+if (process.env.NODE_ENV === 'production' && !process.env.SUPABASE_DB_URL) {
+  throw new Error('Production billing database is not configured.');
+}
+const billing = new BillingService({
+  store: process.env.SUPABASE_DB_URL
+    ? new PostgresBillingStore({ databaseUrl: process.env.SUPABASE_DB_URL })
+    : new VolatileBillingStore(),
+  verifiers: {
+    paddle: hmacWebhookVerifier({ secret: process.env.CTRLB_PADDLE_WEBHOOK_SECRET }),
+    google_play: hmacWebhookVerifier({ secret: process.env.CTRLB_GOOGLE_PLAY_WEBHOOK_SECRET }),
+  },
+});
 authentication.assertProductionConfigured();
 
 function policyFor(request, pathname) {
   if (pathname.startsWith('/v1/transcribe')) return { scope: 'transcribe:create', action: request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'update' : 'create', resourceType: 'transcription' };
   if (pathname === '/v1/desktop/plan' || pathname === '/v1/mobile/plan') return { scope: 'plan:create', action: 'create', resourceType: 'plan' };
+  if (pathname === '/v1/billing/catalog' || pathname === '/v1/billing/status') return { action: 'read', resourceType: 'billing' };
   return null;
 }
 
@@ -54,6 +69,16 @@ async function collect(request, maxBytes = MAX_BODY_BYTES) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
+async function collectBuffer(request, maxBytes = 256 * 1024) {
+  const chunks = []; let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > maxBytes) throw Object.assign(new Error('Request too large'), { status: 413 });
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 async function planDesktop(payload) {
   const frames = Array.isArray(payload?.frameImages) ? payload.frameImages : [];
   if (!payload || !desktopPlanner.validateRequest(payload.request) || frames.length > 6 || frames.some((frame) =>
@@ -76,11 +101,28 @@ const server = http.createServer(async (request, response) => {
   if (request.method === 'GET' && requestUrl.pathname === '/health') return json(response, 200, { ok: true, model, authentication: authentication.configured() });
   let principal;
   const requestId = correlationId(request);
+  if (request.method === 'POST' && requestUrl.pathname === '/v1/billing/webhook') {
+    try {
+      rateLimiter.consume(request, null);
+      const provider = requestUrl.searchParams.get('provider') || '';
+      const result = await billing.ingest(provider, {
+        body: await collectBuffer(request),
+        signature: request.headers['x-ctrlb-signature'],
+      });
+      audit({ action: 'billing.webhook', resourceType: 'billing', outcome: 'allowed', requestId });
+      return json(response, 200, { accepted: true, duplicate: result.duplicate, requestId });
+    } catch (error) {
+      audit({ action: 'billing.webhook', resourceType: 'billing', outcome: 'denied', reason: error?.code, requestId });
+      return json(response, Number.isInteger(error?.status) ? error.status : 503, {
+        error: error?.message || 'Billing webhook failed.', code: error?.code || 'billing_webhook_failed', requestId,
+      });
+    }
+  }
   if (requestUrl.pathname.startsWith('/v1/')) {
     const policy = policyFor(request, requestUrl.pathname);
     try {
       principal = await authentication.authenticate(request);
-      if (policy) requireScope(principal, policy.scope);
+      if (policy?.scope) requireScope(principal, policy.scope);
       rateLimiter.consume(request, principal);
       if (policy) audit({ principal, ...policy, outcome: 'allowed', requestId });
     } catch (error) {
@@ -90,6 +132,17 @@ const server = http.createServer(async (request, response) => {
       }
       if (policy) audit({ principal, ...policy, outcome: 'denied', reason: error?.code, requestId });
       return json(response, Number.isInteger(error?.status) ? error.status : 401, { error: error?.message || 'Unauthorized', code: error?.code || 'unauthorized', requestId });
+    }
+  }
+  if (request.method === 'GET' && requestUrl.pathname === '/v1/billing/catalog') {
+    return json(response, 200, billing.catalog());
+  }
+  if (request.method === 'GET' && requestUrl.pathname === '/v1/billing/status') {
+    try { return json(response, 200, await billing.accessFor(principal.id)); }
+    catch (error) {
+      return json(response, Number.isInteger(error?.status) ? error.status : 503, {
+        error: error?.message || 'Billing status failed.', code: error?.code || 'billing_status_failed', requestId,
+      });
     }
   }
   const uploadMatch = requestUrl.pathname.match(/^\/v1\/transcribe\/uploads\/([0-9a-f-]{36})(\/complete)?$/i);
