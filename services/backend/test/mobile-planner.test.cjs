@@ -26,3 +26,14 @@ test('Render backend serves the public privacy policy without authentication', (
   assert.match(policy, /ctrlB Privacy Policy/);
   assert.match(policy, /darshjain05\.in@gmail\.com/);
 });
+
+test('mobile planning excludes operations without render support or frame evidence', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  for (const name of ['planner-core.cjs', 'mobile-planner.cjs']) {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'server', name), 'utf8');
+    assert.doesNotMatch(source.match(/const allowed = new Set\(\[[^\n]+/)[0], /set_color_grade|add_transition|add_motion_preset/);
+    assert.match(source, /Color requires frame evidence/);
+    assert.match(source, /Transitions and motion presets are unavailable/);
+  }
+});
