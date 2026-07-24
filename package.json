@@ -24,7 +24,7 @@
     "streaming:serve": "node services/backend/server/mobile-planner.cjs",
     "backend:serve": "node services/backend/server/mobile-planner.cjs",
     "billing:verify-db": "node services/backend/scripts/verify-billing-db.cjs",
-    "audio:ingest": "node services/backend/scripts/ingest-audio.cjs --output services/backend/public/audio",
+    "audio:import": "node services/backend/scripts/ingest-audio.cjs",
     "electron:dev": "concurrently -n vite,electron -c green,blue \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:build": "npm run build && electron-builder --win"
   },

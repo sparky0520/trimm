@@ -7,43 +7,37 @@ const os = require('node:os');
 const path = require('node:path');
 const { ingestTrack, validateOptions } = require('../server/audio-ingestion.cjs');
 
-const baseOptions = {
-  id: 'calm-track', sourceUrl: 'https://www.youtube.com/watch?v=licensed', publicBaseUrl: 'https://cdn.example/audio',
-  outputDir: '', licenseId: 'youtube-audio-library:licensed', rightsConfirmed: true, attributionRequired: true,
-  attribution: 'Example Artist — Calm Track (CC BY 4.0)', moods: ['calm'], energy: 0.3,
+const base = {
+  id: 'calm-track', filePath: 'downloaded.mp3', provider: 'youtube-audio-library',
+  providerAssetId: 'library-track-123', sourceUrl: 'https://studio.youtube.com/channel/UC/music',
+  licenseId: 'youtube-audio-library-standard', rightsConfirmed: true,
+  allowedUse: ['commercial', 'rendered-video'], durationMs: 12345,
 };
 
-test('ingestion requires explicit rights confirmation and attribution', () => {
-  assert.throws(() => validateOptions({ ...baseOptions, rightsConfirmed: false }), /rights-confirmed/);
-  assert.throws(() => validateOptions({ ...baseOptions, attribution: '' }), /Attribution text/);
-  assert.throws(() => validateOptions({ ...baseOptions, sourceUrl: 'http://youtube.com/watch?v=x' }), /HTTPS/);
+test('assisted ingestion requires local media, provenance, rights, and render scope', () => {
+  assert.throws(() => validateOptions({ ...base, filePath: '' }), /filePath/);
+  assert.throws(() => validateOptions({ ...base, rightsConfirmed: false }), /rights-confirmed/);
+  assert.throws(() => validateOptions({ ...base, providerAssetId: '' }), /providerAssetId/);
+  assert.throws(() => validateOptions({ ...base, allowedUse: ['personal'] }), /rendered-video/);
 });
 
-test('ingestion downloads, fingerprints, and atomically updates the public catalog', async (t) => {
-  const outputDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ctrlb-audio-'));
-  t.after(() => fs.promises.rm(outputDir, { recursive: true, force: true }));
-  const calls = [];
-  const execFile = async (command, args) => {
-    calls.push({ command, args });
-    if (args.includes('--dump-single-json')) return { stdout: JSON.stringify({ title: 'Calm Track', uploader: 'Example Artist', webpage_url: baseOptions.sourceUrl }) };
-    if (command === 'ffprobe') return { stdout: '12.345\n' };
-    const template = args[args.indexOf('--output') + 1];
-    const downloaded = template.replace('%(ext)s', 'mp3');
-    await fs.promises.writeFile(downloaded, 'licensed audio bytes');
-    return { stdout: `${downloaded}\n` };
-  };
-  const result = await ingestTrack({ ...baseOptions, outputDir }, { execFile });
-  assert.equal(result.item.durationMs, 12345);
-  assert.equal(result.item.title, 'Calm Track');
-  assert.equal(result.item.previewUrl, 'https://cdn.example/audio/media/calm-track.mp3');
-  assert.match(result.item.checksum, /^[a-f0-9]{64}$/);
-  const catalog = JSON.parse(await fs.promises.readFile(path.join(outputDir, 'catalog.v1.json'), 'utf8'));
-  assert.deepEqual(catalog.items, [result.item]);
-  assert.equal(calls.filter((call) => call.command === 'yt-dlp').length, 2);
+test('YouTube Audio Library ingestion imports a user-downloaded file without scraping', async (t) => {
+  const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ctrlb-assisted-'));
+  t.after(() => fs.promises.rm(dir, { recursive: true, force: true }));
+  const filePath = path.join(dir, 'downloaded.mp3');
+  await fs.promises.writeFile(filePath, 'download from provider control');
+  const result = await ingestTrack({ ...base, filePath });
+  assert.equal(result.item.provider, 'youtube-audio-library');
+  assert.equal(result.item.status, 'ready');
+  assert.equal(result.catalogPath, null);
+  assert.equal(result.item.userScoped, true);
 });
 
-test('ingestion rejects a redirected non-YouTube source', async (t) => {
-  const outputDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ctrlb-audio-'));
-  t.after(() => fs.promises.rm(outputDir, { recursive: true, force: true }));
-  await assert.rejects(ingestTrack({ ...baseOptions, outputDir }, { execFile: async () => ({ stdout: JSON.stringify({ webpage_url: 'https://example.com/audio' }) }) }), /Only YouTube/);
+test('user-scoped provider media is not published without redistribution rights', async (t) => {
+  const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ctrlb-no-publish-'));
+  t.after(() => fs.promises.rm(dir, { recursive: true, force: true }));
+  const filePath = path.join(dir, 'downloaded.mp3');
+  await fs.promises.writeFile(filePath, 'bytes');
+  await assert.rejects(ingestTrack({ ...base, filePath, outputDir: path.join(dir, 'public') }), /user cache/);
+  assert.throws(() => validateOptions({ ...base, filePath, outputDir: dir, publish: true }), /redistribution rights/);
 });
