@@ -3,6 +3,8 @@
 require('dotenv').config({ path: require('node:path').join(__dirname, '..', '..', '..', '.env.local') });
 require('dotenv').config({ path: require('node:path').join(__dirname, '..', '..', '..', '.env') });
 const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
 const OpenAI = require('openai').default;
 const transcriptionCore = require('./transcription-core.cjs');
 const { TranscriptionUploads } = require('./transcription-uploads.cjs');
@@ -19,6 +21,7 @@ const apiKey = process.env.MOONSHOT_API_KEY;
 const baseURL = process.env.MOONSHOT_BASE_URL || 'https://api.moonshot.ai/v1';
 const model = process.env.MOONSHOT_MODEL || 'kimi-k3';
 const MAX_BODY_BYTES = 512 * 1024;
+const privacyPolicy = fs.readFileSync(path.join(__dirname, 'privacy.html'));
 const transcriptionUploads = new TranscriptionUploads();
 const authentication = authenticationFromEnvironment();
 const rateLimiter = new IdentityRateLimiter({ limit: Number(process.env.CTRLB_RATE_LIMIT_PER_MINUTE) || 120 });
@@ -52,6 +55,16 @@ function json(response, status, body) {
   const encoded = Buffer.from(JSON.stringify(body));
   response.writeHead(status, { 'content-type': 'application/json', 'content-length': encoded.length, 'cache-control': 'no-store' });
   response.end(encoded);
+}
+
+function html(response, status, body) {
+  response.writeHead(status, {
+    'content-type': 'text/html; charset=utf-8',
+    'content-length': body.length,
+    'cache-control': 'public, max-age=3600',
+    'x-content-type-options': 'nosniff',
+  });
+  response.end(body);
 }
 
 function validateRequest(value) {
@@ -104,6 +117,9 @@ async function planDesktop(payload) {
 const server = http.createServer(async (request, response) => {
   const requestUrl = new URL(request.url, 'http://localhost');
   if (request.method === 'GET' && requestUrl.pathname === '/health') return json(response, 200, { ok: true, model, authentication: authentication.configured() });
+  if (request.method === 'GET' && (requestUrl.pathname === '/privacy' || requestUrl.pathname === '/privacy/')) {
+    return html(response, 200, privacyPolicy);
+  }
   let principal;
   const requestId = correlationId(request);
   if (request.method === 'POST' && requestUrl.pathname === '/v1/billing/webhook') {

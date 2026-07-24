@@ -13,3 +13,16 @@ test('mobile planner is configured as a non-secret package script', () => {
   assert.match(source, /\/v1\/transcribe/);
   assert.doesNotMatch(source, /sk-[a-zA-Z0-9]{20}/);
 });
+
+test('Render backend serves the public privacy policy without authentication', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const serverDirectory = path.join(__dirname, '..', 'server');
+  const source = fs.readFileSync(path.join(serverDirectory, 'mobile-planner.cjs'), 'utf8');
+  const policy = fs.readFileSync(path.join(serverDirectory, 'privacy.html'), 'utf8');
+
+  assert.match(source, /requestUrl\.pathname === '\/privacy'/);
+  assert.match(source, /return html\(response, 200, privacyPolicy\)/);
+  assert.match(policy, /ctrlB Privacy Policy/);
+  assert.match(policy, /darshjain05\.in@gmail\.com/);
+});
