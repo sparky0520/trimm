@@ -62,3 +62,13 @@ See [ProductVision - Audio acquisition policy](../../docs/ai/ProductVision.md#au
 - A rights-audited audio catalog or user-scoped provider connections.
 - Redistributable audio only where the license expressly permits source-file redistribution.
 - Physical-device and CI verification across representative Android capabilities.
+
+## Representative editorial evaluation
+
+Run `npm run fixtures:prepare:mobile` from the repository root to prepare the
+versioned real-camera, multi-clip editorial fixture. The fixture manifest,
+ground truth, provenance, and evaluation contract are committed; downloaded
+CC-licensed media remains ignored. Later perception and planning acceptance
+must exercise this fixture (or another versioned redistributable real-media
+fixture), not synthetic unit inputs alone. See
+[Ticket 5 delivery notes](../../docs/ai/Ticket-005-Mobile-Editorial-Fixtures.md).
