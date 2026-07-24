@@ -32,9 +32,10 @@ test('transcription sends the media stream only to the server-side AssemblyAI cl
 
 test('Android analysis uses remote transcription before the planner and no Whisper invocation', () => {
   const worker = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'apps/mobile/app/src/main/java/ai/ctrlb/mobile/work/MediaWorkers.kt'), 'utf8');
-  assert.match(worker, /TranscriptionClient\(BuildConfig\.TRANSCRIPTION_URL,\s*AuthTokenProvider::currentToken\)/);
+  assert.match(worker, /BuildConfig\.TRANSCRIPTION_URL\.takeIf\(String::isNotBlank\)/);
+  assert.match(worker, /TranscriptionClient\(it,\s*AuthTokenProvider::currentToken\)/);
   assert.doesNotMatch(worker, /BundledWhisperTranscriber|WhisperModelManager/);
-  assert.ok(worker.indexOf('transcriber.transcribe') < worker.indexOf('PlannerClient'));
+  assert.ok(worker.indexOf('client.transcribe') < worker.indexOf('PlannerClient'));
 });
 
 test('Android resumable uploads refresh auth and clean up cancelled sessions', () => {
