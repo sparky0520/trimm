@@ -76,11 +76,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val automatic = FumbleDetector.automatic(candidates)
         val operations = buildList<EditOperation> {
             if (automatic.isNotEmpty()) add(RemoveFumbles(ranges = automatic.map { it.range }, confidence = automatic.minOf { it.confidence }, reasons = automatic.map { it.reason }.distinct()))
-            add(SetColorGrade(grade = GradeEngine.natural(emptyList(), preferences.style)))
             if (source.hasAudio) { add(SetAudioCleanup()); add(SetAudioLevels()) }
             if (preferences.music == MusicChoice.AUTOMATIC) add(SetBackgroundMusic(catalogId = "automatic"))
-            add(AddMotionPreset(range = TimeRange(0, minOf(2_400, durationMs)), preset = "talking-head-title", intensity = .45f))
-            automatic.take(3).forEach { candidate -> add(AddTransition(atSourceMs = candidate.range.endMs, preset = "dip", durationMs = 220)) }
         }
         val capability = DeviceCapability.evaluate(getApplication())
         val (exportWidth, exportHeight) = when (preferences.aspectRatio) {

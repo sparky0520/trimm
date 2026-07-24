@@ -46,7 +46,9 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
         progress("fumbles", 65)
         val candidates = FumbleDetector.detect(words, project.durationMs, project.preferences.pace)
         val automatic = FumbleDetector.automatic(candidates)
-        val retained = project.operations.filterNot { it is RemoveFumbles || it is AddCaptions }.toMutableList()
+        val retained = project.operations.filter {
+            it !is RemoveFumbles && it !is AddCaptions && OperationValidator.isPlannerAvailable(it)
+        }.toMutableList()
         if (automatic.isNotEmpty()) retained += RemoveFumbles(ranges = automatic.map { it.range }, confidence = automatic.minOf { it.confidence }, reasons = automatic.map { it.reason }.distinct())
         val captions = CaptionSegmenter.segment(words)
         if (project.preferences.captions && captions.isNotEmpty()) retained += AddCaptions(cues = captions)

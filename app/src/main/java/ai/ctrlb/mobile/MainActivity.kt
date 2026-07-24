@@ -251,11 +251,15 @@ class MainActivity : ComponentActivity() {
             state.jobMessage?.let { message -> item { StatusCard("PROCESSING", message, Lavender) } }
             item { ClipOrder(project.orderedSources, moveClip) }
             item { Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) { Text("EDIT DECISIONS", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp); HorizontalDivider(Modifier.padding(start = 10.dp), color = Border) } }
-            items(project.operations, key = { it.id }) { op ->
+            items(OperationValidator.visible(project.operations), key = { it.id }) { op ->
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(13.dp), colors = CardDefaults.cardColors(containerColor = Cream), border = BorderStroke(1.dp, Color.White.copy(alpha = .08f))) {
                     Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(34.dp).background(if (op.enabled) Coral.copy(alpha = .18f) else DarkText.copy(alpha = .07f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { Text(if (op.enabled) "✓" else "–", color = if (op.enabled) Coral else Muted, fontWeight = FontWeight.Bold) }
-                        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) { Text(operationTitle(op), color = DarkText, fontWeight = FontWeight.Bold); Text(operationDetail(op), color = DarkText.copy(alpha = .58f), fontSize = 12.sp) }
+                        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                            Text(operationTitle(op), color = DarkText, fontWeight = FontWeight.Bold)
+                            Text(operationDetail(op), color = DarkText.copy(alpha = .58f), fontSize = 12.sp)
+                            Text(OperationValidator.basis(op), color = DarkText.copy(alpha = .46f), fontSize = 10.sp)
+                        }
                         Switch(op.enabled, { toggle(op.id) }, colors = SwitchDefaults.colors(checkedThumbColor = DarkText, checkedTrackColor = Coral))
                     }
                 }
@@ -314,7 +318,7 @@ class MainActivity : ComponentActivity() {
 }
 
 private fun formatDuration(ms: Long): String = "%d:%02d".format(ms / 60_000, (ms / 1_000) % 60)
-private fun operationTitle(op: EditOperation) = when (op) { is RemoveFumbles -> "Fumble removal"; is SetColorGrade -> "Automatic color"; is SetAudioCleanup -> "Background noise cleanup"; is SetAudioLevels -> "Dialogue leveling"; is AddTransition -> "Transition"; is AddMotionPreset -> "Motion preset"; is AddSoundEffect -> "Sound effect"; is SetBackgroundMusic -> "Background music"; is AddCaptions -> "Captions" }
+private fun operationTitle(op: EditOperation) = when (op) { is RemoveFumbles -> "Fumble removal"; is SetColorGrade -> "Frame-based color"; is SetAudioCleanup -> "Background noise cleanup"; is SetAudioLevels -> "Dialogue leveling"; is AddTransition -> "Transition"; is AddMotionPreset -> "Motion preset"; is AddSoundEffect -> "Sound effect"; is SetBackgroundMusic -> "Background music"; is AddCaptions -> "Captions" }
 private fun operationDetail(op: EditOperation) = when (op) { is RemoveFumbles -> "${op.ranges.size} high-confidence cuts"; is SetColorGrade -> "Natural, skin-safe grade"; is SetAudioCleanup -> "Local speech-safe processing"; is SetAudioLevels -> "${op.dialogueLufs.toInt()} LUFS dialogue"; is AddTransition -> op.preset; is AddMotionPreset -> op.preset; is AddSoundEffect -> op.catalogId; is SetBackgroundMusic -> op.catalogId; is AddCaptions -> "${op.cues.size} timed caption cards" }
 
 @Composable private fun CtrlBTheme(content: @Composable () -> Unit) = MaterialTheme(

@@ -50,9 +50,10 @@ See [ProductVision - Audio acquisition policy](../../docs/ai/ProductVision.md#au
 
 - Analysis output and project operations persist locally.
 - Preview is a rendered 720p MP4.
-- Export applies cuts, basic color, dialogue processing, captions when present, background music, and positioned sound effects.
+- Export applies cuts, explicitly frame-derived color when present, dialogue processing, captions when present, background music, and positioned sound effects.
 - Missing planner, transcription, audio, preview, and export configuration produces a visible error or warning.
-- Transitions and motion presets remain represented in the operation schema but are not rendered by the current Media3 path.
+- Legacy transitions and motion presets remain readable in the project schema, but are excluded from planning and UI until the Media3 preview/export path can render them with parity.
+- Color is not offered automatically until frame analysis supplies evidence. Operation cards identify transcript evidence, user preference, or a documented default.
 
 ## Production inputs
 
