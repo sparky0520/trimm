@@ -44,7 +44,7 @@ Do not treat an arbitrary YouTube URL as a YouTube Audio Library asset. The Audi
 
 Provider adapters may automate acquisition only through documented APIs and permitted download flows. Freesound exposes API search and an OAuth-protected original-file download suitable for a sound-effects adapter. Never ship provider cookies or private-endpoint scraping code in the APK. Do not republish provider source files through a ctrlB CDN unless the captured license explicitly permits redistribution.
 
-See [ProductVision - Audio acquisition policy](../../docs/ai/ProductVision.md#audio-acquisition-policy) and AI-042 in [Tickets](../../docs/ai/Tickets.md).
+See [ProductVision - Audio acquisition policy](../../docs/ai/ProductVision.md#audio-acquisition-policy) and Ticket 3 in [Tickets](../../docs/ai/Tickets.md).
 
 ## Current rendering behavior
 

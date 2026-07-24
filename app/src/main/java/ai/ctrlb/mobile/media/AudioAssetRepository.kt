@@ -54,7 +54,11 @@ class AudioAssetRepository(private val context: Context) {
         val document = json.decodeFromString<CatalogDocument>(body)
         check(document.version == 1) { "Unsupported audio catalog version ${document.version}." }
         return document.items.filter {
-            it.licenseId.isNotBlank() && it.checksum.matches(Regex("[a-fA-F0-9]{64}")) &&
+            it.status == "ready" && it.quarantineReasons.isEmpty() &&
+                it.provider.isNotBlank() && it.providerAssetId.isNotBlank() && it.acquiredAt.isNotBlank() &&
+                "rendered-video" in it.allowedUse &&
+                (it.licenseId.isNotBlank() || !it.licenseText.isNullOrBlank()) &&
+                it.checksum.matches(Regex("[a-fA-F0-9]{64}")) &&
                 (!it.attributionRequired || !it.attribution.isNullOrBlank()) &&
                 listOfNotNull(it.downloadUrl, it.previewUrl, it.sourceUrl).all { url -> url.startsWith("https://") }
         }

@@ -21,7 +21,15 @@ import kotlin.math.abs
     val artist: String = "",
     val previewUrl: String? = null,
     val sourceUrl: String? = null,
-    val attributionRequired: Boolean = false
+    val attributionRequired: Boolean = false,
+    val provider: String = "",
+    val providerAssetId: String = "",
+    val acquiredAt: String = "",
+    val licenseText: String? = null,
+    val allowedUse: Set<String> = emptySet(),
+    val status: String = "quarantined",
+    val quarantineReasons: Set<String> = emptySet(),
+    val redistributionAllowed: Boolean = false
 )
 data class AudioMatch(val item: AudioCatalogItem, val score: Float, val reasons: List<String>)
 
