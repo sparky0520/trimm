@@ -13,6 +13,7 @@
     "test:render-smoke": "node --test apps/desktop/test/build.test.js apps/desktop/test/render-timing.test.js apps/desktop/test/packaged-workflow.test.js && node apps/desktop/scripts/render-mp4-smoke.cjs",
     "test:ai-evals": "node --test apps/desktop/test/ai-evaluations.test.js",
     "fixtures:prepare": "node apps/desktop/scripts/prepare-representative-fixtures.cjs",
+    "fixtures:prepare:mobile": "node apps/mobile/scripts/prepare-editorial-fixtures.cjs",
     "benchmark:render": "node apps/desktop/scripts/benchmark-render.cjs",
     "verify:production": "node apps/desktop/scripts/verify-production-build.cjs apps/desktop/dist apps/desktop/release/win-unpacked",
     "verify:ci": "npm run test:unit && npm run test:contracts && npm run test:render-smoke && npm test && npm run build && npm run verify:production",
