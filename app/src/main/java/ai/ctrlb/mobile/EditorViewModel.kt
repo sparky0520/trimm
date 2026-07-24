@@ -40,7 +40,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         mutable.value = EditorState(sources = sources, wizardStep = 1)
     }
 
-    private fun readSource(uri: Uri): SourceMedia {
+    private suspend fun readSource(uri: Uri): SourceMedia = withContext(Dispatchers.IO) {
         runCatching { getApplication<Application>().contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
         val retriever = MediaMetadataRetriever().apply { setDataSource(getApplication(), uri) }
         val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0
@@ -49,8 +49,17 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
         retriever.release()
         require(duration > 0 && width > 0 && height > 0) { "The selected file is not a supported video." }
-        val fingerprint = MessageDigest.getInstance("SHA-256").digest("$uri:$duration:$width:$height".toByteArray()).joinToString("") { "%02x".format(it) }
-        return SourceMedia(uri.toString(), fingerprint, duration, width, height, rotation)
+        val digest = MessageDigest.getInstance("SHA-256")
+        requireNotNull(getApplication<Application>().contentResolver.openInputStream(uri)) { "The selected file cannot be opened." }.use { input ->
+            val buffer = ByteArray(1024 * 1024)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                if (count > 0) digest.update(buffer, 0, count)
+            }
+        }
+        val fingerprint = digest.digest().joinToString("") { "%02x".format(it) }
+        SourceMedia(uri.toString(), fingerprint, duration, width, height, rotation)
     }
 
     fun moveClip(index: Int, offset: Int) {

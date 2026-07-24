@@ -41,6 +41,7 @@ import java.util.UUID
     init { require(exposure in -1f..1f && temperature in -1f..1f && contrast in .75f..1.35f && saturation in .7f..1.3f && highlights in -1f..1f && shadows in -1f..1f && skinProtection in 0f..1f) }
 }
 @Serializable data class Analysis(val words: List<TranscriptWord> = emptyList(), val captions: List<CaptionCue> = emptyList(), val lowConfidenceFumbles: List<FumbleCandidate> = emptyList(), val warnings: List<String> = emptyList(), val completedAtEpochMs: Long? = null)
+@Serializable data class EvidenceGraphReference(val sourceFingerprint: String, val schemaVersion: Int = 1, val relativeCachePath: String, val analyzerVersions: Map<String, String>, val partial: Boolean)
 @Serializable data class FumbleCandidate(val range: TimeRange, val confidence: Float, val reason: String)
 @Serializable data class ExportSettings(val width: Int = 1920, val height: Int = 1080, val codec: String = "video/avc", val bitrate: Int = 16_000_000)
 @Serializable data class ProjectSnapshot(val operations: List<EditOperation>, val sources: List<SourceMedia> = emptyList())
@@ -53,6 +54,7 @@ import java.util.UUID
     val proxyUri: String? = null,
     val preferences: WizardPreferences = WizardPreferences(),
     val analysis: Analysis = Analysis(),
+    val evidenceGraphs: List<EvidenceGraphReference> = emptyList(),
     val operations: List<EditOperation> = emptyList(),
     val undo: List<ProjectSnapshot> = emptyList(),
     val export: ExportSettings = ExportSettings(),

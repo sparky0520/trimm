@@ -8,6 +8,7 @@ import ai.ctrlb.mobile.media.AudioAssetRepository
 import ai.ctrlb.mobile.BuildConfig
 import ai.ctrlb.mobile.auth.AuthTokenProvider
 import ai.ctrlb.mobile.planner.*
+import ai.ctrlb.mobile.evidence.*
 import android.net.Uri
 import android.content.Context
 import androidx.work.CoroutineWorker
@@ -26,20 +27,43 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
         val projectId = requireNotNull(inputData.getString("projectId"))
         val store = ProjectStore(applicationContext)
         val project = store.load(projectId)
-        check(BuildConfig.TRANSCRIPTION_URL.isNotBlank()) { "AssemblyAI transcription endpoint is not configured." }
-        val transcriber = TranscriptionClient(BuildConfig.TRANSCRIPTION_URL, AuthTokenProvider::currentToken)
+        val transcriber = BuildConfig.TRANSCRIPTION_URL.takeIf(String::isNotBlank)
+            ?.let { TranscriptionClient(it, AuthTokenProvider::currentToken) }
         val words = mutableListOf<TranscriptWord>()
+        val evidenceReferences = mutableListOf<EvidenceGraphReference>()
+        val analysisWarnings = mutableListOf<String>()
+        val evidenceCache = EvidenceCache(java.io.File(applicationContext.filesDir, "evidence"))
         var offset = 0L
         project.orderedSources.forEachIndexed { index, source ->
             if (isStopped) return Result.failure()
             progress("transcript-${index + 1}-of-${project.orderedSources.size}", 10 + index * 45 / project.orderedSources.size)
             if (source.hasAudio) {
-                words += transcriber.transcribe(applicationContext, Uri.parse(source.uri)) { uploaded, total ->
+                val transcription: kotlin.Result<List<TranscriptWord>> = transcriber?.let { client -> runCatching { client.transcribe(applicationContext, Uri.parse(source.uri)) { uploaded, total ->
                     val sourceShare = ((uploaded * 45L / total) / project.orderedSources.size).toInt()
                     progress("upload-${index + 1}-of-${project.orderedSources.size}", 10 + index * 45 / project.orderedSources.size + sourceShare)
-                }.map { word ->
+                } } } ?: runCatching { throw IllegalStateException("Transcription service is not configured.") }
+                val localWords = transcription.getOrElse { error ->
+                    analysisWarnings += "Speech analyzer (${source.fingerprint.take(8)}): ${error.message ?: "failed"}"
+                    emptyList()
+                }
+                words += localWords.map { word ->
                     word.copy(range = TimeRange(word.range.startMs + offset, word.range.endMs + offset))
                 }
+                val speechAnalyzer: EvidenceAnalyzer = transcription.fold(
+                    onSuccess = { SpeechEvidenceAnalyzer(it) },
+                    onFailure = { failure -> object : EvidenceAnalyzer {
+                        override val identity = AnalyzerIdentity("ctrlB speech structure", "1.0.0", ExecutionLocation.EXTERNAL_SERVICE)
+                        override suspend fun analyze(context: AnalyzerContext): List<EvidenceObservation> = throw failure
+                    } }
+                )
+                val graph = EvidencePipeline(evidenceCache, listOf(LocalVisualAnalyzer(applicationContext), speechAnalyzer) + unsupportedAnalyzers()).analyze(source)
+                evidenceReferences += graph.reference()
+            } else {
+                val graph = EvidencePipeline(evidenceCache, listOf(LocalVisualAnalyzer(applicationContext), object : EvidenceAnalyzer {
+                    override val identity = AnalyzerIdentity("ctrlB speech structure", "1.0.0", ExecutionLocation.EXTERNAL_SERVICE)
+                    override suspend fun analyze(context: AnalyzerContext): List<EvidenceObservation> = throw UnsupportedOperationException("Source has no audio track.")
+                }) + unsupportedAnalyzers()).analyze(source)
+                evidenceReferences += graph.reference()
             }
             offset += source.durationMs
         }
@@ -54,7 +78,8 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
         if (project.preferences.captions && captions.isNotEmpty()) retained += AddCaptions(cues = captions)
         progress("persist", 90)
         var analyzed = project.copy(
-            analysis = Analysis(words, captions, candidates.filter { it.confidence < .93f }, completedAtEpochMs = System.currentTimeMillis()),
+            analysis = Analysis(words, captions, candidates.filter { it.confidence < .93f }, warnings = analysisWarnings, completedAtEpochMs = System.currentTimeMillis()),
+            evidenceGraphs = evidenceReferences,
             operations = retained,
             revision = project.revision + 1
         )
@@ -78,6 +103,20 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
         Result.success()
     }.getOrElse { Result.failure(Data.Builder().putString("error", it.message).build()) }
 }
+
+private fun EvidenceGraph.reference() = EvidenceGraphReference(
+    sourceFingerprint = sourceFingerprint,
+    schemaVersion = schemaVersion,
+    relativeCachePath = "$sourceFingerprint/graph-v$schemaVersion.json",
+    analyzerVersions = analyzerRuns.associate { it.analyzer.name to it.analyzer.version },
+    partial = analyzerRuns.any { it.status == AnalyzerStatus.FAILED || it.status == AnalyzerStatus.UNSUPPORTED }
+)
+
+private fun unsupportedAnalyzers(): List<EvidenceAnalyzer> = listOf(
+    UnsupportedEvidenceAnalyzer(AnalyzerIdentity("on-device face detector", "not-installed", ExecutionLocation.LOCAL_DEVICE), "Face detector is not bundled in this build."),
+    UnsupportedEvidenceAnalyzer(AnalyzerIdentity("on-device OCR and screen detector", "not-installed", ExecutionLocation.LOCAL_DEVICE), "OCR and screen/UI detector is not bundled in this build."),
+    UnsupportedEvidenceAnalyzer(AnalyzerIdentity("on-device sound classifier", "not-installed", ExecutionLocation.LOCAL_DEVICE), "Waveform loudness, noise, clipping, music, silence, and transient analysis is not bundled in this build.")
+)
 
 class ExportWorker(context: Context, params: WorkerParameters) : ProgressWorker(context, params) {
     override suspend fun doWork(): Result = runCatching {
