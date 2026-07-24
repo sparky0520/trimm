@@ -23,6 +23,8 @@ const model = process.env.MOONSHOT_MODEL || 'kimi-k3';
 const MAX_BODY_BYTES = 512 * 1024;
 const privacyPolicy = fs.readFileSync(path.join(__dirname, 'privacy.html'));
 const transcriptionUploads = new TranscriptionUploads();
+const uploadCleanupTimer = setInterval(() => transcriptionUploads.cleanup(), 15 * 60 * 1000);
+uploadCleanupTimer.unref();
 const authentication = authenticationFromEnvironment();
 const rateLimiter = new IdentityRateLimiter({ limit: Number(process.env.CTRLB_RATE_LIMIT_PER_MINUTE) || 120 });
 if (process.env.NODE_ENV === 'production' && !process.env.SUPABASE_DB_URL) {
@@ -223,8 +225,9 @@ const server = http.createServer(async (request, response) => {
     catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message }); }
   }
   if (uploadMatch && request.method === 'POST' && uploadMatch[2]) {
-    try { const upload = transcriptionUploads.complete(uploadMatch[1], principal.id); const result = await transcriptionCore.transcribe(upload.stream); transcriptionUploads.remove(uploadMatch[1]); return json(response, 200, result); }
+    try { const upload = transcriptionUploads.complete(uploadMatch[1], principal.id); const result = await transcriptionCore.transcribe(upload.stream); return json(response, 200, result); }
     catch (error) { console.error('[transcribe-upload] request failed', { message: error?.message, status: error?.status }); return json(response, Number.isInteger(error?.status) ? error.status : 502, { error: error?.message || 'Transcription failed', offset: error?.offset }); }
+    finally { transcriptionUploads.remove(uploadMatch[1]); }
   }
   if (request.method === 'POST' && request.url === '/v1/transcribe') {
     try {

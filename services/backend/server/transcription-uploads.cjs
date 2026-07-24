@@ -15,6 +15,7 @@ class TranscriptionUploads {
     this.directory = options.directory || path.join(os.tmpdir(), 'ctrlb-transcription-uploads');
     this.maxBytes = options.maxBytes || DEFAULT_MAX_BYTES;
     this.ttlMs = options.ttlMs || DEFAULT_TTL_MS;
+    this.active = new Set();
     fs.mkdirSync(this.directory, { recursive: true });
   }
 
@@ -55,6 +56,8 @@ class TranscriptionUploads {
   async append(id, owner, expectedOffset, input) {
     const metadata = this.read(id, owner);
     if (Number(expectedOffset) !== metadata.offset) throw Object.assign(new Error('Upload offset does not match.'), { status: 409, offset: metadata.offset });
+    if (this.active.has(id)) throw Object.assign(new Error('Upload is already being updated.'), { status: 409, offset: metadata.offset });
+    this.active.add(id);
     let received = 0;
     const remaining = metadata.size - metadata.offset;
     const limiter = new Transform({ transform(chunk, _encoding, callback) {
@@ -62,14 +65,27 @@ class TranscriptionUploads {
       if (received > remaining) return callback(Object.assign(new Error('Chunk exceeds declared upload size.'), { status: 413 }));
       callback(null, chunk);
     } });
-    await new Promise((resolve, reject) => {
-      const output = fs.createWriteStream(this.mediaPath(id), { flags: 'a' });
-      input.on('error', reject); limiter.on('error', reject); output.on('error', reject); output.on('finish', resolve);
-      input.pipe(limiter).pipe(output);
-    });
-    metadata.offset += received; metadata.updatedAt = Date.now();
-    fs.writeFileSync(this.metadataPath(id), JSON.stringify(metadata));
-    return metadata;
+    try {
+      await new Promise((resolve, reject) => {
+        const output = fs.createWriteStream(this.mediaPath(id), { flags: 'r+', start: metadata.offset });
+        let settled = false;
+        const finish = (error) => {
+          if (settled) return;
+          settled = true;
+          if (error) reject(error); else resolve();
+        };
+        input.on('error', finish); limiter.on('error', finish); output.on('error', finish); output.on('finish', () => finish());
+        input.pipe(limiter).pipe(output);
+      });
+      metadata.offset += received; metadata.updatedAt = Date.now();
+      fs.writeFileSync(this.metadataPath(id), JSON.stringify(metadata));
+      return metadata;
+    } catch (error) {
+      try { fs.truncateSync(this.mediaPath(id), metadata.offset); } catch {}
+      throw error;
+    } finally {
+      this.active.delete(id);
+    }
   }
 
   complete(id, owner) {
@@ -84,8 +100,22 @@ class TranscriptionUploads {
 
   cleanup() {
     const now = Date.now();
+    const referenced = new Set();
     for (const name of fs.readdirSync(this.directory).filter((value) => value.endsWith('.json'))) {
-      try { const metadata = JSON.parse(fs.readFileSync(path.join(this.directory, name), 'utf8')); if (now - metadata.updatedAt > this.ttlMs) this.remove(metadata.id); } catch {}
+      const fallbackId = name.slice(0, -5);
+      try {
+        const metadata = JSON.parse(fs.readFileSync(path.join(this.directory, name), 'utf8'));
+        referenced.add(`${metadata.id}.media`);
+        if (!this.active.has(metadata.id) && now - metadata.updatedAt > this.ttlMs) this.remove(metadata.id);
+      } catch {
+        if (!this.active.has(fallbackId)) this.remove(fallbackId);
+      }
+    }
+    for (const name of fs.readdirSync(this.directory).filter((value) => value.endsWith('.media'))) {
+      const id = name.slice(0, -6);
+      if (!referenced.has(name) && !this.active.has(id)) {
+        try { fs.unlinkSync(path.join(this.directory, name)); } catch {}
+      }
     }
   }
 }

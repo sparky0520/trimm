@@ -36,3 +36,11 @@ test('Android analysis uses remote transcription before the planner and no Whisp
   assert.doesNotMatch(worker, /BundledWhisperTranscriber|WhisperModelManager/);
   assert.ok(worker.indexOf('transcriber.transcribe') < worker.indexOf('PlannerClient'));
 });
+
+test('Android resumable uploads refresh auth and clean up cancelled sessions', () => {
+  const client = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'apps/mobile/app/src/main/java/ai/ctrlb/mobile/planner/TranscriptionClient.kt'), 'utf8');
+  assert.match(client, /connection\([^)]*,\s*"PUT",\s*accessToken\(\)\)/);
+  assert.match(client, /remoteOffset\(id\)/);
+  assert.match(client, /withContext\(NonCancellable\).*deleteSession\(session\.id\)/s);
+  assert.doesNotMatch(client, /val token = accessToken\(\)/);
+});
