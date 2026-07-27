@@ -2,6 +2,7 @@ package ai.ctrlb.mobile.domain
 
 import ai.ctrlb.mobile.evidence.TakeGroup
 import ai.ctrlb.mobile.evidence.EditorialProfile
+import ai.ctrlb.mobile.evidence.StoryGraph
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.util.UUID
@@ -53,6 +54,7 @@ import java.util.UUID
     val lowConfidenceFumbles: List<FumbleCandidate> = emptyList(),
     val takeGroups: List<TakeGroup> = emptyList(),
     val editorialProfile: EditorialProfile? = null,
+    val storyGraph: StoryGraph? = null,
     val warnings: List<String> = emptyList(),
     val completedAtEpochMs: Long? = null
 )

@@ -83,6 +83,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
             TakeCandidateGenerator.fromEvidence(evidenceGraphs),
             TakeConstraints(mustKeepWording = listOf(project.preferences.mustKeep).filter(String::isNotBlank))
         )
+        val storyGraph = StoryGraphDeriver.derive(evidenceGraphs, takeGroups, project.preferences.mustKeep)
         if (project.preferences.captions && captions.isNotEmpty()) retained += AddCaptions(cues = captions)
         progress("persist", 90)
         var analyzed = project.copy(
@@ -92,6 +93,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                 lowConfidenceFumbles = candidates.filter { it.confidence < editorialProfile.policy.automaticCutConfidence },
                 takeGroups = takeGroups,
                 editorialProfile = editorialProfile,
+                storyGraph = storyGraph,
                 warnings = analysisWarnings,
                 completedAtEpochMs = System.currentTimeMillis()
             ),
