@@ -37,7 +37,15 @@ object AudioMatcher {
     fun rank(items: List<AudioCatalogItem>, targetDurationMs: Long, style: VisualStyle, kind: AudioKind = AudioKind.MUSIC): List<AudioMatch> {
         val targetEnergy = when (style) { VisualStyle.PUNCHY -> .8f; VisualStyle.CLEAN -> .45f; VisualStyle.WARM -> .35f; VisualStyle.NATURAL -> .4f }
         val desiredMood = style.name.lowercase()
-        return items.asSequence().filter { it.kind == kind && it.licenseId.isNotBlank() && it.checksum.isNotBlank() }.map { item ->
+        return items.asSequence().filter {
+            it.kind == kind &&
+                it.status == "ready" &&
+                it.quarantineReasons.isEmpty() &&
+                "rendered-video" in it.allowedUse &&
+                (it.licenseId.isNotBlank() || !it.licenseText.isNullOrBlank()) &&
+                it.checksum.matches(Regex("[a-fA-F0-9]{64}")) &&
+                (!it.attributionRequired || !it.attribution.isNullOrBlank())
+        }.map { item ->
             val energyScore = 1f - abs(item.energy - targetEnergy).coerceAtMost(1f)
             val durationScore = if (item.durationMs >= targetDurationMs) 1f else (item.durationMs.toFloat() / targetDurationMs).coerceIn(.2f, 1f)
             val moodScore = if (desiredMood in item.moods) 1f else .55f

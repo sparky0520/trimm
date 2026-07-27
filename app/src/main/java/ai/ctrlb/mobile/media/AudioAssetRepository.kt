@@ -15,6 +15,7 @@ import java.security.MessageDigest
 
 class AudioAssetRepository(private val context: Context) {
     private val root = File(context.filesDir, "audio-catalog").apply { mkdirs() }
+    private val catalogCache = File(root, "catalog.v1.json")
     private val json = Json { ignoreUnknownKeys = true }
 
     suspend fun prepare(project: MobileProject): MobileProject = withContext(Dispatchers.IO) {
@@ -49,10 +50,14 @@ class AudioAssetRepository(private val context: Context) {
 
     private fun loadCatalog(): List<AudioCatalogItem> {
         check(BuildConfig.AUDIO_CATALOG_URL.startsWith("https://")) { "Licensed audio catalog HTTPS URL is not configured." }
-        val connection = URI(BuildConfig.AUDIO_CATALOG_URL).toURL().openConnection().apply { connectTimeout = 15_000; readTimeout = 30_000 }
-        val body = connection.getInputStream().bufferedReader().use { it.readText() }
-        val document = json.decodeFromString<CatalogDocument>(body)
-        check(document.version == 1) { "Unsupported audio catalog version ${document.version}." }
+        val document = try {
+            val connection = URI(BuildConfig.AUDIO_CATALOG_URL).toURL().openConnection().apply { connectTimeout = 15_000; readTimeout = 30_000 }
+            val downloaded = connection.getInputStream().bufferedReader().use { it.readText() }
+            decodeCatalog(downloaded).also { cacheCatalog(downloaded) }
+        } catch (error: Throwable) {
+            if (!catalogCache.isFile) throw error
+            decodeCatalog(catalogCache.readText())
+        }
         return document.items.filter {
             it.status == "ready" && it.quarantineReasons.isEmpty() &&
                 it.provider.isNotBlank() && it.providerAssetId.isNotBlank() && it.acquiredAt.isNotBlank() &&
@@ -62,6 +67,20 @@ class AudioAssetRepository(private val context: Context) {
                 (!it.attributionRequired || !it.attribution.isNullOrBlank()) &&
                 listOfNotNull(it.downloadUrl, it.previewUrl, it.sourceUrl).all { url -> url.startsWith("https://") }
         }
+    }
+
+    private fun decodeCatalog(body: String): CatalogDocument =
+        json.decodeFromString<CatalogDocument>(body).also {
+            check(it.version == 1) { "Unsupported audio catalog version ${it.version}." }
+        }
+
+    private fun cacheCatalog(body: String) {
+        val partial = File(root, "catalog.v1.partial")
+        partial.writeText(body)
+        check(partial.renameTo(catalogCache) || run {
+            catalogCache.delete()
+            partial.renameTo(catalogCache)
+        }) { partial.delete(); "Could not cache the licensed audio catalog." }
     }
 
     private fun ensureDownloaded(item: AudioCatalogItem): File {
