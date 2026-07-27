@@ -26,6 +26,9 @@ function normalizeTranscript(transcript) {
       startMs: Math.max(0, Math.trunc(Number(word.start) || 0)),
       endMs: Math.max(0, Math.trunc(Number(word.end) || 0)),
       confidence: Math.max(0, Math.min(1, Number(word.confidence) || 0)),
+      speakerId: typeof word.speaker === 'string' && word.speaker.trim()
+        ? `speaker-${word.speaker.trim().slice(0, 32)}`
+        : null,
     })).filter((word) => word.text && word.endMs >= word.startMs),
   };
 }
@@ -51,6 +54,7 @@ async function transcribe(stream, options = {}) {
     speech_models: [process.env.ASSEMBLYAI_SPEECH_MODEL || 'universal-2'],
     language_detection: true,
     format_text: true,
+    speaker_labels: true,
   });
   return normalizeTranscript(transcript);
 }
