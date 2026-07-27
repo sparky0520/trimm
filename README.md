@@ -44,6 +44,11 @@ Do not treat an arbitrary YouTube URL as a YouTube Audio Library asset. The Audi
 
 Provider adapters may automate acquisition only through documented APIs and permitted download flows. Freesound exposes API search and an OAuth-protected original-file download suitable for a sound-effects adapter. Never ship provider cookies or private-endpoint scraping code in the APK. Do not republish provider source files through a ctrlB CDN unless the captured license explicitly permits redistribution.
 
+The backend `audio:import` command analyzes imports with `ffprobe`/`ffmpeg`, Chromaprint's
+`fpcalc`, and `aubio tempo`; these executables must be installed on the ingestion worker.
+Analysis creates derived catalog metadata and a preview gain instruction. It never rewrites
+the acquired source or its rights record.
+
 See [ProductVision - Audio acquisition policy](../../docs/ai/ProductVision.md#audio-acquisition-policy) and Ticket 3 in [tickets](../../docs/ai/tickets.md).
 
 ## Current rendering behavior
