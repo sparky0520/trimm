@@ -58,13 +58,23 @@ import java.util.UUID
     val operations: List<EditOperation> = emptyList(),
     val undo: List<ProjectSnapshot> = emptyList(),
     val export: ExportSettings = ExportSettings(),
-    val revision: Long = 0
+    val revision: Long = 0,
+    val appliedLayer1ProgramIds: List<String> = emptyList()
 ) {
     init { require(schemaVersion == 1); require(source.durationMs > 0) }
     val orderedSources: List<SourceMedia> get() = sources.ifEmpty { listOf(source) }
     val durationMs: Long get() = orderedSources.sumOf { it.durationMs }
     private fun snapshot() = ProjectSnapshot(operations, orderedSources)
     fun replaceOperations(next: List<EditOperation>) = copy(operations = next, undo = (undo + snapshot()).takeLast(30), revision = revision + 1)
+    fun applyLayer1Program(programId: String, next: List<EditOperation>) =
+        copy(
+            operations = next,
+            undo = (undo + snapshot()).takeLast(30),
+            revision = revision + 1,
+            appliedLayer1ProgramIds = (appliedLayer1ProgramIds + programId).takeLast(100)
+        )
+    fun markLayer1ProgramApplied(programId: String) =
+        copy(appliedLayer1ProgramIds = (appliedLayer1ProgramIds + programId).takeLast(100))
     fun replaceSources(next: List<SourceMedia>): MobileProject {
         require(next.isNotEmpty())
         return copy(source = next.first(), sources = next, undo = (undo + snapshot()).takeLast(30), revision = revision + 1)
