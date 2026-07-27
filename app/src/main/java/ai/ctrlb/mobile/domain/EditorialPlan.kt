@@ -46,3 +46,11 @@ import kotlinx.serialization.Serializable
     val decisions: List<PlannedEditorialDecision>,
     val operationPlans: List<PlannedOperation>
 )
+
+@Serializable data class PendingEditorialProposal(
+    val expectedRevision: Long,
+    val summary: String,
+    val plan: StagedEditorialPlan,
+    val operations: List<EditOperation>,
+    val evidenceIds: List<String>
+)

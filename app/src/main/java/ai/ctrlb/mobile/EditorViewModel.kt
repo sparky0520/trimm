@@ -109,6 +109,27 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun toggle(id: String) { mutable.value.project?.let { project -> updateProject(project.replaceOperations(project.operations.map { if (it.id == id) toggle(it) else it }), true) } }
+    fun applyProposal() {
+        mutable.value.project?.let { project ->
+            val proposal = project.analysis.pendingProposal ?: return
+            val validated = runCatching {
+                OperationValidator.validate(project, proposal.operations, proposal.expectedRevision)
+            }.getOrElse { error ->
+                mutable.value = mutable.value.copy(jobMessage = error.message ?: "This proposal is no longer current.")
+                return
+            }
+            val applied = project.replaceOperations(validated).copy(
+                analysis = project.analysis.copy(editorialPlan = proposal.plan, pendingProposal = null)
+            )
+            updateProject(applied, true)
+        }
+    }
+    fun rejectProposal() {
+        mutable.value.project?.let { project ->
+            if (project.analysis.pendingProposal == null) return
+            updateProject(project.copy(analysis = project.analysis.copy(pendingProposal = null)))
+        }
+    }
     fun undo() { mutable.value.project?.let { updateProject(it.undoOnce(), true) } }
     fun export() { mutable.value.project?.let { project ->
         val estimated = (project.durationMs / 1_000.0 * project.export.bitrate / 8).toLong()

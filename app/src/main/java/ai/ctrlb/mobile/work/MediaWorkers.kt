@@ -120,8 +120,16 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                 response
             }
             planning.onSuccess { response -> if (response is PlannerProposal) {
-                analyzed = analyzed.replaceOperations(OperationValidator.validate(analyzed, response.operations, response.expectedRevision))
-                    .copy(analysis = analyzed.analysis.copy(editorialPlan = response.plan))
+                OperationValidator.validate(analyzed, response.operations, response.expectedRevision)
+                analyzed = analyzed.copy(analysis = analyzed.analysis.copy(
+                    pendingProposal = PendingEditorialProposal(
+                        expectedRevision = response.expectedRevision,
+                        summary = response.summary,
+                        plan = response.plan,
+                        operations = response.operations,
+                        evidenceIds = response.evidenceIds
+                    )
+                ))
                 store.save(analyzed)
             } }.onFailure { error ->
                 analyzed = analyzed.copy(analysis = analyzed.analysis.copy(warnings = analyzed.analysis.warnings + "AI planner: ${error.message ?: "failed"}"))

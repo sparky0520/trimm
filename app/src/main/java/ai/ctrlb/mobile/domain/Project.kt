@@ -56,13 +56,18 @@ import java.util.UUID
     val editorialProfile: EditorialProfile? = null,
     val storyGraph: StoryGraph? = null,
     val editorialPlan: StagedEditorialPlan? = null,
+    val pendingProposal: PendingEditorialProposal? = null,
     val warnings: List<String> = emptyList(),
     val completedAtEpochMs: Long? = null
 )
 @Serializable data class EvidenceGraphReference(val sourceFingerprint: String, val schemaVersion: Int = 1, val relativeCachePath: String, val analyzerVersions: Map<String, String>, val partial: Boolean)
 @Serializable data class FumbleCandidate(val range: TimeRange, val confidence: Float, val reason: String)
 @Serializable data class ExportSettings(val width: Int = 1920, val height: Int = 1080, val codec: String = "video/avc", val bitrate: Int = 16_000_000)
-@Serializable data class ProjectSnapshot(val operations: List<EditOperation>, val sources: List<SourceMedia> = emptyList())
+@Serializable data class ProjectSnapshot(
+    val operations: List<EditOperation>,
+    val sources: List<SourceMedia> = emptyList(),
+    val analysis: Analysis? = null
+)
 @Serializable data class MobileProject(
     val schemaVersion: Int = 1,
     val id: String = UUID.randomUUID().toString(),
@@ -82,7 +87,7 @@ import java.util.UUID
     init { require(schemaVersion == 1); require(source.durationMs > 0) }
     val orderedSources: List<SourceMedia> get() = sources.ifEmpty { listOf(source) }
     val durationMs: Long get() = orderedSources.sumOf { it.durationMs }
-    private fun snapshot() = ProjectSnapshot(operations, orderedSources)
+    private fun snapshot() = ProjectSnapshot(operations, orderedSources, analysis)
     fun replaceOperations(next: List<EditOperation>) = copy(operations = next, undo = (undo + snapshot()).takeLast(30), revision = revision + 1)
     fun applyLayer1Program(programId: String, next: List<EditOperation>) =
         copy(
@@ -99,6 +104,13 @@ import java.util.UUID
     }
     fun undoOnce() = undo.lastOrNull()?.let { snapshot ->
         val restoredSources = snapshot.sources.ifEmpty { orderedSources }
-        copy(source = restoredSources.first(), sources = restoredSources, operations = snapshot.operations, undo = undo.dropLast(1), revision = revision + 1)
+        copy(
+            source = restoredSources.first(),
+            sources = restoredSources,
+            operations = snapshot.operations,
+            analysis = snapshot.analysis ?: analysis,
+            undo = undo.dropLast(1),
+            revision = revision + 1
+        )
     } ?: this
 }

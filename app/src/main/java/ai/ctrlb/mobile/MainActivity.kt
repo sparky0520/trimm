@@ -78,7 +78,7 @@ class MainActivity : ComponentActivity() {
     val state by vm.state.collectAsStateWithLifecycle()
     when {
         state.source == null -> ImportScreen(vm::import)
-        state.project != null -> EditorScreen(state, vm::toggle, vm::undo, vm::export, vm::moveClip)
+        state.project != null -> EditorScreen(state, vm::toggle, vm::undo, vm::export, vm::moveClip, vm::applyProposal, vm::rejectProposal)
         else -> WizardScreen(state, vm::preferences, vm::next, vm::back, vm::generateDraft, vm::moveClip)
     }
 }
@@ -225,12 +225,24 @@ class MainActivity : ComponentActivity() {
     Spacer(Modifier.height(20.dp))
 }
 
-@Composable private fun EditorScreen(state: EditorState, toggle: (String) -> Unit, undo: () -> Unit, export: () -> Unit, moveClip: (Int, Int) -> Unit) {
+@Composable private fun EditorScreen(
+    state: EditorState,
+    toggle: (String) -> Unit,
+    undo: () -> Unit,
+    export: () -> Unit,
+    moveClip: (Int, Int) -> Unit,
+    applyProposal: () -> Unit,
+    rejectProposal: () -> Unit
+) {
     val project = requireNotNull(state.project)
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(Ink)) {
         BrandBar(actionLabel = "Export ${project.export.height}p", onAction = export, secondaryLabel = "Undo", onSecondary = undo)
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            item { EditorialReadCard(EditorialReviewBuilder.editorialRead(project)) }
+            EditorialReviewBuilder.proposal(project)?.let { review ->
+                item { ProposalReviewCard(review, applyProposal, rejectProposal) }
+            }
             item {
                 Column(Modifier.fillMaxWidth().background(Workspace, RoundedCornerShape(18.dp)).border(1.dp, Border, RoundedCornerShape(18.dp))) {
                     Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -269,6 +281,82 @@ class MainActivity : ComponentActivity() {
     }
     if (fullscreen) FullscreenPreview(state.previewUri?.let(::listOf) ?: project.orderedSources.map { it.uri }) { fullscreen = false }
 }
+
+@Composable private fun EditorialReadCard(read: EditorialRead) {
+    ReviewSurface("WHAT CTRLB FOUND", "Editorial read") {
+        ReviewSection("Likely story", read.likelyStory.ifEmpty { listOf("No evidence-backed spoken story was identified.") })
+        ReviewSection("Repeated takes", read.repeatedTakes.map { comparison ->
+            "“${comparison.sentence}” — ${comparison.alternatives.size + 1} take(s), ${reviewPercent(comparison.confidence)} confidence"
+        }.ifEmpty { listOf("No repeated wording was detected.") })
+        ReviewSection("Technical problems", read.technicalProblems.ifEmpty { listOf("No technical problems were reported.") })
+        ReviewSection("Useful product shots", read.usefulProductShots.ifEmpty { listOf("No grounded product or demonstration shot was identified.") })
+        ReviewSection("Uncertainty", read.uncertainty.ifEmpty { listOf("No material uncertainty was reported.") }, Lavender)
+    }
+}
+
+@Composable private fun ProposalReviewCard(review: ProposalReview, apply: () -> Unit, reject: () -> Unit) {
+    ReviewSurface("PROPOSED CUT", review.summary) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            StructureColumn("Before", review.beforeStory, Modifier.weight(1f))
+            StructureColumn("After", review.afterStory, Modifier.weight(1f))
+        }
+        Text(
+            "${formatDuration(review.beforeDurationMs)} → ${formatDuration(review.afterDurationMs)}",
+            color = Coral, fontWeight = FontWeight.Bold, fontSize = 18.sp
+        )
+        ReviewSection("Selected takes", review.selectedTakes.map {
+            "“${it.sentence}” — selected ${it.selectedTakeId ?: "not resolved"}; alternatives: ${it.alternatives.joinToString().ifBlank { "none" }}\n${it.explanation}"
+        }.ifEmpty { listOf("No repeated sentence needs a take choice.") })
+        ReviewSection("Removals", review.removals.ifEmpty { listOf("No story material is proposed for removal.") })
+        ReviewSection("Evidence", review.evidenceIds.map { it }.ifEmpty { listOf("No evidence IDs supplied.") })
+        ReviewSection("Assumptions", review.assumptions.ifEmpty { listOf("No unstated assumptions.") })
+        ReviewSection("Warnings", review.warnings.ifEmpty { listOf("No material warnings.") }, Lavender)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = reject, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Border)) {
+                Text("Reject", color = Cream)
+            }
+            Button(onClick = apply, enabled = review.warnings.none { it.startsWith("This proposal targets revision") },
+                modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText)) {
+                Text("Apply edit", fontWeight = FontWeight.Bold)
+            }
+        }
+        Text("Apply is one atomic change. Reject does not change the timeline. Undo restores the prior edit.", color = Muted, fontSize = 10.sp)
+    }
+}
+
+@Composable private fun ReviewSurface(kicker: String, title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().background(Workspace, RoundedCornerShape(18.dp))
+            .border(1.dp, Border, RoundedCornerShape(18.dp)).padding(16.dp)
+    ) {
+        Text(kicker, color = Coral, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+        Text(title, color = CreamRaised, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Spacer(Modifier.height(12.dp))
+        content()
+    }
+}
+
+@Composable private fun ReviewSection(title: String, lines: List<String>, accent: Color = Green) {
+    Text(title, color = Cream, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+    lines.forEach { line ->
+        Row(Modifier.padding(top = 5.dp)) {
+            Box(Modifier.padding(top = 6.dp).size(5.dp).background(accent, RoundedCornerShape(50)))
+            Text(line, color = Muted, fontSize = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(start = 8.dp))
+        }
+    }
+    Spacer(Modifier.height(12.dp))
+}
+
+@Composable private fun StructureColumn(title: String, beats: List<String>, modifier: Modifier = Modifier) {
+    Column(modifier.background(Raised, RoundedCornerShape(10.dp)).padding(10.dp)) {
+        Text(title, color = Cream, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+        beats.ifEmpty { listOf("No grounded beats") }.forEachIndexed { index, beat ->
+            Text("${index + 1}. $beat", color = Muted, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
+        }
+    }
+}
+
+private fun reviewPercent(value: Float) = "${(value * 100).toInt()}%"
 
 @Composable private fun StatusCard(title: String, detail: String, accent: Color) {
     Row(Modifier.fillMaxWidth().background(Raised, RoundedCornerShape(10.dp)).border(1.dp, Border, RoundedCornerShape(10.dp)).padding(12.dp)) {
