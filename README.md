@@ -41,17 +41,19 @@ Provider keys remain in the shared backend and are not placed in the Electron re
 ## Documentation
 
 - [Product vision](docs/ai/ProductVision.md) - footage-specific editorial direction and architecture
-- [Active tickets](docs/ai/Tickets.md) - future work and acceptance criteria
+- [Architecture](docs/ai/architecture.md) - local Layer 1, cloud planner, and Layer 2 boundary
+- [Product tickets](docs/ai/tickets.md) - the single active, blocked, superseded, and completed work ledger
 - [Internal visual handbook](docs/human/index.html) — product workflow, evidence model, architecture, and contributor runbook
 - [Implementation status](docs/ai/ProjectStatus.md) — verified capabilities and code map
 
 ## Current limits
 
-The desktop editor is designed around narrated developer recordings. Large
-transcription uploads must use the streaming Node backend because serverless
-platforms impose smaller request-body limits. Build it with
-`services/backend/Dockerfile`, then point both clients at the service's HTTPS
-origin using `CTRLB_BACKEND_URL`. That one Render Node deployment serves
+The desktop editor is designed around narrated developer recordings. The current
+mobile transcription path still sends selected source media to the streaming
+Node backend; this is legacy behavior. Ticket 2 replaces it with locally
+extracted compressed-audio jobs so source video remains on the device. Build
+the current backend with `services/backend/Dockerfile`, then point both clients
+at its HTTPS origin using `CTRLB_BACKEND_URL`. That Render Node deployment serves
 `/v1/mobile/plan`, `/v1/desktop/plan`, `/v1/transcribe`, and the authenticated
 billing routes; Vercel is not required for these routes.
 
