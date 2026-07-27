@@ -16,6 +16,7 @@ const { PostgresBillingStore } = require('./postgres-billing-store.cjs');
 const { createPaddleWebhookVerifier } = require('./paddle-billing.cjs');
 const { GooglePlayPurchaseVerifier } = require('./google-play-billing.cjs');
 const { DerivativeJobs } = require('./derivative-jobs.cjs');
+const { Layer2Orchestrator } = require('./layer2-orchestrator.cjs');
 
 const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.MOONSHOT_API_KEY;
@@ -40,6 +41,23 @@ const billing = new BillingService({
   },
 });
 const derivativeJobs = new DerivativeJobs({ accessFor: (userId) => billing.accessFor(userId) });
+const layer2Orchestrator = new Layer2Orchestrator({
+  derivativeJobs,
+  decide: async ({ systemPolicy, inventory, evidence }) => {
+    if (!apiKey) throw Object.assign(new Error('MOONSHOT_API_KEY is not configured'), { status: 503 });
+    const client = new OpenAI({ apiKey, baseURL });
+    const completion = await client.chat.completions.create({
+      model,
+      response_format: { type: 'json_object' },
+      max_completion_tokens: 4096,
+      messages: [
+        { role: 'system', content: systemPolicy },
+        { role: 'user', content: JSON.stringify({ inventory, evidence }) },
+      ],
+    });
+    return JSON.parse(completion.choices?.[0]?.message?.content);
+  },
+});
 const derivativeCleanupTimer = setInterval(() => derivativeJobs.cleanup(), 15 * 60 * 1000);
 derivativeCleanupTimer.unref();
 const googlePlay = process.env.CTRLB_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
@@ -54,7 +72,9 @@ function policyFor(request, pathname) {
     resourceType: 'derivative_job',
   };
   if (pathname.startsWith('/v1/transcribe')) return { scope: 'transcribe:create', action: request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'update' : 'create', resourceType: 'transcription' };
-  if (pathname === '/v1/desktop/plan' || pathname === '/v1/mobile/plan') return { scope: 'plan:create', action: 'create', resourceType: 'plan' };
+  if (pathname === '/v1/desktop/plan' || pathname === '/v1/mobile/plan' || pathname === '/v1/mobile/orchestrate') {
+    return { scope: 'plan:create', action: 'create', resourceType: 'plan' };
+  }
   if (pathname === '/v1/billing/catalog' || pathname === '/v1/billing/status') return { action: 'read', resourceType: 'billing' };
   if (pathname === '/v1/billing/google-play/verify') return { action: 'verify', resourceType: 'billing' };
   return null;
@@ -314,6 +334,18 @@ const server = http.createServer(async (request, response) => {
     } catch (error) {
       console.error('[desktop-planner] request failed', { message: error?.message, status: error?.status });
       return json(response, Number.isInteger(error?.status) ? error.status : 502, { error: error?.message || 'Planner failed' });
+    }
+  }
+  if (request.method === 'POST' && request.url === '/v1/mobile/orchestrate') {
+    try {
+      return json(response, 200, await layer2Orchestrator.orchestrate(principal, await collect(request)));
+    } catch (error) {
+      console.error('[layer2-orchestrator] request failed', { message: error?.message, status: error?.status, code: error?.code });
+      return json(response, Number.isInteger(error?.status) ? error.status : 502, {
+        error: error?.message || 'Layer 2 orchestration failed',
+        code: error?.code || 'orchestration_failed',
+        requestId,
+      });
     }
   }
   if (request.method !== 'POST' || request.url !== '/v1/mobile/plan') return json(response, 404, { error: 'Not found' });
