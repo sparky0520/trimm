@@ -15,6 +15,7 @@ const { BillingService, VolatileBillingStore } = require('./billing-core.cjs');
 const { PostgresBillingStore } = require('./postgres-billing-store.cjs');
 const { createPaddleWebhookVerifier } = require('./paddle-billing.cjs');
 const { GooglePlayPurchaseVerifier } = require('./google-play-billing.cjs');
+const { DerivativeJobs } = require('./derivative-jobs.cjs');
 
 const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.MOONSHOT_API_KEY;
@@ -38,12 +39,20 @@ const billing = new BillingService({
     paddle: createPaddleWebhookVerifier({ secret: process.env.CTRLB_PADDLE_WEBHOOK_SECRET }),
   },
 });
+const derivativeJobs = new DerivativeJobs({ accessFor: (userId) => billing.accessFor(userId) });
+const derivativeCleanupTimer = setInterval(() => derivativeJobs.cleanup(), 15 * 60 * 1000);
+derivativeCleanupTimer.unref();
 const googlePlay = process.env.CTRLB_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
   ? new GooglePlayPurchaseVerifier()
   : null;
 authentication.assertProductionConfigured();
 
 function policyFor(request, pathname) {
+  if (pathname.startsWith('/v1/derivatives/')) return {
+    scope: 'derivatives:create',
+    action: pathname === '/v1/derivatives/activity' ? 'read' : request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'upload' : 'authorize',
+    resourceType: 'derivative_job',
+  };
   if (pathname.startsWith('/v1/transcribe')) return { scope: 'transcribe:create', action: request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'update' : 'create', resourceType: 'transcription' };
   if (pathname === '/v1/desktop/plan' || pathname === '/v1/mobile/plan') return { scope: 'plan:create', action: 'create', resourceType: 'plan' };
   if (pathname === '/v1/billing/catalog' || pathname === '/v1/billing/status') return { action: 'read', resourceType: 'billing' };
@@ -67,6 +76,23 @@ function html(response, status, body) {
     'x-content-type-options': 'nosniff',
   });
   response.end(body);
+}
+
+function derivativeView(job) {
+  return {
+    id: job.id, projectId: job.projectId, deviceSessionId: job.deviceSessionId,
+    purpose: job.purpose, type: job.type, acceptedFormat: job.acceptedFormat,
+    maximumBytes: job.maximumBytes, maximumDurationMs: job.maximumDurationMs,
+    maximumCount: job.maximumCount, offset: job.offset, status: job.status,
+    expiresAt: new Date(job.expiresAt).toISOString(), contentKey: job.contentKey,
+  };
+}
+
+function derivativeContext(request) {
+  return {
+    projectId: String(request.headers['x-ctrlb-project-id'] || ''),
+    deviceSessionId: String(request.headers['x-ctrlb-device-session-id'] || ''),
+  };
 }
 
 function validateRequest(value) {
@@ -202,6 +228,49 @@ const server = http.createServer(async (request, response) => {
         code: error?.code || 'purchase_verification_failed',
         requestId,
       });
+    }
+  }
+  const derivativeMatch = requestUrl.pathname.match(/^\/v1\/derivatives\/jobs\/([0-9a-f-]{36})(\/complete)?$/i);
+  if (request.method === 'POST' && requestUrl.pathname === '/v1/derivatives/jobs') {
+    try {
+      derivativeJobs.cleanup();
+      const authorized = await derivativeJobs.authorize(principal, await collect(request, 16 * 1024));
+      return json(response, authorized.reused ? 200 : 201, { ...derivativeView(authorized.job), reused: authorized.reused, chunkSize: 4 * 1024 * 1024, requestId });
+    } catch (error) {
+      return json(response, Number.isInteger(error?.status) ? error.status : 400, { error: error?.message || 'Could not authorize derivative.', code: error?.code, requestId });
+    }
+  }
+  if (request.method === 'GET' && requestUrl.pathname === '/v1/derivatives/activity') {
+    return json(response, 200, { activity: derivativeJobs.listActivity(principal, requestUrl.searchParams.get('projectId')), requestId });
+  }
+  if (derivativeMatch && request.method === 'HEAD' && !derivativeMatch[2]) {
+    try {
+      const job = derivativeJobs.read(derivativeMatch[1], principal, derivativeContext(request));
+      response.writeHead(204, { 'upload-offset': job.offset, 'upload-expires': new Date(job.expiresAt).toISOString(), 'cache-control': 'no-store' });
+      return response.end();
+    } catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message, code: error?.code, requestId }); }
+  }
+  if (derivativeMatch && request.method === 'PUT' && !derivativeMatch[2]) {
+    try {
+      const job = await derivativeJobs.append(derivativeMatch[1], principal, request.headers['upload-offset'], request, derivativeContext(request));
+      return json(response, 200, { offset: job.offset, requestId });
+    } catch (error) {
+      return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message, code: error?.code, offset: error?.offset, requestId });
+    }
+  }
+  if (derivativeMatch && request.method === 'DELETE' && !derivativeMatch[2]) {
+    try { derivativeJobs.cancel(derivativeMatch[1], principal, derivativeContext(request)); response.writeHead(204); return response.end(); }
+    catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message, code: error?.code, requestId }); }
+  }
+  if (derivativeMatch && request.method === 'POST' && derivativeMatch[2]) {
+    try {
+      const completed = derivativeJobs.complete(derivativeMatch[1], principal, await collect(request, 4096), derivativeContext(request));
+      return json(response, 200, {
+        ...derivativeView(completed.job), reused: completed.reused,
+        ...(completed.result ? { result: completed.result } : {}), requestId,
+      });
+    } catch (error) {
+      return json(response, Number.isInteger(error?.status) ? error.status : 400, { error: error?.message, code: error?.code, requestId });
     }
   }
   const uploadMatch = requestUrl.pathname.match(/^\/v1\/transcribe\/uploads\/([0-9a-f-]{36})(\/complete)?$/i);

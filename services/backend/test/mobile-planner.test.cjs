@@ -11,6 +11,8 @@ test('mobile planner is configured as a non-secret package script', () => {
   assert.match(source, /\/v1\/desktop\/plan/);
   assert.match(source, /\/v1\/mobile\/plan/);
   assert.match(source, /\/v1\/transcribe/);
+  assert.match(source, /\/v1\/derivatives\/jobs/);
+  assert.match(source, /\/v1\/derivatives\/activity/);
   assert.doesNotMatch(source, /sk-[a-zA-Z0-9]{20}/);
 });
 
