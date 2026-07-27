@@ -1,6 +1,6 @@
 # ctrlB
 
-ctrlB is a conversational desktop video editor for turning one narrated developer demo or screen recording into a clean, publishable video. Describe the result in chat, review the proposed edits, then apply or reject them; you do not need to edit project JSON or work in a traditional timeline.
+ctrlB is a conversational video editor for turning raw recordings into clean, publishable videos. Product development is **mobile first**: new product foundations and editing workflows are designed and verified on Android first, then shared with or adapted for desktop. Describe the result in chat, review the proposed edits, then apply or reject them; you do not need to edit project JSON or work in a traditional timeline.
 
 ## Current workflow
 
