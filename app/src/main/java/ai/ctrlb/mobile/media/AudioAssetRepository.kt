@@ -22,7 +22,8 @@ class AudioAssetRepository(private val context: Context) {
         val needsAudio = project.operations.any { it.enabled && (it is SetBackgroundMusic || it is AddSoundEffect) }
         if (!needsAudio) return@withContext project
         val catalog = loadCatalog()
-        val rankedMusic = AudioMatcher.rank(catalog, project.durationMs, project.preferences.style)
+        val storyContext = StoryAudioContext.from(project.analysis.storyGraph, project.durationMs)
+        val rankedMusic = AudioMatcher.rankMusic(catalog, storyContext, catalogVersion = "catalog-v1")
         val operations = project.operations.map { operation ->
             when (operation) {
                 is SetBackgroundMusic -> {
