@@ -117,15 +117,36 @@ function derivativeContext(request) {
 
 function validateRequest(value) {
   if (!value || typeof value !== 'object' || typeof value.prompt !== 'string' || value.prompt.length > 2000) return false;
-  if (!Array.isArray(value.transcript) || value.transcript.length > 320 || !Array.isArray(value.operations)) return false;
+  if (!Array.isArray(value.operations) || !value.evidence || value.evidence.schemaVersion !== 1 ||
+      typeof value.evidence.evidenceFingerprint !== 'string' || !Array.isArray(value.evidence.items) || value.evidence.items.length > 256) return false;
+  const ids = new Set();
+  for (const item of value.evidence.items) {
+    if (!item || typeof item.id !== 'string' || ids.has(item.id) ||
+        !['STORY_BEAT', 'TRANSCRIPT', 'FRAME', 'VISUAL', 'AUDIO_SUMMARY', 'SHOT'].includes(item.type) ||
+        typeof item.sourceId !== 'string' || !/^source-\d+$/.test(item.sourceId) ||
+        !item.range || !Number.isSafeInteger(item.range.startMs) || !Number.isSafeInteger(item.range.endMs) ||
+        item.range.startMs < 0 || item.range.endMs <= item.range.startMs ||
+        typeof item.summary !== 'string' || item.summary.length > 1000) return false;
+    ids.add(item.id);
+  }
   const wire = JSON.stringify(value).toLowerCase();
-  return !['"uri"', '"proxyuri"', '"fingerprint"', '"path"', '"bytes"', '"image"', '"audio"'].some((key) => wire.includes(key));
+  return !['"uri"', '"proxyuri"', '"sourcefingerprint"', '"artifactpath"', '"path"', '"bytes"', '"image"', '"audio"'].some((key) => wire.includes(key));
 }
 
-function validateProposal(value, revision) {
+function validateProposal(value, revision, validEvidenceIds = new Set()) {
   const allowed = new Set(['remove_fumbles', 'set_audio_cleanup', 'set_audio_levels', 'add_sound_effect', 'set_background_music', 'add_captions']);
+  if (value?.type === 'evidence_request') {
+    const query = value.query;
+    if (!query || typeof query.request !== 'string' || query.request.length > 2000 ||
+        !Array.isArray(query.evidenceTypes) || query.evidenceTypes.length > 6 ||
+        !query.evidenceTypes.every((type) => ['STORY_BEAT', 'TRANSCRIPT', 'FRAME', 'VISUAL', 'AUDIO_SUMMARY', 'SHOT'].includes(type))) {
+      throw new Error('Invalid bounded evidence request.');
+    }
+    return value;
+  }
   if (!value || value.type !== 'proposal' || value.expectedRevision !== revision || !Array.isArray(value.operations)) throw new Error('Invalid planner proposal envelope.');
   if (value.operations.some((operation) => !operation || !allowed.has(operation.type) || typeof operation.id !== 'string' || typeof operation.enabled !== 'boolean')) throw new Error('Planner returned an unsupported operation.');
+  if (!Array.isArray(value.evidenceIds) || !value.evidenceIds.length || value.evidenceIds.some((id) => !validEvidenceIds.has(id))) throw new Error('Planner returned missing, stale, or invented evidence.');
   return value;
 }
 
@@ -359,12 +380,12 @@ const server = http.createServer(async (request, response) => {
       response_format: { type: 'json_object' },
       max_completion_tokens: 4096,
       messages: [
-        { role: 'system', content: `You are ctrlB's conservative mobile video-edit planner. Return one JSON object only. Envelope: {"type":"proposal","expectedRevision":number,"summary":string,"operations":array}. Preserve useful existing operations. Every operation requires id, enabled, and one of these type values: remove_fumbles, set_audio_cleanup, set_audio_levels, add_sound_effect, set_background_music, add_captions. Color requires frame evidence, which is not supplied, so never propose color. Transitions and motion presets are unavailable. Never invent timestamps outside media.durationMs. Only use catalog IDs already present in existing operations. Prefer transcript-grounded edits and make no destructive low-confidence cut.` },
+        { role: 'system', content: `You are ctrlB's conservative mobile video-edit planner. Return one JSON object only. Either request bounded additional evidence with type evidence_request and a typed query, or propose {"type":"proposal","expectedRevision":number,"summary":string,"operations":array,"evidenceIds":array}. Proposal evidenceIds must exist in evidence.items. Preserve useful existing operations. Supported operations: remove_fumbles, set_audio_cleanup, set_audio_levels, add_sound_effect, set_background_music, add_captions. Color requires frame evidence and remains unavailable to this planner. Transitions and motion presets are unavailable. Never invent timestamps or evidence. Prefer grounded edits and make no destructive low-confidence cut.` },
         { role: 'user', content: JSON.stringify(payload) },
       ],
     });
     const content = completion.choices?.[0]?.message?.content;
-    const proposal = validateProposal(JSON.parse(content), payload.projectRevision);
+    const proposal = validateProposal(JSON.parse(content), payload.projectRevision, new Set(payload.evidence.items.map((item) => item.id)));
     return json(response, 200, proposal);
   } catch (error) {
     console.error('[mobile-planner] request failed', { message: error?.message, status: error?.status });

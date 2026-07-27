@@ -1,6 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const plannerCore = require('../server/planner-core.cjs');
 
 test('mobile planner is configured as a non-secret package script', () => {
   const packageJson = require('../../../package.json');
@@ -39,4 +40,37 @@ test('mobile planning excludes operations without render support or frame eviden
     assert.match(source, /Color requires frame evidence/);
     assert.match(source, /Transitions and motion presets are unavailable/);
   }
+});
+
+test('mobile planner accepts only bounded evidence packets and grounded output references', () => {
+  const request = {
+    prompt: 'make a first cut',
+    media: { durationMs: 1000, width: 1080, height: 1920, rotation: 0, hasAudio: true },
+    preferences: {},
+    operations: [],
+    projectRevision: 4,
+    evidence: {
+      schemaVersion: 1,
+      evidenceFingerprint: 'graph-version',
+      items: [{
+        id: 'sentence-1', type: 'TRANSCRIPT', sourceId: 'source-1',
+        range: { startMs: 0, endMs: 500 }, confidence: 0.9, summary: 'Hello',
+        derivedFromEvidenceIds: [],
+      }],
+      exhaustedTypes: [],
+      omittedCounts: {},
+    },
+  };
+  assert.equal(plannerCore.validateRequest(request), true);
+  assert.equal(plannerCore.validateRequest({ ...request, evidence: { ...request.evidence, items: [
+    { ...request.evidence.items[0], artifactPath: '/private/frame.jpg' },
+  ] } }), false);
+  assert.throws(() => plannerCore.validateProposal({
+    type: 'proposal', expectedRevision: 4, summary: 'cut', operations: [],
+    evidenceIds: ['invented'],
+  }, 4, new Set(['sentence-1'])), /invented evidence/);
+  assert.equal(plannerCore.validateProposal({
+    type: 'proposal', expectedRevision: 4, summary: 'cut', operations: [],
+    evidenceIds: ['sentence-1'],
+  }, 4, new Set(['sentence-1'])).summary, 'cut');
 });
