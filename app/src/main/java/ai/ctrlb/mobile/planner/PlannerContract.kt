@@ -2,6 +2,7 @@ package ai.ctrlb.mobile.planner
 
 import ai.ctrlb.mobile.domain.EditOperation
 import ai.ctrlb.mobile.domain.SourceMedia
+import ai.ctrlb.mobile.domain.StagedEditorialPlan
 import ai.ctrlb.mobile.domain.WizardPreferences
 import ai.ctrlb.mobile.evidence.EvidencePacket
 import ai.ctrlb.mobile.evidence.EvidenceRetrievalQuery
@@ -44,7 +45,13 @@ object PlannerPrivacyBoundary {
 @Serializable @SerialName("message") data class PlannerMessage(val text: String) : PlannerResponse
 @Serializable @SerialName("clarification") data class PlannerClarification(val question: String, val options: List<String>) : PlannerResponse
 @Serializable @SerialName("evidence_request") data class PlannerEvidenceRequest(val query: EvidenceRetrievalQuery) : PlannerResponse
-@Serializable @SerialName("proposal") data class PlannerProposal(val expectedRevision: Long, val summary: String, val operations: List<EditOperation>, val evidenceIds: List<String>) : PlannerResponse
+@Serializable @SerialName("proposal") data class PlannerProposal(
+    val expectedRevision: Long,
+    val summary: String,
+    val plan: StagedEditorialPlan,
+    val operations: List<EditOperation>,
+    val evidenceIds: List<String>
+) : PlannerResponse
 
 class PlannerClient(private val endpoint: String, private val accessToken: suspend () -> String) {
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = false; classDiscriminator = "type" }

@@ -55,6 +55,7 @@ import java.util.UUID
     val takeGroups: List<TakeGroup> = emptyList(),
     val editorialProfile: EditorialProfile? = null,
     val storyGraph: StoryGraph? = null,
+    val editorialPlan: StagedEditorialPlan? = null,
     val warnings: List<String> = emptyList(),
     val completedAtEpochMs: Long? = null
 )
