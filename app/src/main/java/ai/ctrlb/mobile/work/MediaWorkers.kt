@@ -105,9 +105,19 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
         if (BuildConfig.PLANNER_URL.isNotBlank()) {
             progress("planner", 94)
             val planning = runCatching {
-                PlannerClient(BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken).plan(
-                    PlannerPrivacyBoundary.create("Create a polished, conservative first cut using the supplied transcript and preferences.", words, analyzed.source, analyzed.preferences, analyzed.operations, analyzed.revision)
-                )
+                val prompt = "Create a polished, conservative first cut using the supplied evidence and preferences."
+                val client = PlannerClient(BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken)
+                var packet = BoundedEvidenceRetriever.retrieve(evidenceGraphs, storyGraph, EvidenceRetrievalQuery(prompt))
+                var response = client.plan(PlannerPrivacyBoundary.create(prompt, analyzed.source, analyzed.preferences, analyzed.operations, analyzed.revision, packet))
+                var additionalPasses = 0
+                while (response is PlannerEvidenceRequest && additionalPasses++ < 2) {
+                    val query = response.query.copy(excludeEvidenceIds = response.query.excludeEvidenceIds + packet.items.map { it.id })
+                    val additional = BoundedEvidenceRetriever.retrieve(evidenceGraphs, storyGraph, query)
+                    packet = packet.copy(items = (packet.items + additional.items).distinctBy { it.id })
+                    response = client.plan(PlannerPrivacyBoundary.create(prompt, analyzed.source, analyzed.preferences, analyzed.operations, analyzed.revision, packet))
+                }
+                if (response is PlannerProposal) BoundedEvidenceRetriever.validateReferences(packet, response.evidenceIds)
+                response
             }
             planning.onSuccess { response -> if (response is PlannerProposal) {
                 analyzed = analyzed.replaceOperations(OperationValidator.validate(analyzed, response.operations, response.expectedRevision))
