@@ -2,7 +2,7 @@
 
 const ALLOWED_OPERATIONS = new Set([
   'remove_fumbles', 'set_audio_cleanup', 'set_audio_levels',
-  'add_sound_effect', 'set_background_music', 'add_captions',
+  'add_sound_effect', 'set_background_music', 'add_captions', 'semantic_visual',
 ]);
 const ALLOWED_DERIVATIVES = Object.freeze({
   audio: Object.freeze({ formats: new Set(['audio/mpeg', 'audio/mp4', 'audio/ogg']), purposes: new Set(['transcription', 'speech-analysis', 'audio-analysis']) }),
@@ -28,7 +28,8 @@ Begin with the compact inventory. Ask only for the minimum derivative evidence n
 Never request source video, rendered output, executable instructions, provider credentials, or tools.
 Every edit operation must cite supplied evidence IDs and include confidence from 0 to 1.
 Do not invent evidence. When evidence is missing or uncertain, request bounded evidence, clarify, or fall back.
-Supported operations: remove_fumbles, set_audio_cleanup, set_audio_levels, add_sound_effect, set_background_music, add_captions.`;
+Supported operations: remove_fumbles, set_audio_cleanup, set_audio_levels, add_sound_effect, set_background_music, add_captions, semantic_visual.
+Semantic visuals require a cited face, screen, product, OCR, or salience subject with normalized bounds. Unsafe reframing must return clarification or fallback.`;
 
 function orchestrationError(message, status = 400, code = 'invalid_orchestration') {
   return Object.assign(new Error(message), { status, code });
@@ -160,6 +161,25 @@ function validateEditProgram(decision, inventory, evidence) {
         !Array.isArray(operation.evidenceIds) || !operation.evidenceIds.length ||
         operation.evidenceIds.some((id) => !evidenceIds.has(id))) {
       throw orchestrationError('Edit operation has missing, stale, or invented evidence.', 422, 'invalid_evidence_reference');
+    }
+    if (operation.type === 'semantic_visual') {
+      const subject = operation.subject;
+      const bounds = subject?.bounds;
+      const values = bounds && [bounds.left, bounds.top, bounds.right, bounds.bottom];
+      const range = operation.range;
+      if (!['INTRODUCE', 'POINT_OUT', 'TRANSITION', 'REVEAL', 'EMPHASIZE', 'RECAP'].includes(operation.intent) ||
+          !['CALLOUT', 'SPOTLIGHT', 'REFRAME'].includes(operation.treatment) ||
+          !range || !Number.isSafeInteger(range.startMs) || !Number.isSafeInteger(range.endMs) ||
+          range.startMs < 0 || range.endMs - range.startMs < 300 || range.endMs - range.startMs > 8000 ||
+          !subject || !evidenceIds.has(subject.evidenceId) ||
+          !['FACE', 'SCREEN_UI', 'PRODUCT', 'OCR_TEXT', 'SALIENCE'].includes(subject.kind) ||
+          typeof subject.confidence !== 'number' || subject.confidence < .55 || subject.confidence > 1 ||
+          !values || values.some((value) => typeof value !== 'number' || value < 0 || value > 1) ||
+          bounds.right <= bounds.left || bounds.bottom <= bounds.top ||
+          operation.treatment === 'REFRAME' && (!operation.framing ||
+            operation.framing.preservesSubject !== true || operation.framing.preservesText !== true)) {
+        throw orchestrationError('Semantic visual is unsafe or ungrounded.', 422, 'invalid_edit_program');
+      }
     }
   }
   return {

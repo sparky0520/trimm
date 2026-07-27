@@ -1,7 +1,31 @@
 'use strict';
 
 const OpenAI = require('openai').default;
-const SYSTEM_POLICY = `You are ctrlB's conservative mobile video-edit planner. Return one JSON object only. Either request bounded additional evidence with {"type":"evidence_request","query":{"request":string,"evidenceTypes":["STORY_BEAT"|"TRANSCRIPT"|"FRAME"|"VISUAL"|"AUDIO_SUMMARY"|"SHOT"],"sourceIds":[],"ranges":[],"excludeEvidenceIds":[],"budget":object}} or return a proposal. Plan in order: choose story beats and takes first, then CORRECTION, PACING, COVERAGE, and finally OPTIONAL_TREATMENT. A proposal is {"type":"proposal","expectedRevision":number,"summary":string,"plan":{"story":[story choices],"decisions":[decisions in stage order],"operationPlans":[one explanation per operation]},"operations":array,"evidenceIds":array}. Every story choice, decision, and operation explanation requires rationale, nonempty evidenceIds copied from evidence.items, confidence from 0 to 1, assumptions array, and expectedStoryEffect. Decisions also require unique id, stage ("STORY","TAKE_SELECTION","CORRECTION","PACING","COVERAGE","OPTIONAL_TREATMENT"), and kind ("REQUIRED_CLEANUP","OPTIONAL_STYLE","OPTIONAL_MUSIC"). Non-optional stages are REQUIRED_CLEANUP; optional style and music are only OPTIONAL_TREATMENT. Preserve useful existing operations. Every operation requires id, enabled, and one of: remove_fumbles, set_audio_cleanup, set_audio_levels, add_sound_effect, set_background_music, add_captions. Color requires frame evidence and remains unavailable to this planner. Transitions and motion presets are unavailable. Never invent timestamps or evidence. Prefer grounded footage-specific edits and make no destructive low-confidence cut. Never add a transition, motion, music, or sound effect merely to make plans differ; music and sound effects require explicit evidence plus user intent and must remain optional.`;
+const SYSTEM_POLICY = `You are ctrlB's conservative mobile video-edit planner. Return one JSON object only. Either request bounded additional evidence with {"type":"evidence_request","query":{"request":string,"evidenceTypes":["STORY_BEAT"|"TRANSCRIPT"|"FRAME"|"VISUAL"|"AUDIO_SUMMARY"|"SHOT"],"sourceIds":[],"ranges":[],"excludeEvidenceIds":[],"budget":object}} or return a proposal. Plan in order: choose story beats and takes first, then CORRECTION, PACING, COVERAGE, and finally OPTIONAL_TREATMENT. A proposal is {"type":"proposal","expectedRevision":number,"summary":string,"plan":{"story":[story choices],"decisions":[decisions in stage order],"operationPlans":[one explanation per operation]},"operations":array,"evidenceIds":array}. Every story choice, decision, and operation explanation requires rationale, nonempty evidenceIds copied from evidence.items, confidence from 0 to 1, assumptions array, and expectedStoryEffect. Decisions also require unique id, stage ("STORY","TAKE_SELECTION","CORRECTION","PACING","COVERAGE","OPTIONAL_TREATMENT"), and kind ("REQUIRED_CLEANUP","OPTIONAL_STYLE","OPTIONAL_MUSIC"). Non-optional stages are REQUIRED_CLEANUP; optional style and music are only OPTIONAL_TREATMENT. Preserve useful existing operations. Every operation requires id, enabled, and one of: remove_fumbles, set_audio_cleanup, set_audio_levels, add_sound_effect, set_background_music, add_captions, semantic_visual. A semantic_visual is optional style with intent INTRODUCE|POINT_OUT|TRANSITION|REVEAL|EMPHASIZE|RECAP, treatment CALLOUT|SPOTLIGHT|REFRAME, a 300-8000ms range, and subject {evidenceId,kind,bounds,confidence}; kind must be FACE|SCREEN_UI|PRODUCT|OCR_TEXT|SALIENCE and evidenceId must cite supplied visual evidence. Use at most two overlaps and three treatments in any ten seconds. Reduced motion uses curve HOLD. REFRAME also requires framing {zoom,preservesSubject:true,preservesText:true}; ask for clarification instead if subject or text preservation is uncertain. Color requires frame evidence and remains unavailable to this planner. Legacy generic transitions and motion presets are unavailable. Never invent timestamps or evidence. Prefer grounded footage-specific edits and make no destructive low-confidence cut. Never add a semantic treatment, music, or sound effect merely to make plans differ; music and sound effects require explicit evidence plus user intent and must remain optional.`;
+
+function validSemanticOperation(operation, validEvidenceIds) {
+  if (operation.type !== 'semantic_visual') return true;
+  const range = operation.range;
+  const subject = operation.subject;
+  const motion = operation.motion || {};
+  const bounds = subject?.bounds;
+  const values = bounds && [bounds.left, bounds.top, bounds.right, bounds.bottom];
+  if (!['INTRODUCE', 'POINT_OUT', 'TRANSITION', 'REVEAL', 'EMPHASIZE', 'RECAP'].includes(operation.intent) ||
+      !['CALLOUT', 'SPOTLIGHT', 'REFRAME'].includes(operation.treatment) ||
+      !range || !Number.isSafeInteger(range.startMs) || !Number.isSafeInteger(range.endMs) ||
+      range.startMs < 0 || range.endMs - range.startMs < 300 || range.endMs - range.startMs > 8000 ||
+      !subject || !validEvidenceIds.has(subject.evidenceId) ||
+      !['FACE', 'SCREEN_UI', 'PRODUCT', 'OCR_TEXT', 'SALIENCE'].includes(subject.kind) ||
+      typeof subject.confidence !== 'number' || subject.confidence < .55 || subject.confidence > 1 ||
+      !values || values.some((value) => typeof value !== 'number' || value < 0 || value > 1) ||
+      bounds.right <= bounds.left || bounds.bottom <= bounds.top ||
+      typeof motion.intensity !== 'number' || motion.intensity < 0 || motion.intensity > .7 ||
+      !['HOLD', 'EASE_IN_OUT'].includes(motion.curve) || (motion.reducedMotion && motion.curve !== 'HOLD')) return false;
+  if (operation.treatment !== 'REFRAME') return operation.framing == null;
+  return operation.framing && typeof operation.framing.zoom === 'number' &&
+    operation.framing.zoom >= 1 && operation.framing.zoom <= 2.25 &&
+    operation.framing.preservesSubject === true && operation.framing.preservesText === true;
+}
 
 function validateRequest(value) {
   if (!value || typeof value !== 'object' || typeof value.prompt !== 'string' || value.prompt.length > 2000) return false;
@@ -23,7 +47,7 @@ function validateRequest(value) {
 }
 
 function validateProposal(value, revision, validEvidenceIds = new Set()) {
-  const allowed = new Set(['remove_fumbles', 'set_audio_cleanup', 'set_audio_levels', 'add_sound_effect', 'set_background_music', 'add_captions']);
+  const allowed = new Set(['remove_fumbles', 'set_audio_cleanup', 'set_audio_levels', 'add_sound_effect', 'set_background_music', 'add_captions', 'semantic_visual']);
   const stages = ['STORY', 'TAKE_SELECTION', 'CORRECTION', 'PACING', 'COVERAGE', 'OPTIONAL_TREATMENT'];
   const kinds = new Set(['REQUIRED_CLEANUP', 'OPTIONAL_STYLE', 'OPTIONAL_MUSIC']);
   const grounded = (item) => item && typeof item.rationale === 'string' && item.rationale.length > 0 &&
@@ -42,6 +66,13 @@ function validateProposal(value, revision, validEvidenceIds = new Set()) {
   }
   if (!value || value.type !== 'proposal' || value.expectedRevision !== revision || !Array.isArray(value.operations)) throw new Error('Invalid planner proposal envelope.');
   if (value.operations.some((operation) => !operation || !allowed.has(operation.type) || typeof operation.id !== 'string' || typeof operation.enabled !== 'boolean')) throw new Error('Planner returned an unsupported operation.');
+  if (value.operations.some((operation) => !validSemanticOperation(operation, validEvidenceIds))) throw new Error('Planner returned an unsafe or ungrounded semantic visual.');
+  const semantics = value.operations.filter((operation) => operation.enabled && operation.type === 'semantic_visual').sort((a, b) => a.range.startMs - b.range.startMs);
+  if (semantics.some((operation, index) =>
+    semantics.filter((candidate) => candidate.range.startMs < operation.range.endMs && operation.range.startMs < candidate.range.endMs).length > 2 ||
+    semantics.slice(index).filter((candidate) => candidate.range.startMs < operation.range.startMs + 10000).length > 3)) {
+    throw new Error('Planner exceeded semantic visual density.');
+  }
   if (!Array.isArray(value.evidenceIds) || !value.evidenceIds.length || value.evidenceIds.some((id) => !validEvidenceIds.has(id))) {
     throw new Error('Planner returned missing, stale, or invented evidence.');
   }

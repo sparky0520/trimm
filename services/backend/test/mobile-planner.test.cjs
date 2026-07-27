@@ -38,8 +38,44 @@ test('mobile planning excludes operations without render support or frame eviden
     const source = fs.readFileSync(path.join(__dirname, '..', 'server', name), 'utf8');
     assert.doesNotMatch(source.match(/const allowed = new Set\(\[[^\n]+/)[0], /set_color_grade|add_transition|add_motion_preset/);
     assert.match(source, /Color requires frame evidence/);
-    assert.match(source, /Transitions and motion presets are unavailable/);
+    assert.match(source, /transitions and motion presets are unavailable/i);
   }
+});
+
+test('semantic visuals require grounded bounded subjects and safe framing', () => {
+  const evidence = new Set(['visual-product-1']);
+  const grounding = {
+    rationale: 'The product is visible and bounded.', evidenceIds: ['visual-product-1'],
+    confidence: 0.9, assumptions: [], expectedStoryEffect: 'Point out the demonstrated control.',
+  };
+  const semantic = {
+    id: 'semantic-1', type: 'semantic_visual', enabled: true,
+    intent: 'POINT_OUT', treatment: 'REFRAME', range: { startMs: 1000, endMs: 2600 },
+    subject: {
+      evidenceId: 'visual-product-1', kind: 'PRODUCT', confidence: 0.9,
+      bounds: { left: .3, top: .2, right: .7, bottom: .8 },
+    },
+    motion: { intensity: .3, curve: 'EASE_IN_OUT', reducedMotion: false },
+    framing: { zoom: 1.25, preservesSubject: true, preservesText: true },
+  };
+  const proposal = {
+    type: 'proposal', expectedRevision: 2, summary: 'Grounded product emphasis',
+    evidenceIds: [...evidence], operations: [semantic],
+    plan: {
+      story: [{ beatId: 'beat-demo', ...grounding }],
+      decisions: [{ id: 'style-1', stage: 'OPTIONAL_TREATMENT', kind: 'OPTIONAL_STYLE', ...grounding }],
+      operationPlans: [{ operationId: semantic.id, decisionId: 'style-1', ...grounding }],
+    },
+  };
+  assert.equal(plannerCore.validateProposal(proposal, 2, evidence).summary, proposal.summary);
+  assert.throws(() => plannerCore.validateProposal({
+    ...proposal,
+    operations: [{ ...semantic, subject: { ...semantic.subject, evidenceId: 'invented' } }],
+  }, 2, evidence), /unsafe or ungrounded/);
+  assert.throws(() => plannerCore.validateProposal({
+    ...proposal,
+    operations: [{ ...semantic, framing: { ...semantic.framing, preservesText: false } }],
+  }, 2, evidence), /unsafe or ungrounded/);
 });
 
 test('mobile planner accepts only bounded evidence packets and grounded output references', () => {

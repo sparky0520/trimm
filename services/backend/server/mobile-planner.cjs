@@ -135,8 +135,8 @@ function validateRequest(value) {
 }
 
 function validateProposal(value, revision, validEvidenceIds = new Set()) {
-  const allowed = new Set(['remove_fumbles', 'set_audio_cleanup', 'set_audio_levels', 'add_sound_effect', 'set_background_music', 'add_captions']);
-  // Shared mobile policy: Color requires frame evidence. Transitions and motion presets are unavailable.
+  const allowed = new Set(['remove_fumbles', 'set_audio_cleanup', 'set_audio_levels', 'add_sound_effect', 'set_background_music', 'add_captions', 'semantic_visual']);
+  // Shared mobile policy: Color requires frame evidence. Legacy generic transitions and motion presets are unavailable.
   void allowed;
   return plannerCore.validateProposal(value, revision, validEvidenceIds);
 }
