@@ -47,9 +47,9 @@ class EvidencePipelineTest {
 
     @Test fun `speech evidence derives sentences pauses disfluencies and stable ids`() = runTest {
         val words = listOf(
-            TranscriptWord("Um", TimeRange(0, 100), .9f),
-            TranscriptWord("hello.", TimeRange(150, 400), .98f),
-            TranscriptWord("Again", TimeRange(900, 1_200), .95f)
+            TranscriptWord("Um", TimeRange(0, 100), .9f, "speaker-A"),
+            TranscriptWord("hello.", TimeRange(150, 400), .98f, "speaker-A"),
+            TranscriptWord("Again", TimeRange(900, 1_200), .95f, "speaker-B")
         )
         val analyzer = SpeechEvidenceAnalyzer(words)
         val first = analyzer.analyze(AnalyzerContext(source, Files.createTempDirectory("speech-test").toFile()))
@@ -59,6 +59,14 @@ class EvidencePipelineTest {
         val kinds = first.filterIsInstance<SpeechEvidence>().map { it.kind }.toSet()
         assertTrue(kinds.containsAll(setOf(SpeechKind.WORD, SpeechKind.SENTENCE, SpeechKind.PAUSE, SpeechKind.DISFLUENCY, SpeechKind.SPEAKER_REGION)))
         assertTrue(first.all { it.provenance.analyzer.version == "1.0.0" })
+        assertEquals(setOf("speaker-A", "speaker-B"), first.filterIsInstance<SpeechEvidence>().mapNotNull { it.speakerId }.toSet())
+    }
+
+    @Test fun `speech analyzer does not invent a speaker when diarization is absent`() = runTest {
+        val observations = SpeechEvidenceAnalyzer(listOf(
+            TranscriptWord("Hello", TimeRange(0, 200), .9f)
+        )).analyze(AnalyzerContext(source, Files.createTempDirectory("speech-no-speaker").toFile()))
+        assertTrue(observations.filterIsInstance<SpeechEvidence>().none { it.kind == SpeechKind.SPEAKER_REGION })
     }
 
     private fun analyzer(name: String, version: String, block: suspend TestAnalyzer.(AnalyzerContext) -> List<EvidenceObservation>) =

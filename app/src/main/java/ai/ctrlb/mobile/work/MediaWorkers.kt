@@ -56,7 +56,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                         override suspend fun analyze(context: AnalyzerContext): List<EvidenceObservation> = throw failure
                     } }
                 )
-                val graph = EvidencePipeline(evidenceCache, listOf(LocalVisualAnalyzer(applicationContext), speechAnalyzer) + unsupportedAnalyzers()).analyze(source)
+                val graph = EvidencePipeline(evidenceCache, listOf(LocalVisualAnalyzer(applicationContext), LocalSoundAnalyzer(applicationContext), speechAnalyzer) + unsupportedAnalyzers()).analyze(source)
                 evidenceReferences += graph.reference()
             } else {
                 val graph = EvidencePipeline(evidenceCache, listOf(LocalVisualAnalyzer(applicationContext), object : EvidenceAnalyzer {
@@ -115,7 +115,7 @@ private fun EvidenceGraph.reference() = EvidenceGraphReference(
 private fun unsupportedAnalyzers(): List<EvidenceAnalyzer> = listOf(
     UnsupportedEvidenceAnalyzer(AnalyzerIdentity("on-device face detector", "not-installed", ExecutionLocation.LOCAL_DEVICE), "Face detector is not bundled in this build."),
     UnsupportedEvidenceAnalyzer(AnalyzerIdentity("on-device OCR and screen detector", "not-installed", ExecutionLocation.LOCAL_DEVICE), "OCR and screen/UI detector is not bundled in this build."),
-    UnsupportedEvidenceAnalyzer(AnalyzerIdentity("on-device sound classifier", "not-installed", ExecutionLocation.LOCAL_DEVICE), "Waveform loudness, noise, clipping, music, silence, and transient analysis is not bundled in this build.")
+    UnsupportedEvidenceAnalyzer(AnalyzerIdentity("on-device music classifier", "not-installed", ExecutionLocation.LOCAL_DEVICE), "A truthful music classifier is not bundled in this build.")
 )
 
 class ExportWorker(context: Context, params: WorkerParameters) : ProgressWorker(context, params) {

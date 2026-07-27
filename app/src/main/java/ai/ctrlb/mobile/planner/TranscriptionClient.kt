@@ -18,7 +18,7 @@ import java.net.HttpURLConnection
 import java.net.URI
 import kotlin.coroutines.coroutineContext
 
-@Serializable private data class RemoteTranscriptWord(val text: String, val startMs: Long, val endMs: Long, val confidence: Float)
+@Serializable private data class RemoteTranscriptWord(val text: String, val startMs: Long, val endMs: Long, val confidence: Float, val speakerId: String? = null)
 @Serializable private data class RemoteTranscript(val id: String, val languageCode: String? = null, val words: List<RemoteTranscriptWord>)
 @Serializable private data class CreateUpload(val contentType: String, val size: Long)
 @Serializable private data class UploadSession(val id: String, val offset: Long, val chunkSize: Int)
@@ -56,7 +56,7 @@ class TranscriptionClient(private val endpoint: String, private val accessToken:
             }
             val transcript = completeSession(session.id)
             completed = true
-            transcript.words.map { word -> TranscriptWord(word.text, TimeRange(word.startMs, word.endMs), word.confidence) }
+            transcript.words.map { word -> TranscriptWord(word.text, TimeRange(word.startMs, word.endMs), word.confidence, word.speakerId) }
         } finally {
             if (!completed) withContext(NonCancellable) { runCatching { deleteSession(session.id) } }
         }

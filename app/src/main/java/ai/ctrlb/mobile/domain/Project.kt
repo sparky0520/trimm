@@ -8,7 +8,12 @@ import java.util.UUID
     init { require(startMs >= 0 && endMs > startMs) }
     val durationMs get() = endMs - startMs
 }
-@Serializable data class TranscriptWord(val text: String, val range: TimeRange, val confidence: Float)
+@Serializable data class TranscriptWord(
+    val text: String,
+    val range: TimeRange,
+    val confidence: Float,
+    val speakerId: String? = null
+)
 @Serializable data class CaptionCue(val text: String, val range: TimeRange)
 @Serializable data class SourceMedia(val uri: String, val fingerprint: String, val durationMs: Long, val width: Int, val height: Int, val rotation: Int = 0, val hasAudio: Boolean = true)
 @Serializable data class WizardPreferences(

@@ -26,9 +26,9 @@ class SpeechEvidenceAnalyzer(
         valid.filter { it.text.lowercase().trim(',', '.', '!', '?') in DISFLUENCIES }.forEach {
             result += speech(source, it.range, SpeechKind.DISFLUENCY, it.confidence, it.text)
         }
-        if (valid.isNotEmpty()) {
-            val range = TimeRange(valid.first().range.startMs, valid.last().range.endMs)
-            result += speech(source, range, SpeechKind.SPEAKER_REGION, .5f, speakerId = "speaker-unknown")
+        speakerRegions(valid).forEach { (range, regionWords) ->
+            val speakerId = requireNotNull(regionWords.first().speakerId)
+            result += speech(source, range, SpeechKind.SPEAKER_REGION, regionWords.minOf { it.confidence }, speakerId = speakerId)
         }
         return result
     }
@@ -37,7 +37,7 @@ class SpeechEvidenceAnalyzer(
         SpeechEvidence(
             stableEvidenceId(source.fingerprint, identity, kind.name, range, text.orEmpty()),
             source.fingerprint, range, confidence.coerceIn(0f, 1f),
-            EvidenceProvenance(identity, source.fingerprint, note = if (kind == SpeechKind.SPEAKER_REGION) "Diarization was unavailable; region is intentionally unassigned." else null),
+            EvidenceProvenance(identity, source.fingerprint),
             kind, text, speakerId
         )
 
@@ -53,6 +53,22 @@ class SpeechEvidenceAnalyzer(
             }
         }
         return groups.filter { it.isNotEmpty() }.map { TimeRange(it.first().range.startMs, it.last().range.endMs) to it }
+    }
+
+    private fun speakerRegions(words: List<TranscriptWord>): List<Pair<TimeRange, List<TranscriptWord>>> {
+        val regions = mutableListOf<List<TranscriptWord>>()
+        var current = mutableListOf<TranscriptWord>()
+        words.forEach { word ->
+            if (word.speakerId == null) {
+                if (current.isNotEmpty()) regions += current
+                current = mutableListOf()
+            } else if (current.isNotEmpty() && current.last().speakerId != word.speakerId) {
+                regions += current
+                current = mutableListOf(word)
+            } else current += word
+        }
+        if (current.isNotEmpty()) regions += current
+        return regions.map { TimeRange(it.first().range.startMs, it.last().range.endMs) to it }
     }
 
     companion object { private val DISFLUENCIES = setOf("um", "uh", "erm", "hmm") }
