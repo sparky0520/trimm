@@ -12,10 +12,6 @@ object OperationValidator {
     fun visible(operations: List<EditOperation>): List<EditOperation> =
         operations.filter(::isRendered)
 
-    /**
-     * A deterministic description of the render inputs changed by enabled
-     * operations. Fixture tests use this as the preview/export parity contract.
-     */
     fun renderFingerprint(operations: List<EditOperation>): List<String> =
         operations.filter { it.enabled && isRendered(it) }.map { operation ->
             when (operation) {
@@ -26,6 +22,7 @@ object OperationValidator {
                 is AddSoundEffect -> "audio-effect:${operation.atSourceMs}:${operation.catalogId}:${operation.gainDb}"
                 is SetBackgroundMusic -> "audio-music:${operation.catalogId}:${operation.gainDb}:${operation.loop}"
                 is AddCaptions -> "video-captions:${operation.cues}:${operation.style}"
+                is ApplySemanticVisual -> "semantic-visual:${operation.intent}:${operation.treatment}:${operation.range}:${operation.subject}:${operation.motion}:${operation.framing}"
                 is AddTransition, is AddMotionPreset -> error("Unrendered operation reached render contract")
             }
         }
@@ -38,6 +35,7 @@ object OperationValidator {
         is AddSoundEffect -> "User preference • ${operation.catalogId}"
         is SetBackgroundMusic -> "User preference • ${operation.catalogId}"
         is AddCaptions -> "Transcript evidence • ${operation.cues.size} timed cues"
+        is ApplySemanticVisual -> "Visual evidence • ${operation.subject.kind.name.lowercase()} ${operation.subject.evidenceId}"
         is AddTransition, is AddMotionPreset -> "Unavailable • not rendered"
     }
 
@@ -55,7 +53,9 @@ object OperationValidator {
             is AddSoundEffect -> { require(op.atSourceMs in 0..project.durationMs); require(op.gainDb in -36f..0f) }
             is SetBackgroundMusic -> require(op.gainDb in -40f..-6f)
             is AddCaptions -> { require(op.cues.isNotEmpty()); op.cues.forEach { require(it.range.endMs <= project.durationMs); require(it.text.isNotBlank() && it.text.length <= 120) } }
+            is ApplySemanticVisual -> SemanticVisualPolicy.validate(op, project.durationMs)
         } }
+        SemanticVisualPolicy.validateDensity(proposed.filterIsInstance<ApplySemanticVisual>().filter { it.enabled })
         return proposed
     }
 }

@@ -34,7 +34,18 @@ class ProjectTest {
             SetAudioLevels(dialogueLufs = -16f),
             AddSoundEffect(atSourceMs = 500, catalogId = "fixture-effect"),
             SetBackgroundMusic(catalogId = "fixture-music"),
-            AddCaptions(cues = listOf(CaptionCue("Fixture", TimeRange(0, 500))))
+            AddCaptions(cues = listOf(CaptionCue("Fixture", TimeRange(0, 500)))),
+            ApplySemanticVisual(
+                intent = SemanticIntent.POINT_OUT,
+                treatment = SemanticTreatment.CALLOUT,
+                range = TimeRange(500, 1_500),
+                subject = GroundedVisualSubject(
+                    "fixture-product",
+                    ai.ctrlb.mobile.evidence.VisualKind.PRODUCT,
+                    ai.ctrlb.mobile.evidence.NormalizedBounds(.3f, .2f, .7f, .8f),
+                    .9f
+                )
+            )
         )
         val baseline = OperationValidator.renderFingerprint(emptyList())
         fixture.forEach { operation ->

@@ -53,7 +53,7 @@ data class VisualEvidence(
 ) : EvidenceObservation
 
 @Serializable enum class VisualKind {
-    FACE, SCREEN_UI, OCR_TEXT, SALIENCE, MOTION, BLUR, SHAKE, EXPOSURE, CROP_SAFETY
+    FACE, SCREEN_UI, PRODUCT, OCR_TEXT, SALIENCE, MOTION, BLUR, SHAKE, EXPOSURE, CROP_SAFETY
 }
 
 @Serializable data class NormalizedBounds(val left: Float, val top: Float, val right: Float, val bottom: Float) {

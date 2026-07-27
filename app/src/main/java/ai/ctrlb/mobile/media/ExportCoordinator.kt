@@ -63,12 +63,20 @@ object ExportCoordinator {
         }
         val sequence = if (project.orderedSources.all { it.hasAudio }) EditedMediaItemSequence.withAudioAndVideoFrom(clips) else EditedMediaItemSequence.withVideoFrom(clips)
         val videoEffects = mutableListOf<Effect>(
-            Presentation.createForWidthAndHeight(
+        )
+        val semanticOperations = project.operations.filterIsInstance<ApplySemanticVisual>().filter { it.enabled }.mapNotNull { operation ->
+            val start = timelineMapper.sourceToOutput(operation.range.startMs)
+            val end = timelineMapper.sourceToOutput(operation.range.endMs)
+            if (end > start) operation.copy(range = TimeRange(start, end)) else null
+        }
+        if (semanticOperations.any { it.treatment == SemanticTreatment.REFRAME }) {
+            videoEffects += SemanticReframeTransformation(semanticOperations)
+        }
+        videoEffects += Presentation.createForWidthAndHeight(
                 project.export.width,
                 project.export.height,
                 Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP
             )
-        )
         project.operations.filterIsInstance<SetColorGrade>().lastOrNull { it.enabled }?.grade?.let { grade ->
             videoEffects += HslAdjustment.Builder().adjustSaturation((grade.saturation - 1f) * 100f).adjustLightness(grade.exposure * 22f).build()
             videoEffects += RgbAdjustment.Builder()
@@ -86,6 +94,8 @@ object ExportCoordinator {
                 videoEffects += OverlayEffect(listOf(CaptionOverlay(mapped, project.export.height > project.export.width)))
             }
         }
+        val overlays = semanticOperations.filter { it.treatment != SemanticTreatment.REFRAME }
+        if (overlays.isNotEmpty()) videoEffects += OverlayEffect(listOf(SemanticVisualOverlay(overlays)))
         val sequences = mutableListOf(sequence)
         val audioRepository = AudioAssetRepository(context)
         project.operations.filterIsInstance<SetBackgroundMusic>().lastOrNull { it.enabled }?.let { music ->

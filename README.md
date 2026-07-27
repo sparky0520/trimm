@@ -52,7 +52,7 @@ See [ProductVision - Audio acquisition policy](../../docs/ai/ProductVision.md#au
 - Preview is a rendered 720p MP4.
 - Export applies cuts, explicitly frame-derived color when present, dialogue processing, captions when present, background music, and positioned sound effects.
 - Missing planner, transcription, audio, preview, and export configuration produces a visible error or warning.
-- Legacy transitions and motion presets remain readable in the project schema, but are excluded from planning and UI until the Media3 preview/export path can render them with parity.
+- Evidence-gated semantic callouts, spotlights, and safe reframes share the Media3 preview/export path. Legacy generic transitions and motion presets remain readable in the project schema but stay excluded from planning and UI.
 - Color is not offered automatically until frame analysis supplies evidence. Operation cards identify transcript evidence, user preference, or a documented default.
 
 ## Production inputs

@@ -44,6 +44,16 @@ import java.util.UUID
 @Serializable @SerialName("add_sound_effect") data class AddSoundEffect(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val atSourceMs: Long, val catalogId: String, val gainDb: Float = -12f) : EditOperation
 @Serializable @SerialName("set_background_music") data class SetBackgroundMusic(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val catalogId: String, val gainDb: Float = -24f, val loop: Boolean = true) : EditOperation
 @Serializable @SerialName("add_captions") data class AddCaptions(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val cues: List<CaptionCue>, val style: String = "bold-bottom") : EditOperation
+@Serializable @SerialName("semantic_visual") data class ApplySemanticVisual(
+    override val id: String = UUID.randomUUID().toString(),
+    override val enabled: Boolean = true,
+    val intent: SemanticIntent,
+    val treatment: SemanticTreatment,
+    val range: TimeRange,
+    val subject: GroundedVisualSubject,
+    val motion: SemanticMotion = SemanticMotion(),
+    val framing: SemanticFraming? = null
+) : EditOperation
 
 @Serializable data class ColorGrade(val exposure: Float = 0f, val temperature: Float = 0f, val contrast: Float = 1f, val saturation: Float = 1f, val highlights: Float = 0f, val shadows: Float = 0f, val skinProtection: Float = .8f) {
     init { require(exposure in -1f..1f && temperature in -1f..1f && contrast in .75f..1.35f && saturation in .7f..1.3f && highlights in -1f..1f && shadows in -1f..1f && skinProtection in 0f..1f) }
