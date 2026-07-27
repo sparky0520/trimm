@@ -3,6 +3,7 @@ package ai.ctrlb.mobile.evidence
 import ai.ctrlb.mobile.domain.TimeRange
 import kotlinx.serialization.Serializable
 import java.security.MessageDigest
+import kotlin.math.abs
 import kotlin.math.max
 
 @Serializable
@@ -196,6 +197,76 @@ class TakeRanker(
         val bytes = ids.sorted().joinToString("|").toByteArray()
         return "take-" + MessageDigest.getInstance("SHA-256").digest(bytes).take(8).joinToString("") { "%02x".format(it) }
     }
+}
+
+/**
+ * Builds ranking inputs only from provenance-bearing observations. The generator deliberately
+ * does not infer facts: product-state differences must come from a detector or user input that
+ * can name and cite the differing state.
+ */
+object TakeCandidateGenerator {
+    fun fromEvidence(graphs: List<EvidenceGraph>): List<TakeCandidate> = graphs.flatMap { graph ->
+        val speech = graph.observations.filterIsInstance<SpeechEvidence>()
+        speech.filter { it.kind == SpeechKind.SENTENCE && !it.text.isNullOrBlank() }.map { sentence ->
+            val overlapping = graph.observations.filter { it.range.overlaps(sentence.range) }
+            val visuals = overlapping.filterIsInstance<VisualEvidence>()
+            val sounds = overlapping.filterIsInstance<SoundEvidence>()
+            val disfluencies = overlapping.count { it is SpeechEvidence && it.kind == SpeechKind.DISFLUENCY }
+            val speakers = overlapping.filterIsInstance<SpeechEvidence>()
+                .filter { it.kind == SpeechKind.SPEAKER_REGION }.mapNotNull { it.speakerId }.distinct()
+            val clarity = (sentence.confidence - sounds.penalty()).coerceIn(0f, 1f)
+            val technical = technicalQuality(visuals, sounds)
+            val salience = visuals.filter { it.kind == VisualKind.SALIENCE }.mapNotNull { it.value }
+                .averageOr(.5f)
+            TakeCandidate(
+                id = sentence.id,
+                sourceFingerprint = graph.sourceFingerprint,
+                range = sentence.range,
+                transcript = requireNotNull(sentence.text),
+                speakerId = speakers.singleOrNull(),
+                evidenceIds = overlapping.map { it.id }.toSet(),
+                completeness = sentence.confidence,
+                clarity = clarity,
+                delivery = (clarity - disfluencies * .18f).coerceIn(0f, 1f),
+                technicalQuality = technical,
+                continuity = continuity(overlapping, sentence.range),
+                storyFit = (.7f * sentence.confidence + .3f * salience).coerceIn(0f, 1f),
+                editRisk = (1f - minOf(sentence.confidence, clarity, technical)).coerceIn(0f, 1f)
+            )
+        }
+    }
+
+    private fun technicalQuality(visuals: List<VisualEvidence>, sounds: List<SoundEvidence>): Float {
+        val exposure = visuals.filter { it.kind == VisualKind.EXPOSURE }.mapNotNull { it.value }
+            .map { 1f - (abs(it - .5f) * 2f).coerceIn(0f, 1f) }
+        val sharpness = visuals.filter { it.kind == VisualKind.BLUR }.mapNotNull { it.value }
+        val stability = visuals.filter { it.kind == VisualKind.SHAKE }.mapNotNull { it.value }
+            .map { 1f - it }
+        return (listOf(exposure.averageOr(.7f), sharpness.averageOr(.7f), stability.averageOr(.7f))
+            .average().toFloat() - sounds.penalty()).coerceIn(0f, 1f)
+    }
+
+    private fun continuity(observations: List<EvidenceObservation>, range: TimeRange): Float {
+        val shotCount = observations.filterIsInstance<ShotEvidence>().count { it.range.overlaps(range) }
+        return when (shotCount) {
+            0, 1 -> .85f
+            2 -> .65f
+            else -> .45f
+        }
+    }
+
+    private fun List<SoundEvidence>.penalty(): Float {
+        val clipping = filter { it.kind == SoundKind.CLIPPING }.mapNotNull { it.value }.maxOrNull() ?: 0f
+        val noise = filter { it.kind == SoundKind.NOISE_FLOOR }.mapNotNull { it.value }
+            .maxOrNull()?.let { ((it + 60f) / 40f).coerceIn(0f, 1f) } ?: 0f
+        return (.45f * clipping + .2f * noise).coerceIn(0f, .65f)
+    }
+
+    private fun List<Float>.averageOr(fallback: Float) =
+        if (isEmpty()) fallback else average().toFloat()
+
+    private fun TimeRange.overlaps(other: TimeRange) =
+        startMs < other.endMs && other.startMs < endMs
 }
 
 @Serializable

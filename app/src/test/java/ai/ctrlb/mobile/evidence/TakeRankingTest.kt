@@ -6,6 +6,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TakeRankingTest {
+    @Test fun `candidate generation cites evidence and ranks repeated sentences across sources`() {
+        val graphs = listOf(
+            graph("source-a", "sentence-a", "Can I get some water in my water bottle", .82f, clipping = .04f),
+            graph("source-b", "sentence-b", "Can I get some water in my water bottle", .97f, clipping = 0f)
+        )
+
+        val candidates = TakeCandidateGenerator.fromEvidence(graphs)
+        val group = TakeRanker(nearTieDelta = 0f).detectAndRank(candidates).single()
+
+        assertEquals(setOf("sentence-a", "sentence-b"), group.candidates.map { it.id }.toSet())
+        assertEquals("sentence-b", group.preferredTakeId)
+        assertEquals(TakeResolution.SELECTED, group.resolution)
+        assertTrue(group.candidates.all { it.evidenceIds.size >= 3 })
+        assertTrue(group.scores.all { it.evidenceIds.isNotEmpty() })
+    }
+
     @Test fun `repeated wording groups while repeated topic does not`() {
         val takes = listOf(
             take("a", 0, "Open settings and turn on the notification light"),
@@ -93,4 +109,34 @@ class TakeRankingTest {
         id, "fixture-source", TimeRange(start, start + 1_500), text, "speaker-1", setOf("speech-$id", "shot-$id"),
         facts, quality, quality, quality, quality, quality, quality, 1f - quality
     )
+
+    private fun graph(
+        fingerprint: String,
+        sentenceId: String,
+        text: String,
+        confidence: Float,
+        clipping: Float
+    ): EvidenceGraph {
+        val range = TimeRange(0, 1_500)
+        val speechAnalyzer = AnalyzerIdentity("speech", "1", ExecutionLocation.EXTERNAL_SERVICE)
+        val mediaAnalyzer = AnalyzerIdentity("local", "1", ExecutionLocation.LOCAL_DEVICE)
+        val provenance = EvidenceProvenance(mediaAnalyzer, fingerprint)
+        return EvidenceGraph(
+            sourceFingerprint = fingerprint,
+            sourceDurationMs = 2_000,
+            createdAtEpochMs = 1,
+            observations = listOf(
+                SpeechEvidence(sentenceId, fingerprint, range, confidence,
+                    EvidenceProvenance(speechAnalyzer, fingerprint), SpeechKind.SENTENCE, text, "speaker-1"),
+                FrameEvidence("frame-$sentenceId", fingerprint, TimeRange(0, 1), .95f,
+                    provenance, "frame.jpg", 720, 1280),
+                VisualEvidence("exposure-$sentenceId", fingerprint, TimeRange(0, 1), .8f,
+                    provenance, VisualKind.EXPOSURE, .5f),
+                SoundEvidence("clip-$sentenceId", fingerprint, range, .99f,
+                    provenance, SoundKind.CLIPPING, clipping, "ratio")
+            ),
+            analyzerRuns = emptyList(),
+            disclosure = EvidenceDisclosure(emptyList(), emptyList())
+        )
+    }
 }

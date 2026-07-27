@@ -1,5 +1,6 @@
 package ai.ctrlb.mobile.domain
 
+import ai.ctrlb.mobile.evidence.TakeGroup
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.util.UUID
@@ -45,7 +46,14 @@ import java.util.UUID
 @Serializable data class ColorGrade(val exposure: Float = 0f, val temperature: Float = 0f, val contrast: Float = 1f, val saturation: Float = 1f, val highlights: Float = 0f, val shadows: Float = 0f, val skinProtection: Float = .8f) {
     init { require(exposure in -1f..1f && temperature in -1f..1f && contrast in .75f..1.35f && saturation in .7f..1.3f && highlights in -1f..1f && shadows in -1f..1f && skinProtection in 0f..1f) }
 }
-@Serializable data class Analysis(val words: List<TranscriptWord> = emptyList(), val captions: List<CaptionCue> = emptyList(), val lowConfidenceFumbles: List<FumbleCandidate> = emptyList(), val warnings: List<String> = emptyList(), val completedAtEpochMs: Long? = null)
+@Serializable data class Analysis(
+    val words: List<TranscriptWord> = emptyList(),
+    val captions: List<CaptionCue> = emptyList(),
+    val lowConfidenceFumbles: List<FumbleCandidate> = emptyList(),
+    val takeGroups: List<TakeGroup> = emptyList(),
+    val warnings: List<String> = emptyList(),
+    val completedAtEpochMs: Long? = null
+)
 @Serializable data class EvidenceGraphReference(val sourceFingerprint: String, val schemaVersion: Int = 1, val relativeCachePath: String, val analyzerVersions: Map<String, String>, val partial: Boolean)
 @Serializable data class FumbleCandidate(val range: TimeRange, val confidence: Float, val reason: String)
 @Serializable data class ExportSettings(val width: Int = 1920, val height: Int = 1080, val codec: String = "video/avc", val bitrate: Int = 16_000_000)

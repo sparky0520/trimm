@@ -30,6 +30,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
         val transcriber = BuildConfig.TRANSCRIPTION_URL.takeIf(String::isNotBlank)
             ?.let { TranscriptionClient(it, AuthTokenProvider::currentToken) }
         val words = mutableListOf<TranscriptWord>()
+        val evidenceGraphs = mutableListOf<EvidenceGraph>()
         val evidenceReferences = mutableListOf<EvidenceGraphReference>()
         val analysisWarnings = mutableListOf<String>()
         val evidenceCache = EvidenceCache(java.io.File(applicationContext.filesDir, "evidence"))
@@ -57,12 +58,14 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                     } }
                 )
                 val graph = EvidencePipeline(evidenceCache, listOf(LocalVisualAnalyzer(applicationContext), LocalSoundAnalyzer(applicationContext), speechAnalyzer) + unsupportedAnalyzers()).analyze(source)
+                evidenceGraphs += graph
                 evidenceReferences += graph.reference()
             } else {
                 val graph = EvidencePipeline(evidenceCache, listOf(LocalVisualAnalyzer(applicationContext), object : EvidenceAnalyzer {
                     override val identity = AnalyzerIdentity("ctrlB speech structure", "1.0.0", ExecutionLocation.EXTERNAL_SERVICE)
                     override suspend fun analyze(context: AnalyzerContext): List<EvidenceObservation> = throw UnsupportedOperationException("Source has no audio track.")
                 }) + unsupportedAnalyzers()).analyze(source)
+                evidenceGraphs += graph
                 evidenceReferences += graph.reference()
             }
             offset += source.durationMs
@@ -75,10 +78,21 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
         }.toMutableList()
         if (automatic.isNotEmpty()) retained += RemoveFumbles(ranges = automatic.map { it.range }, confidence = automatic.minOf { it.confidence }, reasons = automatic.map { it.reason }.distinct())
         val captions = CaptionSegmenter.segment(words)
+        val takeGroups = TakeRanker().detectAndRank(
+            TakeCandidateGenerator.fromEvidence(evidenceGraphs),
+            TakeConstraints(mustKeepWording = listOf(project.preferences.mustKeep).filter(String::isNotBlank))
+        )
         if (project.preferences.captions && captions.isNotEmpty()) retained += AddCaptions(cues = captions)
         progress("persist", 90)
         var analyzed = project.copy(
-            analysis = Analysis(words, captions, candidates.filter { it.confidence < .93f }, warnings = analysisWarnings, completedAtEpochMs = System.currentTimeMillis()),
+            analysis = Analysis(
+                words = words,
+                captions = captions,
+                lowConfidenceFumbles = candidates.filter { it.confidence < .93f },
+                takeGroups = takeGroups,
+                warnings = analysisWarnings,
+                completedAtEpochMs = System.currentTimeMillis()
+            ),
             evidenceGraphs = evidenceReferences,
             operations = retained,
             revision = project.revision + 1
