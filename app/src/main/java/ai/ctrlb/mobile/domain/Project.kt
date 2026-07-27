@@ -74,6 +74,8 @@ import java.util.UUID
     val storyGraph: StoryGraph? = null,
     val editorialPlan: StagedEditorialPlan? = null,
     val pendingProposal: PendingEditorialProposal? = null,
+    val revisionConversation: List<EditorialConversationTurn> = emptyList(),
+    val settledConstraints: List<SettledEditorialConstraint> = emptyList(),
     val warnings: List<String> = emptyList(),
     val completedAtEpochMs: Long? = null
 )

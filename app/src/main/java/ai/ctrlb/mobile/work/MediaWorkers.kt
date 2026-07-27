@@ -197,7 +197,14 @@ class ExportWorker(context: Context, params: WorkerParameters) : ProgressWorker(
 class PreviewWorker(context: Context, params: WorkerParameters) : ProgressWorker(context, params) {
     override suspend fun doWork(): Result = runCatching {
         val projectId = requireNotNull(inputData.getString("projectId"))
-        val stored = ProjectStore(applicationContext).load(projectId)
+        val persisted = ProjectStore(applicationContext).load(projectId)
+        val stored = if (inputData.getBoolean("simulatePendingProposal", false)) {
+            persisted.analysis.pendingProposal?.let { proposal ->
+                persisted.copy(operations = OperationValidator.validate(
+                    persisted, proposal.operations, proposal.expectedRevision
+                ))
+            } ?: persisted
+        } else persisted
         var warning: String? = null
         val prepared = runCatching { AudioAssetRepository(applicationContext).prepare(stored) }.getOrElse { error ->
             warning = "Audio preview unavailable: ${error.message}"

@@ -78,7 +78,7 @@ class MainActivity : ComponentActivity() {
     val state by vm.state.collectAsStateWithLifecycle()
     when {
         state.source == null -> ImportScreen(vm::import)
-        state.project != null -> EditorScreen(state, vm::toggle, vm::undo, vm::export, vm::moveClip, vm::applyProposal, vm::rejectProposal)
+        state.project != null -> EditorScreen(state, vm::toggle, vm::undo, vm::export, vm::moveClip, vm::applyProposal, vm::rejectProposal, vm::reviseStory)
         else -> WizardScreen(state, vm::preferences, vm::next, vm::back, vm::generateDraft, vm::moveClip)
     }
 }
@@ -232,7 +232,8 @@ class MainActivity : ComponentActivity() {
     export: () -> Unit,
     moveClip: (Int, Int) -> Unit,
     applyProposal: () -> Unit,
-    rejectProposal: () -> Unit
+    rejectProposal: () -> Unit,
+    reviseStory: (String) -> Unit
 ) {
     val project = requireNotNull(state.project)
     var fullscreen by rememberSaveable { mutableStateOf(false) }
@@ -243,6 +244,7 @@ class MainActivity : ComponentActivity() {
             EditorialReviewBuilder.proposal(project)?.let { review ->
                 item { ProposalReviewCard(review, applyProposal, rejectProposal) }
             }
+            item { ConversationalRevisionCard(project, reviseStory) }
             item {
                 Column(Modifier.fillMaxWidth().background(Workspace, RoundedCornerShape(18.dp)).border(1.dp, Border, RoundedCornerShape(18.dp))) {
                     Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -280,6 +282,41 @@ class MainActivity : ComponentActivity() {
         Spacer(Modifier.navigationBarsPadding())
     }
     if (fullscreen) FullscreenPreview(state.previewUri?.let(::listOf) ?: project.orderedSources.map { it.uri }) { fullscreen = false }
+}
+
+@Composable private fun ConversationalRevisionCard(project: MobileProject, revise: (String) -> Unit) {
+    var request by rememberSaveable { mutableStateOf("") }
+    ReviewSurface("REVISE", "Keep editing conversationally") {
+        project.analysis.revisionConversation.takeLast(3).forEach { turn ->
+            Text(turn.request, color = CreamRaised, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+            Text(turn.response, color = Muted, fontSize = 11.sp)
+            Spacer(Modifier.height(6.dp))
+        }
+        OutlinedTextField(
+            value = request,
+            onValueChange = { request = it.take(2_000) },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("Why this take? Use fewer effects…") },
+            minLines = 2,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = CreamRaised, unfocusedTextColor = CreamRaised,
+                focusedBorderColor = Lavender, unfocusedBorderColor = Border
+            )
+        )
+        Button(
+            onClick = { revise(request); request = "" },
+            enabled = request.isNotBlank(),
+            modifier = Modifier.align(Alignment.End),
+            colors = ButtonDefaults.buttonColors(containerColor = Lavender, contentColor = Ink)
+        ) { Text("Revise proposal", fontWeight = FontWeight.Bold) }
+        val constraints = project.analysis.settledConstraints
+        if (constraints.isNotEmpty()) {
+            Text(
+                "Settled: " + constraints.joinToString { "${it.kind.name.lowercase().replace('_', ' ')} = ${it.value}" },
+                color = Muted, fontSize = 10.sp
+            )
+        }
+    }
 }
 
 @Composable private fun EditorialReadCard(read: EditorialRead) {

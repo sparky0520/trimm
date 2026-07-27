@@ -130,6 +130,28 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             updateProject(project.copy(analysis = project.analysis.copy(pendingProposal = null)))
         }
     }
+    fun reviseStory(request: String) {
+        mutable.value.project?.let { project ->
+            when (val result = ConversationalRevisionEngine.revise(project, request)) {
+                is ConversationalRevisionResult.Answer ->
+                    updateProject(result.project).also {
+                        mutable.value = mutable.value.copy(jobMessage = result.text)
+                    }
+                is ConversationalRevisionResult.Clarification ->
+                    updateProject(result.project).also {
+                        mutable.value = mutable.value.copy(jobMessage = result.question)
+                    }
+                is ConversationalRevisionResult.Revision ->
+                    run {
+                        mutable.value = mutable.value.copy(project = result.project, jobMessage = "Revised proposal ready to review")
+                        viewModelScope.launch {
+                            store.save(result.project)
+                            renderPreview(result.project, simulatePendingProposal = true)
+                        }
+                    }
+            }
+        }
+    }
     fun undo() { mutable.value.project?.let { updateProject(it.undoOnce(), true) } }
     fun export() { mutable.value.project?.let { project ->
         val estimated = (project.durationMs / 1_000.0 * project.export.bitrate / 8).toLong()
@@ -138,10 +160,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         manager.enqueue(request); viewModelScope.launch { val info = awaitWork(manager, request.id); mutable.value = mutable.value.copy(jobMessage = if (info.state == WorkInfo.State.SUCCEEDED) "Export saved to Movies/ctrlB" else "Export failed: ${info.outputData.getString("error") ?: info.state}") }
     } }
     private fun updateProject(project: MobileProject, preview: Boolean = false) { mutable.value = mutable.value.copy(project = project); viewModelScope.launch { store.save(project); if (preview) renderPreview(project) } }
-    private fun renderPreview(project: MobileProject) {
+    private fun renderPreview(project: MobileProject, simulatePendingProposal: Boolean = false) {
         val manager = WorkManager.getInstance(getApplication())
-        val request = OneTimeWorkRequestBuilder<PreviewWorker>().setInputData(Data.Builder().putString("projectId", project.id).build()).addTag("preview:${project.id}").build()
-        mutable.value = mutable.value.copy(jobMessage = "Rendering edited preview…")
+        val request = OneTimeWorkRequestBuilder<PreviewWorker>().setInputData(Data.Builder()
+            .putString("projectId", project.id)
+            .putBoolean("simulatePendingProposal", simulatePendingProposal)
+            .build()).addTag("preview:${project.id}").build()
+        mutable.value = mutable.value.copy(jobMessage = if (simulatePendingProposal) "Simulating revised preview…" else "Rendering edited preview…")
         manager.enqueueUniqueWork("preview:${project.id}", ExistingWorkPolicy.REPLACE, request)
         viewModelScope.launch {
             val info = awaitWork(manager, request.id)
