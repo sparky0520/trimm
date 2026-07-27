@@ -1,14 +1,23 @@
 package ai.ctrlb.mobile.domain
 
+import ai.ctrlb.mobile.evidence.EditorialProfile
 import kotlin.math.max
 import kotlin.math.min
 
 object FumbleDetector {
     private val fillers = setOf("um", "uh", "erm", "hmm", "ah")
-    fun detect(words: List<TranscriptWord>, durationMs: Long, pace: Pace): List<FumbleCandidate> {
+    fun detect(words: List<TranscriptWord>, durationMs: Long, pace: Pace, profile: EditorialProfile? = null): List<FumbleCandidate> {
         if (words.isEmpty()) return emptyList()
         val out = mutableListOf<FumbleCandidate>()
-        val pauseLimit = when (pace) { Pace.TIGHT -> 1100L; Pace.NATURAL -> 1700L; Pace.RELAXED -> 2400L }
+        val fallbackPauseLimit = when (pace) { Pace.TIGHT -> 1100L; Pace.NATURAL -> 1700L; Pace.RELAXED -> 2400L }
+        val pauseLimit = profile?.distributions?.get("pauseMs")?.let { distribution ->
+            when {
+                distribution.count < 3 -> fallbackPauseLimit
+                profile.policy.pauseCutPercentile <= .65f -> distribution.p75.toLong()
+                profile.policy.pauseCutPercentile <= .8f -> ((distribution.p75 + distribution.p90) / 2).toLong()
+                else -> distribution.p90.toLong()
+            }.coerceIn(700L, 4_000L)
+        } ?: fallbackPauseLimit
         words.zipWithNext().forEach { (a, b) ->
             val gap = b.range.startMs - a.range.endMs
             if (gap >= pauseLimit) out += FumbleCandidate(TimeRange(a.range.endMs + 180, b.range.startMs - 180), min(.98f, .82f + gap / 20_000f), "long-pause")
@@ -26,7 +35,8 @@ object FumbleDetector {
         }
         return merge(out.sortedBy { it.range.startMs })
     }
-    fun automatic(candidates: List<FumbleCandidate>) = candidates.filter { it.confidence >= .93f }
+    fun automatic(candidates: List<FumbleCandidate>, profile: EditorialProfile? = null) =
+        candidates.filter { it.confidence >= (profile?.policy?.automaticCutConfidence ?: .93f) }
     private fun merge(input: List<FumbleCandidate>): List<FumbleCandidate> = input.fold(mutableListOf()) { acc, value ->
         val last = acc.lastOrNull()
         if (last != null && value.range.startMs <= last.range.endMs + 80) acc[acc.lastIndex] = FumbleCandidate(TimeRange(last.range.startMs, max(last.range.endMs, value.range.endMs)), max(last.confidence, value.confidence), "${last.reason}+${value.reason}") else acc += value

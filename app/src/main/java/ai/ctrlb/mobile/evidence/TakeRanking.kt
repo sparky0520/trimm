@@ -82,7 +82,8 @@ data class TakeGroup(
 
 class TakeRanker(
     private val wordingThreshold: Float = .72f,
-    private val nearTieDelta: Float = .04f
+    private val nearTieDelta: Float = .04f,
+    private val profile: EditorialProfile? = null
 ) {
     fun detectAndRank(candidates: List<TakeCandidate>, constraints: TakeConstraints = TakeConstraints()): List<TakeGroup> {
         require(candidates.map { it.id }.distinct().size == candidates.size)
@@ -123,9 +124,14 @@ class TakeRanker(
             if (values.values.distinct().size > 1) FactualDifference(key, values) else null
         }
         val scores = candidates.map { take ->
-            val total = .18f * take.completeness + .16f * take.clarity + .16f * take.delivery +
-                .14f * take.technicalQuality + .12f * take.continuity + .18f * take.storyFit -
-                .06f * take.editRisk
+            val weights = profile?.policy?.rankingWeights.orEmpty()
+            val total = (weights["completeness"] ?: .18f) * take.completeness +
+                (weights["clarity"] ?: .16f) * take.clarity +
+                (weights["delivery"] ?: .16f) * take.delivery +
+                (weights["technicalQuality"] ?: .14f) * take.technicalQuality +
+                (weights["continuity"] ?: .12f) * take.continuity +
+                (weights["storyFit"] ?: .18f) * take.storyFit +
+                (weights["editRisk"] ?: -.06f) * take.editRisk
             TakeScore(take.id, take.completeness, take.clarity, take.delivery, take.technicalQuality,
                 take.continuity, take.storyFit, take.editRisk, total.coerceIn(0f, 1f), take.evidenceIds)
         }.sortedByDescending { it.total }
@@ -139,7 +145,8 @@ class TakeRanker(
         val wordingRequired = wordingKeep.isNotEmpty()
         val hardKeep = candidates.filter { it.id in constraints.mustKeepTakeIds }.map { it.id }
         val factualConflict = differences.isNotEmpty()
-        val nearTie = scores.size > 1 && scores[0].total - scores[1].total <= nearTieDelta
+        val effectiveNearTieDelta = profile?.policy?.nearTieDelta ?: nearTieDelta
+        val nearTie = scores.size > 1 && scores[0].total - scores[1].total <= effectiveNearTieDelta
         val constrainedIds = (hardKeep + wordingKeep).distinct()
         val constrainedWinner = scores.firstOrNull { it.takeId in constrainedIds }?.takeId
         val preferred = explicit ?: constrainedWinner ?: scores.first().takeId
@@ -157,6 +164,9 @@ class TakeRanker(
         val explanation = buildList {
             add("Grouped by repeated wording alignment; topic overlap alone is not sufficient.")
             add("Ranking compares completeness, clarity, delivery, technical quality, continuity, story fit, and edit risk.")
+            profile?.let {
+                add("Adaptive policy ${it.policyVersion} (${it.evidenceFingerprint.take(12)}) used profile-relative thresholds and disclosed versioned ranking weights.")
+            }
             if (wordingRequired) add("Must-keep wording is present and cannot be removed from the edit.")
             if (explicit != null) add("The user's explicit take choice overrides automatic ranking.")
             if (explicitConstraintConflict) add("The explicit choice conflicts with other must-keep material, so neither may be deleted automatically.")
@@ -174,7 +184,7 @@ class TakeRanker(
         val union = (a.toSet() + b.toSet()).size.coerceAtLeast(1)
         val overlap = (a.toSet() intersect b.toSet()).size.toFloat() / union
         val sameSpeaker = if (left.speakerId == null || right.speakerId == null) null else left.speakerId == right.speakerId
-        val repeatedWording = aligned >= wordingThreshold && sameSpeaker != false
+        val repeatedWording = aligned >= (profile?.policy?.repeatedWordingThreshold ?: wordingThreshold) && sameSpeaker != false
         return TakeSimilarityEvidence(left.id, right.id, aligned, overlap, sameSpeaker, repeatedWording)
     }
 
