@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { importUserFile, publicCatalogItem } = require('./audio-rights.cjs');
 const { LocalFileProvider, YouTubeAudioLibraryProvider } = require('./audio-providers.cjs');
+const { analyzeAudioAsset, duplicateOf, previewNormalization } = require('./audio-analysis.cjs');
 
 const PROVIDERS = {
   'local-file': new LocalFileProvider(),
@@ -45,10 +46,14 @@ async function ingestTrack(options, dependencies = {}) {
     ...license, allowedUse: options.allowedUse, rightsAttested: options.rightsConfirmed,
     rightsArtifact: options.rightsArtifact || null, durationMs,
   }, dependencies);
+  const analysis = options.analyze === false ? null : await (dependencies.analyzeAudio || analyzeAudioAsset)(
+    path.resolve(options.filePath), item.checksum, dependencies,
+  );
+  const analyzedItem = analysis ? { ...item, durationMs: analysis.durationMs, analysis, preview: previewNormalization(analysis) } : item;
 
-  if (!options.outputDir) return { item, mediaPath: path.resolve(options.filePath), catalogPath: null };
+  if (!options.outputDir) return { item: analyzedItem, mediaPath: path.resolve(options.filePath), catalogPath: null };
   if (!options.publish) throw new Error('User-scoped imports must remain in the user cache; omit outputDir or grant redistribution rights with --publish.');
-  const publishable = publicCatalogItem(item);
+  const publishable = publicCatalogItem(analyzedItem);
   const outputDir = path.resolve(options.outputDir);
   const mediaDir = path.join(outputDir, 'media');
   await fs.promises.mkdir(mediaDir, { recursive: true });
@@ -57,13 +62,16 @@ async function ingestTrack(options, dependencies = {}) {
   await fs.promises.copyFile(options.filePath, finalPath);
   const base = String(options.publicBaseUrl || '').replace(/\/$/, '');
   const catalogItem = {
-    ...publishable, cachedPath: undefined, assetPath: `media/${item.id}${extension}`,
+    ...publishable, analysis: analyzedItem.analysis, preview: analyzedItem.preview,
+    cachedPath: undefined, assetPath: `media/${item.id}${extension}`,
     previewUrl: `${base}/media/${encodeURIComponent(item.id)}${extension}`,
     downloadUrl: `${base}/media/${encodeURIComponent(item.id)}${extension}`,
   };
   const catalogPath = path.join(outputDir, 'catalog.v1.json');
   let document = { version: 1, items: [] };
   try { document = JSON.parse(await fs.promises.readFile(catalogPath, 'utf8')); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  const duplicate = duplicateOf(catalogItem, document.items);
+  if (duplicate) throw new Error(`Duplicate audio asset '${duplicate.id}' has the same ${duplicate.checksum === catalogItem.checksum ? 'checksum' : 'acoustic fingerprint'}.`);
   document.items = [...document.items.filter((entry) => entry.id !== item.id), catalogItem].sort((a, b) => a.id.localeCompare(b.id));
   await fs.promises.writeFile(`${catalogPath}.tmp`, `${JSON.stringify(document, null, 2)}\n`);
   await fs.promises.rename(`${catalogPath}.tmp`, catalogPath);

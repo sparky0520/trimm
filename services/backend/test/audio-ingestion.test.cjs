@@ -11,7 +11,7 @@ const base = {
   id: 'calm-track', filePath: 'downloaded.mp3', provider: 'youtube-audio-library',
   providerAssetId: 'library-track-123', sourceUrl: 'https://studio.youtube.com/channel/UC/music',
   licenseId: 'youtube-audio-library-standard', rightsConfirmed: true,
-  allowedUse: ['commercial', 'rendered-video'], durationMs: 12345,
+  allowedUse: ['commercial', 'rendered-video'], durationMs: 12345, analyze: false,
 };
 
 test('assisted ingestion requires local media, provenance, rights, and render scope', () => {
