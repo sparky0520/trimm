@@ -1,6 +1,6 @@
 # ctrlB Android
 
-Native Android talking-head and product-demo editor. Product direction lives in [ProductVision](../../docs/ai/ProductVision.md), verified behavior in [ProjectStatus](../../docs/ai/ProjectStatus.md), and future work in [Tickets](../../docs/ai/Tickets.md).
+Native Android talking-head and product-demo editor. Product direction lives in [ProductVision](../../docs/ai/ProductVision.md), the local/cloud boundary in [architecture](../../docs/ai/architecture.md), verified behavior in [ProjectStatus](../../docs/ai/ProjectStatus.md), and all work in [tickets](../../docs/ai/tickets.md).
 
 ## Build
 
@@ -10,7 +10,7 @@ Use JDK 17 and Android SDK 37. Open this directory in Android Studio and run the
 
 Set `CTRLB_BACKEND_URL` to the HTTPS origin of the long-lived Node backend. Android derives `/v1/mobile/plan` and `/v1/transcribe` from it.
 
-The app uploads each selected media source in resumable 4 MB chunks, reports progress through WorkManager, retries interrupted chunks, and explicitly cancels abandoned sessions. The long-lived backend offset-checks every chunk, limits uploads to 1 GB, removes completed/cancelled media, and expires abandoned temporary files after six hours. The backend owns the AssemblyAI and model-provider credentials. Normal phone videos should not use the Vercel transcription adapter because platform request-body limits apply before application code can accept the upload.
+The current implementation uploads selected media sources in resumable chunks for transcription. This is legacy behavior, not the target architecture. Ticket 2 replaces it with local Layer 1 audio extraction and scoped compressed-audio jobs so the original video remains on the device. The backend continues to own AssemblyAI and model-provider credentials.
 
 Development example:
 
@@ -44,7 +44,7 @@ Do not treat an arbitrary YouTube URL as a YouTube Audio Library asset. The Audi
 
 Provider adapters may automate acquisition only through documented APIs and permitted download flows. Freesound exposes API search and an OAuth-protected original-file download suitable for a sound-effects adapter. Never ship provider cookies or private-endpoint scraping code in the APK. Do not republish provider source files through a ctrlB CDN unless the captured license explicitly permits redistribution.
 
-See [ProductVision - Audio acquisition policy](../../docs/ai/ProductVision.md#audio-acquisition-policy) and Ticket 3 in [Tickets](../../docs/ai/Tickets.md).
+See [ProductVision - Audio acquisition policy](../../docs/ai/ProductVision.md#audio-acquisition-policy) and Ticket 3 in [tickets](../../docs/ai/tickets.md).
 
 ## Current rendering behavior
 
@@ -71,4 +71,4 @@ ground truth, provenance, and evaluation contract are committed; downloaded
 CC-licensed media remains ignored. Later perception and planning acceptance
 must exercise this fixture (or another versioned redistributable real-media
 fixture), not synthetic unit inputs alone. See
-[Ticket 5 delivery notes](../../docs/ai/Ticket-005-Mobile-Editorial-Fixtures.md).
+[Ticket 5 delivery notes](../../docs/ai/tickets.md#ticket-5---add-representative-mobile-editorial-fixtures-and-evaluation-p0).
