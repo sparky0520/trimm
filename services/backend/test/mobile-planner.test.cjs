@@ -69,8 +69,80 @@ test('mobile planner accepts only bounded evidence packets and grounded output r
     type: 'proposal', expectedRevision: 4, summary: 'cut', operations: [],
     evidenceIds: ['invented'],
   }, 4, new Set(['sentence-1'])), /invented evidence/);
-  assert.equal(plannerCore.validateProposal({
+  const grounding = {
+    rationale: 'The spoken opening establishes the subject.',
+    evidenceIds: ['sentence-1'],
+    confidence: 0.9,
+    assumptions: [],
+    expectedStoryEffect: 'Open with context.',
+  };
+  const proposal = {
     type: 'proposal', expectedRevision: 4, summary: 'cut', operations: [],
     evidenceIds: ['sentence-1'],
-  }, 4, new Set(['sentence-1'])).summary, 'cut');
+    plan: {
+      story: [{ beatId: 'beat-opening', ...grounding }],
+      decisions: [{ id: 'decision-story', stage: 'STORY', kind: 'REQUIRED_CLEANUP', ...grounding }],
+      operationPlans: [],
+    },
+  };
+  assert.equal(plannerCore.validateProposal(proposal, 4, new Set(['sentence-1'])).summary, 'cut');
+  assert.throws(() => plannerCore.validateProposal({
+    ...proposal,
+    plan: { ...proposal.plan, story: proposal.plan.story.map(({ evidenceIds, ...choice }) => choice) },
+  }, 4, new Set(['sentence-1'])), /story and take plan/);
+});
+
+test('staged plans keep cleanup separate and explain every typed operation', () => {
+  const evidence = new Set(['beat-demo', 'audio-noise']);
+  const grounded = (evidenceIds, expectedStoryEffect) => ({
+    rationale: 'Grounded in the retrieved footage evidence.', evidenceIds, confidence: 0.88,
+    assumptions: [], expectedStoryEffect,
+  });
+  const proposal = {
+    type: 'proposal', expectedRevision: 8, summary: 'Demo-led cut',
+    evidenceIds: [...evidence],
+    operations: [{ id: 'cleanup-1', type: 'set_audio_cleanup', enabled: true, strength: 0.5 }],
+    plan: {
+      story: [{ beatId: 'beat-demo', ...grounded(['beat-demo'], 'Lead with the demonstration.') }],
+      decisions: [
+        { id: 'story-1', stage: 'STORY', kind: 'REQUIRED_CLEANUP', ...grounded(['beat-demo'], 'Lead with the demonstration.') },
+        { id: 'correction-1', stage: 'CORRECTION', kind: 'REQUIRED_CLEANUP', ...grounded(['audio-noise'], 'Make the explanation intelligible.') },
+      ],
+      operationPlans: [{
+        operationId: 'cleanup-1', decisionId: 'correction-1',
+        ...grounded(['audio-noise'], 'Make the explanation intelligible.'),
+      }],
+    },
+  };
+  assert.equal(plannerCore.validateProposal(proposal, 8, evidence).summary, 'Demo-led cut');
+  assert.throws(() => plannerCore.validateProposal({
+    ...proposal,
+    plan: { ...proposal.plan, decisions: proposal.plan.decisions.map((decision) =>
+      decision.id === 'correction-1' ? { ...decision, kind: 'OPTIONAL_STYLE' } : decision) },
+  }, 8, evidence), /cleanup must be separate/);
+});
+
+test('identical preferences can yield materially footage-specific plans without decorative variation', () => {
+  const preferences = { pace: 'NATURAL', music: 'NONE', captions: true };
+  const talkingHeadPlan = {
+    preferences,
+    story: ['hook-claim', 'explanation', 'cta'],
+    selectedTakes: ['take-clear-delivery'],
+    operations: ['remove_fumbles', 'add_captions'],
+  };
+  const productDemoPlan = {
+    preferences,
+    story: ['problem', 'product-demonstration', 'proof', 'cta'],
+    selectedTakes: ['take-product-state-correct'],
+    operations: ['set_audio_cleanup', 'add_captions'],
+  };
+  assert.notDeepEqual(talkingHeadPlan.story, productDemoPlan.story);
+  assert.notDeepEqual(talkingHeadPlan.selectedTakes, productDemoPlan.selectedTakes);
+  assert.notDeepEqual(talkingHeadPlan.operations, productDemoPlan.operations);
+  for (const plan of [talkingHeadPlan, productDemoPlan]) {
+    assert.equal(plan.operations.includes('add_transition'), false);
+    assert.equal(plan.operations.includes('add_motion_preset'), false);
+    assert.equal(plan.operations.includes('set_background_music'), false);
+    assert.equal(plan.operations.includes('add_sound_effect'), false);
+  }
 });

@@ -17,6 +17,7 @@ const { createPaddleWebhookVerifier } = require('./paddle-billing.cjs');
 const { GooglePlayPurchaseVerifier } = require('./google-play-billing.cjs');
 const { DerivativeJobs } = require('./derivative-jobs.cjs');
 const { Layer2Orchestrator } = require('./layer2-orchestrator.cjs');
+const plannerCore = require('./planner-core.cjs');
 
 const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.MOONSHOT_API_KEY;
@@ -135,19 +136,9 @@ function validateRequest(value) {
 
 function validateProposal(value, revision, validEvidenceIds = new Set()) {
   const allowed = new Set(['remove_fumbles', 'set_audio_cleanup', 'set_audio_levels', 'add_sound_effect', 'set_background_music', 'add_captions']);
-  if (value?.type === 'evidence_request') {
-    const query = value.query;
-    if (!query || typeof query.request !== 'string' || query.request.length > 2000 ||
-        !Array.isArray(query.evidenceTypes) || query.evidenceTypes.length > 6 ||
-        !query.evidenceTypes.every((type) => ['STORY_BEAT', 'TRANSCRIPT', 'FRAME', 'VISUAL', 'AUDIO_SUMMARY', 'SHOT'].includes(type))) {
-      throw new Error('Invalid bounded evidence request.');
-    }
-    return value;
-  }
-  if (!value || value.type !== 'proposal' || value.expectedRevision !== revision || !Array.isArray(value.operations)) throw new Error('Invalid planner proposal envelope.');
-  if (value.operations.some((operation) => !operation || !allowed.has(operation.type) || typeof operation.id !== 'string' || typeof operation.enabled !== 'boolean')) throw new Error('Planner returned an unsupported operation.');
-  if (!Array.isArray(value.evidenceIds) || !value.evidenceIds.length || value.evidenceIds.some((id) => !validEvidenceIds.has(id))) throw new Error('Planner returned missing, stale, or invented evidence.');
-  return value;
+  // Shared mobile policy: Color requires frame evidence. Transitions and motion presets are unavailable.
+  void allowed;
+  return plannerCore.validateProposal(value, revision, validEvidenceIds);
 }
 
 async function collect(request, maxBytes = MAX_BODY_BYTES) {
@@ -380,7 +371,7 @@ const server = http.createServer(async (request, response) => {
       response_format: { type: 'json_object' },
       max_completion_tokens: 4096,
       messages: [
-        { role: 'system', content: `You are ctrlB's conservative mobile video-edit planner. Return one JSON object only. Either request bounded additional evidence with type evidence_request and a typed query, or propose {"type":"proposal","expectedRevision":number,"summary":string,"operations":array,"evidenceIds":array}. Proposal evidenceIds must exist in evidence.items. Preserve useful existing operations. Supported operations: remove_fumbles, set_audio_cleanup, set_audio_levels, add_sound_effect, set_background_music, add_captions. Color requires frame evidence and remains unavailable to this planner. Transitions and motion presets are unavailable. Never invent timestamps or evidence. Prefer grounded edits and make no destructive low-confidence cut.` },
+        { role: 'system', content: plannerCore.SYSTEM_POLICY },
         { role: 'user', content: JSON.stringify(payload) },
       ],
     });
