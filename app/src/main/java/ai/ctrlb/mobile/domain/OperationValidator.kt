@@ -20,7 +20,7 @@ object OperationValidator {
                 is SetAudioCleanup -> "dialogue-cleanup:${operation.strength}"
                 is SetAudioLevels -> "dialogue-levels:${operation.dialogueLufs}:${operation.musicDuckDb}"
                 is AddSoundEffect -> "audio-effect:${operation.atSourceMs}:${operation.catalogId}:${operation.gainDb}"
-                is SetBackgroundMusic -> "audio-music:${operation.catalogId}:${operation.gainDb}:${operation.loop}"
+                is SetBackgroundMusic -> "audio-music:${operation.catalogId}:${operation.gainDb}:${operation.loop}:${operation.structure?.version}"
                 is AddCaptions -> "video-captions:${operation.cues}:${operation.style}"
                 is ApplySemanticVisual -> "semantic-visual:${operation.intent}:${operation.treatment}:${operation.range}:${operation.subject}:${operation.motion}:${operation.framing}"
                 is AddTransition, is AddMotionPreset -> error("Unrendered operation reached render contract")
@@ -51,7 +51,17 @@ object OperationValidator {
             is AddTransition -> { require(op.atSourceMs in 0..project.durationMs); require(op.durationMs in 120..1_000) }
             is AddMotionPreset -> { require(op.range.endMs <= project.durationMs); require(op.intensity in 0f..1f) }
             is AddSoundEffect -> { require(op.atSourceMs in 0..project.durationMs); require(op.gainDb in -36f..0f) }
-            is SetBackgroundMusic -> require(op.gainDb in -40f..-6f)
+            is SetBackgroundMusic -> {
+                require(op.gainDb in -40f..-6f)
+                op.structure?.let { structure ->
+                    require(structure.segments.zipWithNext().all { (a, b) -> a.timelineEndMs <= b.timelineStartMs })
+                    require(structure.segments.all {
+                        it.timelineStartMs >= 0 && it.fadeInMs >= 0 && it.fadeOutMs >= 0 &&
+                            it.fadeInMs + it.fadeOutMs <= it.sourceRange.durationMs
+                    })
+                    require(structure.decisions.any { it.kind == AudioStructuralDecisionKind.SPEECH_TIMING })
+                }
+            }
             is AddCaptions -> { require(op.cues.isNotEmpty()); op.cues.forEach { require(it.range.endMs <= project.durationMs); require(it.text.isNotBlank() && it.text.length <= 120) } }
             is ApplySemanticVisual -> SemanticVisualPolicy.validate(op, project.durationMs)
         } }

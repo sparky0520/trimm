@@ -106,9 +106,42 @@ object ExportCoordinator {
                 val end = timelineMapper.sourceToOutput(word.range.endMs)
                 if (end > start) TimeRange(start, end) else null
             }
-            val item = EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(audioRepository.localFile(music.catalogId))))
-                .setEffects(Effects(listOf(GainProcessor(SpeechDuckingGainProvider(gain, duckDb, speechRanges))), emptyList())).build()
-            sequences += EditedMediaItemSequence.withAudioFrom(listOf(item)).buildUpon().setIsLooping(music.loop).build()
+            val audioUri = Uri.fromFile(audioRepository.localFile(music.catalogId))
+            val structure = music.structure
+            if (structure == null || structure.segments.isEmpty()) {
+                val item = EditedMediaItem.Builder(MediaItem.fromUri(audioUri))
+                    .setEffects(Effects(listOf(GainProcessor(SpeechDuckingGainProvider(gain, duckDb, speechRanges))), emptyList())).build()
+                sequences += EditedMediaItemSequence.withAudioFrom(listOf(item)).buildUpon().setIsLooping(music.loop).build()
+            } else {
+                val builder = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO))
+                var cursorMs = 0L
+                structure.segments.sortedBy { it.timelineStartMs }.forEach { segment ->
+                    if (segment.timelineStartMs > cursorMs) builder.addGap((segment.timelineStartMs - cursorMs) * 1_000)
+                    val localSpeech = speechRanges.mapNotNull { range ->
+                        val start = maxOf(range.startMs, segment.timelineStartMs)
+                        val end = minOf(range.endMs, segment.timelineEndMs)
+                        if (end > start) TimeRange(start - segment.timelineStartMs, end - segment.timelineStartMs) else null
+                    }
+                    val mediaItem = MediaItem.Builder().setUri(audioUri).setClippingConfiguration(
+                        MediaItem.ClippingConfiguration.Builder()
+                            .setStartPositionMs(segment.sourceRange.startMs)
+                            .setEndPositionMs(segment.sourceRange.endMs).build()
+                    ).build()
+                    val provider = SpeechDuckingGainProvider(
+                        gain, duckDb, localSpeech,
+                        fadeInMs = segment.fadeInMs,
+                        fadeOutStartMs = segment.sourceRange.durationMs - segment.fadeOutMs,
+                        fadeOutMs = segment.fadeOutMs,
+                        attackMs = structure.duckAttackMs,
+                        releaseMs = structure.duckReleaseMs
+                    )
+                    builder.addItem(EditedMediaItem.Builder(mediaItem)
+                        .setDurationUs(segment.sourceRange.durationMs * 1_000)
+                        .setEffects(Effects(listOf(GainProcessor(provider)), emptyList())).build())
+                    cursorMs = segment.timelineEndMs
+                }
+                sequences += builder.build()
+            }
         }
         project.operations.filterIsInstance<AddSoundEffect>().filter { it.enabled }.forEach { effect ->
             val gain = 10f.pow(effect.gainDb / 20f)

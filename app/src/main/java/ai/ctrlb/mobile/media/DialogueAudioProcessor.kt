@@ -115,12 +115,15 @@ class SpeechDuckingGainProvider(
     baseGain: Float,
     duckDb: Float,
     speechRanges: List<TimeRange>,
+    private val fadeInMs: Long = 0,
+    private val fadeOutStartMs: Long? = null,
+    private val fadeOutMs: Long = 0,
+    private val attackMs: Long = 150,
+    private val releaseMs: Long = 350,
 ) : GainProcessor.GainProvider {
     private val normal = baseGain.coerceIn(0f, 1f)
     private val ducked = (baseGain * 10f.pow(duckDb.coerceIn(-18f, -3f) / 20f)).coerceIn(0f, 1f)
     private val ranges = mergeRanges(speechRanges.sortedBy { it.startMs })
-    private val attackMs = 150L
-    private val releaseMs = 350L
 
     override fun getGainFactorAtSamplePosition(samplePosition: Long, sampleRate: Int): Float {
         val timeMs = samplePosition * 1_000 / sampleRate
@@ -141,7 +144,13 @@ class SpeechDuckingGainProvider(
             }
             gain = minOf(gain, candidate)
         }
-        return gain
+        val entrance = if (fadeInMs > 0) (timeMs.toFloat() / fadeInMs).coerceIn(0f, 1f) else 1f
+        val ending = fadeOutStartMs?.let { start ->
+            if (fadeOutMs > 0 && timeMs >= start)
+                (1f - (timeMs - start).toFloat() / fadeOutMs).coerceIn(0f, 1f)
+            else 1f
+        } ?: 1f
+        return gain * minOf(entrance, ending)
     }
 
     override fun isUnityUntil(samplePosition: Long, sampleRate: Int): Long = C.TIME_UNSET

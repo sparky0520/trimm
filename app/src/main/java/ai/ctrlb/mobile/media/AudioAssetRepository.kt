@@ -31,7 +31,12 @@ class AudioAssetRepository(private val context: Context) {
                         ?: error("No licensed background music matches this edit.")
                     else catalog.firstOrNull { it.id == operation.catalogId && it.kind == AudioKind.MUSIC }
                         ?: error("Background music '${operation.catalogId}' is not in the licensed catalog.")
-                    ensureDownloaded(selected); operation.copy(catalogId = selected.id)
+                    ensureDownloaded(selected)
+                    operation.copy(
+                        catalogId = selected.id,
+                        loop = false,
+                        structure = operation.structure ?: StoryAudioStructurePlanner.plan(selected, storyContext)
+                    )
                 }
                 is AddSoundEffect -> {
                     val selected = catalog.firstOrNull { it.id == operation.catalogId && it.kind == AudioKind.SOUND_EFFECT }
