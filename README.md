@@ -20,3 +20,5 @@ npm test
 ```
 
 Production fails closed unless required authentication, provider, and Supabase billing configuration is present. Secrets belong in Render or local untracked environment files.
+
+Public wire-contract versions are declared in `contracts/contract-manifest.json`. Clients pin compatible versions rather than copying cloud implementation code.
