@@ -28,3 +28,11 @@ ctrlB is not a filter wizard and not a rules engine pretending to understand vid
 - Source orientation is detected from media metadata and preserved. Chat cannot silently change framing.
 - Output resolution never exceeds source resolution. Lower-quality preview/export is allowed.
 - Users choose whether original media, a high-fidelity proxy, or only selected derivatives may enter cloud analysis.
+
+## Future enhancements
+
+Person or object segmentation, transparent backgrounds, background replacement,
+and temporally consistent removal or inpainting are promising future editing
+capabilities. They are not active implementation commitments. Promote them only
+after the core video agent, grounding, preview parity, and representative-device
+evaluation work end to end.
