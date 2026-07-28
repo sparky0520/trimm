@@ -1,6 +1,7 @@
 'use strict';
 
 const OpenAI = require('openai').default;
+const CREATOR_PREFERENCE_POLICY = `Creator preferences are transparent learned taste only. Current project intent and hard footage evidence override them. Preference provenanceDecisionIds are not footage evidence and must never justify invented operations or timestamps.`;
 const SYSTEM_POLICY = `You are ctrlB's conservative mobile video-edit planner. Return one JSON object only. Either request bounded additional evidence with {"type":"evidence_request","query":{"request":string,"evidenceTypes":["STORY_BEAT"|"TRANSCRIPT"|"FRAME"|"VISUAL"|"AUDIO_SUMMARY"|"SHOT"],"sourceIds":[],"ranges":[],"excludeEvidenceIds":[],"budget":object}} or return a proposal. Plan in order: choose story beats and takes first, then CORRECTION, PACING, COVERAGE, and finally OPTIONAL_TREATMENT. A proposal is {"type":"proposal","expectedRevision":number,"summary":string,"plan":{"story":[story choices],"decisions":[decisions in stage order],"operationPlans":[one explanation per operation]},"operations":array,"evidenceIds":array}. Every story choice, decision, and operation explanation requires rationale, nonempty evidenceIds copied from evidence.items, confidence from 0 to 1, assumptions array, and expectedStoryEffect. Decisions also require unique id, stage ("STORY","TAKE_SELECTION","CORRECTION","PACING","COVERAGE","OPTIONAL_TREATMENT"), and kind ("REQUIRED_CLEANUP","OPTIONAL_STYLE","OPTIONAL_MUSIC"). Non-optional stages are REQUIRED_CLEANUP; optional style and music are only OPTIONAL_TREATMENT. Preserve useful existing operations. Every operation requires id, enabled, and one of: remove_fumbles, set_audio_cleanup, set_audio_levels, add_sound_effect, set_background_music, add_captions, semantic_visual. A semantic_visual is optional style with intent INTRODUCE|POINT_OUT|TRANSITION|REVEAL|EMPHASIZE|RECAP, treatment CALLOUT|SPOTLIGHT|REFRAME, a 300-8000ms range, and subject {evidenceId,kind,bounds,confidence}; kind must be FACE|SCREEN_UI|PRODUCT|OCR_TEXT|SALIENCE and evidenceId must cite supplied visual evidence. Use at most two overlaps and three treatments in any ten seconds. Reduced motion uses curve HOLD. REFRAME also requires framing {zoom,preservesSubject:true,preservesText:true}; ask for clarification instead if subject or text preservation is uncertain. Color requires frame evidence and remains unavailable to this planner. Legacy generic transitions and motion presets are unavailable. Never invent timestamps or evidence. Prefer grounded footage-specific edits and make no destructive low-confidence cut. Never add a semantic treatment, music, or sound effect merely to make plans differ; music and sound effects require explicit evidence plus user intent and must remain optional.`;
 
 function validSemanticOperation(operation, validEvidenceIds) {
@@ -29,6 +30,13 @@ function validSemanticOperation(operation, validEvidenceIds) {
 
 function validateRequest(value) {
   if (!value || typeof value !== 'object' || typeof value.prompt !== 'string' || value.prompt.length > 2000) return false;
+  const creator = value.creatorPreferences || {};
+  if (Object.keys(creator).some((key) => !['brandAssets', 'terminology', 'captionRules', 'pacing', 'motionTolerance', 'provenanceDecisionIds'].includes(key)) ||
+      ['brandAssets', 'terminology', 'captionRules', 'provenanceDecisionIds'].some((key) =>
+        creator[key] != null && (!Array.isArray(creator[key]) || creator[key].length > 20 ||
+          creator[key].some((item) => typeof item !== 'string' || item.length > 500))) ||
+      (creator.pacing != null && (typeof creator.pacing !== 'string' || creator.pacing.length > 50)) ||
+      (creator.motionTolerance != null && (typeof creator.motionTolerance !== 'string' || creator.motionTolerance.length > 50))) return false;
   if (!Array.isArray(value.operations) || !value.evidence || value.evidence.schemaVersion !== 1 ||
       typeof value.evidence.evidenceFingerprint !== 'string' || !Array.isArray(value.evidence.items) ||
       value.evidence.items.length > 256) return false;
@@ -123,7 +131,7 @@ async function plan(payload) {
   const completion = await client.chat.completions.create({
     model: process.env.MOONSHOT_MODEL || 'kimi-k3', response_format: { type: 'json_object' }, max_completion_tokens: 4096,
     messages: [
-      { role: 'system', content: SYSTEM_POLICY },
+      { role: 'system', content: `${CREATOR_PREFERENCE_POLICY}\n${SYSTEM_POLICY}` },
       { role: 'user', content: JSON.stringify(payload) },
     ],
   });

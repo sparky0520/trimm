@@ -128,6 +128,29 @@ test('mobile planner accepts only bounded evidence packets and grounded output r
   }, 4, new Set(['sentence-1'])), /story and take plan/);
 });
 
+test('creator preferences are bounded context and never become footage evidence', () => {
+  const request = {
+    prompt: 'make a first cut',
+    media: { durationMs: 1000, width: 1080, height: 1920, rotation: 0, hasAudio: true },
+    preferences: {},
+    creatorPreferences: {
+      brandAssets: ['logo-primary.svg'], terminology: ['Ctrl+B'], captionRules: ['bold-bottom'],
+      pacing: 'NATURAL', motionTolerance: 'restrained', provenanceDecisionIds: ['decision-1'],
+    },
+    operations: [], projectRevision: 1,
+    evidence: {
+      schemaVersion: 1, evidenceFingerprint: 'fixture', exhaustedTypes: [], omittedCounts: {},
+      items: [{ id: 'spoken-1', type: 'TRANSCRIPT', sourceId: 'source-1',
+        range: { startMs: 0, endMs: 500 }, confidence: .9, summary: 'Hello', derivedFromEvidenceIds: [] }],
+    },
+  };
+  assert.equal(plannerCore.validateRequest(request), true);
+  assert.equal(plannerCore.validateRequest({
+    ...request, creatorPreferences: { ...request.creatorPreferences, brandAssets: Array(21).fill('logo.svg') },
+  }), false);
+  assert.match(plannerCore.SYSTEM_POLICY + require('../server/planner-core.cjs').SYSTEM_POLICY, /Never invent timestamps/i);
+});
+
 test('staged plans keep cleanup separate and explain every typed operation', () => {
   const evidence = new Set(['beat-demo', 'audio-noise']);
   const grounded = (evidenceIds, expectedStoryEffect) => ({
