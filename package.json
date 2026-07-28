@@ -1,88 +1,23 @@
 {
-  "name": "ctrlb",
+  "name": "ctrlb-cloud",
   "version": "0.3.3",
-  "description": "Cursor for video editing - AI-powered video editor with minimal interface",
-  "author": "sparky0520",
+  "description": "Shared ctrlB cloud backend",
   "private": true,
   "type": "module",
-  "main": "apps/desktop/electron/main.cjs",
   "scripts": {
-    "test": "node --test \"apps/desktop/test/*.test.js\" \"apps/desktop/test/*.test.cjs\" \"services/backend/test/*.test.cjs\"",
-    "test:unit": "node --test apps/desktop/test/schema.test.js apps/desktop/test/apply-operations.test.js apps/desktop/test/proposals.test.js",
-    "test:contracts": "node --test apps/desktop/test/operations.test.js apps/desktop/test/ai-response.test.js apps/desktop/test/ai-planner.test.cjs services/backend/test/server.test.cjs services/backend/test/mobile-transcription.test.cjs",
-    "test:render-smoke": "node --test apps/desktop/test/build.test.js apps/desktop/test/render-timing.test.js apps/desktop/test/packaged-workflow.test.js && node apps/desktop/scripts/render-mp4-smoke.cjs",
-    "test:ai-evals": "node --test apps/desktop/test/ai-evaluations.test.js",
-    "fixtures:prepare": "node apps/desktop/scripts/prepare-representative-fixtures.cjs",
-    "fixtures:prepare:mobile": "node apps/mobile/scripts/prepare-editorial-fixtures.cjs",
-    "benchmark:render": "node apps/desktop/scripts/benchmark-render.cjs",
-    "verify:production": "node apps/desktop/scripts/verify-production-build.cjs apps/desktop/dist apps/desktop/release/win-unpacked",
-    "verify:ci": "npm run test:unit && npm run test:contracts && npm run test:render-smoke && npm test && npm run build && npm run verify:production",
-    "build": "vite build apps/desktop --config apps/desktop/vite.config.js",
-    "build:icon": "electron apps/desktop/scripts/build-electron-icon.cjs",
-    "dev": "vite apps/desktop --config apps/desktop/vite.config.js",
-    "preview": "vite preview apps/desktop --config apps/desktop/vite.config.js",
+    "test": "node --test \"services/backend/test/*.test.cjs\"",
     "backend:serve": "node services/backend/server/server.cjs",
     "billing:verify-db": "node services/backend/scripts/verify-billing-db.cjs",
-    "audio:import": "node services/backend/scripts/ingest-audio.cjs",
-    "electron:dev": "concurrently -n vite,electron -c green,blue \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "npm run build && electron-builder --win"
-  },
-  "build": {
-    "appId": "ai.ctrlb.app",
-    "productName": "ctrlb",
-    "icon": "apps/desktop/public/ctrlb-mark.png",
-    "directories": {
-      "output": "apps/desktop/release"
-    },
-    "extraMetadata": {
-      "main": "apps/desktop/electron/main.cjs"
-    },
-    "files": [
-      "apps/desktop/dist/**/*",
-      "apps/desktop/electron/**/*",
-      "apps/desktop/public/ctrlb-mark.png",
-      "apps/desktop/remotion/**/*",
-      "package.json",
-      "node_modules/**/*"
-    ],
-    "win": {
-      "target": "nsis"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    },
-    "publish": {
-      "provider": "github",
-      "owner": "sparky0520",
-      "repo": "ctrlb"
-    }
-  },
-  "devDependencies": {
-    "concurrently": "^9.0.0",
-    "electron": "^42.5.0",
-    "electron-builder": "^26.15.3",
-    "supabase": "2.109.1",
-    "vite": "^6.0.0",
-    "wait-on": "^9.0.10"
+    "audio:import": "node services/backend/scripts/ingest-audio.cjs"
   },
   "dependencies": {
-    "@fontsource/jetbrains-mono": "^5.2.8",
-    "@fontsource/manrope": "^5.2.8",
     "@paddle/paddle-node-sdk": "^3.8.0",
-    "@remotion/bundler": "^4.0.484",
-    "@remotion/player": "^4.0.484",
-    "@remotion/renderer": "^4.0.484",
-    "@vitejs/plugin-react": "^5.2.0",
     "assemblyai": "^4.35.4",
     "dotenv": "^17.4.2",
     "google-auth-library": "^10.9.0",
     "jose": "^6.2.4",
     "openai": "^6.42.0",
     "postgres": "3.4.9",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "remotion": "^4.0.484",
     "zod": "^4.4.3"
   }
 }

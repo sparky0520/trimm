@@ -2,8 +2,6 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const { normalizeTranscript, transcribe, validateUpload } = require('../server/transcription-core.cjs');
 
 test('mobile transcription accepts only bounded audio and video bodies', () => {
@@ -31,18 +29,3 @@ test('transcription sends the media stream only to the server-side AssemblyAI cl
   assert.deepEqual(result.words, [{ text: 'Hi', startMs: 0, endMs: 100, confidence: .9, speakerId: 'speaker-A' }]);
 });
 
-test('Android analysis uses remote transcription before the planner and no Whisper invocation', () => {
-  const worker = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'apps/mobile/app/src/main/java/ai/ctrlb/mobile/work/MediaWorkers.kt'), 'utf8');
-  assert.match(worker, /BuildConfig\.TRANSCRIPTION_URL\.takeIf\(String::isNotBlank\)/);
-  assert.match(worker, /TranscriptionClient\(it,\s*AuthTokenProvider::currentToken\)/);
-  assert.doesNotMatch(worker, /BundledWhisperTranscriber|WhisperModelManager/);
-  assert.ok(worker.indexOf('client.transcribe') < worker.indexOf('PlannerClient'));
-});
-
-test('Android resumable uploads refresh auth and clean up cancelled sessions', () => {
-  const client = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'apps/mobile/app/src/main/java/ai/ctrlb/mobile/planner/TranscriptionClient.kt'), 'utf8');
-  assert.match(client, /connection\([^)]*,\s*"PUT",\s*accessToken\(\)\)/);
-  assert.match(client, /remoteOffset\(id\)/);
-  assert.match(client, /withContext\(NonCancellable\).*deleteSession\(session\.id\)/s);
-  assert.doesNotMatch(client, /val token = accessToken\(\)/);
-});
