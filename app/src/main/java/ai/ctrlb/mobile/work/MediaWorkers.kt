@@ -25,6 +25,10 @@ abstract class ProgressWorker(context: Context, params: WorkerParameters) : Coro
 class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorker(context, params) {
     override suspend fun doWork(): Result = runCatching {
         val projectId = requireNotNull(inputData.getString("projectId"))
+        val initialPrompt = inputData.getString("prompt")
+            ?.trim()
+            ?.takeIf(String::isNotEmpty)
+            ?: "Create a polished, conservative first cut using the supplied evidence and preferences."
         val store = ProjectStore(applicationContext)
         val project = store.load(projectId)
         val transcriber = BuildConfig.TRANSCRIPTION_URL.takeIf(String::isNotBlank)
@@ -94,6 +98,10 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                 takeGroups = takeGroups,
                 editorialProfile = editorialProfile,
                 storyGraph = storyGraph,
+                revisionConversation = listOf(EditorialConversationTurn(
+                    request = initialPrompt,
+                    response = "I analyzed the clips and prepared an evidence-backed first cut."
+                )),
                 warnings = analysisWarnings,
                 completedAtEpochMs = System.currentTimeMillis()
             ),
@@ -105,7 +113,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
         if (BuildConfig.PLANNER_URL.isNotBlank()) {
             progress("planner", 94)
             val planning = runCatching {
-                val prompt = "Create a polished, conservative first cut using the supplied evidence and preferences."
+                val prompt = initialPrompt
                 val client = PlannerClient(BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken)
                 var packet = BoundedEvidenceRetriever.retrieve(evidenceGraphs, storyGraph, EvidenceRetrievalQuery(prompt))
                 val learnedTaste = CreatorPreferenceResolver.resolve(analyzed.creatorPreferences, analyzed.preferences)
@@ -129,7 +137,12 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                         plan = response.plan,
                         operations = response.operations,
                         evidenceIds = response.evidenceIds
-                    )
+                    ),
+                    revisionConversation = listOf(EditorialConversationTurn(
+                        request = initialPrompt,
+                        response = response.summary,
+                        evidenceIds = response.evidenceIds
+                    ))
                 ))
                 store.save(analyzed)
             } }.onFailure { error ->

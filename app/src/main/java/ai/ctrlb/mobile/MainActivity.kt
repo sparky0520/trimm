@@ -78,8 +78,8 @@ class MainActivity : ComponentActivity() {
     val state by vm.state.collectAsStateWithLifecycle()
     when {
         state.source == null -> ImportScreen(vm::import)
-        state.project != null -> EditorScreen(state, vm::toggle, vm::undo, vm::export, vm::moveClip, vm::applyProposal, vm::rejectProposal, vm::reviseStory, vm::recordCreatorPreference, vm::setCreatorPreferenceEnabled, vm::resetCreatorPreferences)
-        else -> WizardScreen(state, vm::preferences, vm::next, vm::back, vm::generateDraft, vm::moveClip)
+        state.project != null -> EditorScreen(state, vm::undo, vm::export, vm::applyProposal, vm::rejectProposal, vm::reviseStory)
+        else -> NewEditChatScreen(state, vm::generateDraft, vm::moveClip)
     }
 }
 
@@ -176,37 +176,77 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable private fun WizardScreen(state: EditorState, update: (WizardPreferences) -> Unit, next: () -> Unit, back: () -> Unit, finish: () -> Unit, moveClip: (Int, Int) -> Unit) {
-    val p = state.preferences
+@Composable private fun NewEditChatScreen(state: EditorState, createDraft: (String) -> Unit, moveClip: (Int, Int) -> Unit) {
     var fullscreen by rememberSaveable { mutableStateOf(false) }
+    var message by rememberSaveable { mutableStateOf("") }
+    val suggestions = listOf(
+        "Make a clean, natural first cut",
+        "Turn this into a tight vertical short with captions",
+        "Keep the best takes and remove mistakes",
+    )
     Column(Modifier.fillMaxSize().background(Ink)) {
-        BrandBar(secondaryLabel = if (state.wizardStep > 1) "Back" else null, onSecondary = if (state.wizardStep > 1) back else null,
-            actionLabel = if (state.wizardStep == 3) "Create edit" else "Continue", onAction = if (state.wizardStep == 3) finish else next)
-        Column(Modifier.weight(1f).padding(12.dp).background(Workspace, RoundedCornerShape(18.dp)).border(1.dp, Border, RoundedCornerShape(18.dp)).verticalScroll(rememberScrollState())) {
-            Column(Modifier.padding(18.dp)) {
-                Text("QUICK EDIT BRIEF  •  ${state.wizardStep}/3", color = Coral, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
-                Spacer(Modifier.height(7.dp))
-                Text(when (state.wizardStep) { 1 -> "Set the canvas"; 2 -> "Choose the feel"; else -> "Finish the sound" }, color = CreamRaised, style = MaterialTheme.typography.headlineMedium)
-                Text("A few choices help ctrlB build a first cut that feels like yours.", color = Muted)
-            }
-            if (state.wizardStep == 1) {
-                Box(Modifier.padding(horizontal = 12.dp).background(Ink, RoundedCornerShape(14.dp)).border(1.dp, Border, RoundedCornerShape(14.dp)).padding(10.dp)) {
+        BrandBar()
+        LazyColumn(
+            Modifier.weight(1f),
+            contentPadding = PaddingValues(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item {
+                Box(Modifier.fillMaxWidth().background(Workspace, RoundedCornerShape(18.dp)).border(1.dp, Border, RoundedCornerShape(18.dp)).padding(10.dp)) {
                     val first = state.sources.first()
-                    VideoPreview(state.sources.map { it.uri }, Modifier.fillMaxWidth().aspectRatio(first.width.toFloat() / first.height).background(Color.Black, RoundedCornerShape(10.dp)))
+                    VideoPreview(state.sources.map { it.uri }, Modifier.fillMaxWidth().aspectRatio(first.width.toFloat() / first.height))
                     SmallAction("Expand", Modifier.align(Alignment.TopEnd).padding(8.dp)) { fullscreen = true }
                 }
-                Spacer(Modifier.height(12.dp))
-                ClipOrder(state.sources, moveClip)
             }
-            Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
-                when (state.wizardStep) {
-                    1 -> { Choice("Where will you publish?", Platform.entries, p.platform) { update(p.copy(platform = it, aspectRatio = if (it == Platform.YOUTUBE) AspectRatio.LANDSCAPE else AspectRatio.PORTRAIT)) }; Choice("Framing", AspectRatio.entries, p.aspectRatio) { update(p.copy(aspectRatio = it)) } }
-                    2 -> { Choice("Pacing", Pace.entries, p.pace) { update(p.copy(pace = it)) }; Choice("Visual style", VisualStyle.entries, p.style) { update(p.copy(style = it)) } }
-                    else -> { Choice("Music", MusicChoice.entries, p.music) { update(p.copy(music = it)) }; Text("Captions", color = Cream, fontWeight = FontWeight.Bold); Text("Temporarily unavailable", color = Muted, fontSize = 12.sp) }
+            item { ClipOrder(state.sources, moveClip) }
+            item {
+                Column(
+                    Modifier.fillMaxWidth(.88f).background(Raised, RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp)).padding(14.dp)
+                ) {
+                    Text("ctrlB", color = Lavender, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "I have ${state.sources.size} clip${if (state.sources.size == 1) "" else "s"}. What should the finished video feel like? Mention the audience, length, format, captions, music, or anything that must stay.",
+                        color = CreamRaised, lineHeight = 20.sp
+                    )
+                }
+            }
+            item {
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    suggestions.forEach { suggestion ->
+                        SuggestionChip(onClick = { message = suggestion }, label = { Text(suggestion, fontSize = 11.sp) })
+                    }
                 }
             }
         }
-        Spacer(Modifier.navigationBarsPadding())
+        Surface(color = Workspace, tonalElevation = 4.dp) {
+            Row(
+                Modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = message,
+                    onValueChange = { message = it.take(2_000) },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Describe the edit you want…") },
+                    minLines = 1,
+                    maxLines = 5,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = CreamRaised, unfocusedTextColor = CreamRaised,
+                        focusedBorderColor = Lavender, unfocusedBorderColor = Border
+                    )
+                )
+                Button(
+                    onClick = { createDraft(message) },
+                    enabled = message.isNotBlank(),
+                    modifier = Modifier.height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText),
+                ) { Text("Send", fontWeight = FontWeight.Bold) }
+            }
+        }
     }
     if (fullscreen) FullscreenPreview(state.sources.map { it.uri }) { fullscreen = false }
 }
@@ -227,32 +267,31 @@ class MainActivity : ComponentActivity() {
 
 @Composable private fun EditorScreen(
     state: EditorState,
-    toggle: (String) -> Unit,
     undo: () -> Unit,
     export: () -> Unit,
-    moveClip: (Int, Int) -> Unit,
     applyProposal: () -> Unit,
     rejectProposal: () -> Unit,
     reviseStory: (String) -> Unit,
-    recordPreference: (CreatorPreferenceKind, String) -> Unit,
-    setPreferenceEnabled: (CreatorPreferenceKind, String, Boolean) -> Unit,
-    resetPreferences: (CreatorPreferenceKind?, String?) -> Unit
 ) {
     val project = requireNotNull(state.project)
     var fullscreen by rememberSaveable { mutableStateOf(false) }
+    var request by rememberSaveable { mutableStateOf("") }
+    val read = EditorialReviewBuilder.editorialRead(project)
+    val review = EditorialReviewBuilder.proposal(project)
     Column(Modifier.fillMaxSize().background(Ink)) {
         BrandBar(actionLabel = "Export ${project.export.height}p", onAction = export, secondaryLabel = "Undo", onSecondary = undo)
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            item { EditorialReadCard(EditorialReviewBuilder.editorialRead(project)) }
-            EditorialReviewBuilder.proposal(project)?.let { review ->
-                item { ProposalReviewCard(review, applyProposal, rejectProposal) }
-            }
-            item { ConversationalRevisionCard(project, reviseStory) }
-            item { CreatorPreferencesCard(project.creatorPreferences, recordPreference, setPreferenceEnabled, resetPreferences) }
+        LazyColumn(
+            Modifier.weight(1f),
+            contentPadding = PaddingValues(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             item {
                 Column(Modifier.fillMaxWidth().background(Workspace, RoundedCornerShape(18.dp)).border(1.dp, Border, RoundedCornerShape(18.dp))) {
                     Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) { Text("PREVIEW", color = Coral, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp); Text("Your edit", color = CreamRaised, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
+                        Column(Modifier.weight(1f)) {
+                            Text("YOUR VIDEO", color = Coral, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Text(if (state.previewUri == null) "Original clips" else "Current edit", color = CreamRaised, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        }
                         SmallAction("Expand") { fullscreen = true }
                     }
                     val ratio = when (project.preferences.aspectRatio) { AspectRatio.LANDSCAPE -> 16f / 9f; AspectRatio.PORTRAIT -> 9f / 16f; AspectRatio.SQUARE -> 1f }
@@ -265,27 +304,116 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-            state.capabilityMessage?.let { message -> item { StatusCard("Export adjusted", message, MaterialTheme.colorScheme.error) } }
-            state.jobMessage?.let { message -> item { StatusCard("PROCESSING", message, Lavender) } }
-            item { ClipOrder(project.orderedSources, moveClip) }
-            item { Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) { Text("EDIT DECISIONS", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp); HorizontalDivider(Modifier.padding(start = 10.dp), color = Border) } }
-            items(OperationValidator.visible(project.operations), key = { it.id }) { op ->
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(13.dp), colors = CardDefaults.cardColors(containerColor = Cream), border = BorderStroke(1.dp, Color.White.copy(alpha = .08f))) {
-                    Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(34.dp).background(if (op.enabled) Coral.copy(alpha = .18f) else DarkText.copy(alpha = .07f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { Text(if (op.enabled) "✓" else "–", color = if (op.enabled) Coral else Muted, fontWeight = FontWeight.Bold) }
-                        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                            Text(operationTitle(op), color = DarkText, fontWeight = FontWeight.Bold)
-                            Text(operationDetail(op), color = DarkText.copy(alpha = .58f), fontSize = 12.sp)
-                            Text(OperationValidator.basis(op), color = DarkText.copy(alpha = .46f), fontSize = 10.sp)
-                        }
-                        Switch(op.enabled, { toggle(op.id) }, colors = SwitchDefaults.colors(checkedThumbColor = DarkText, checkedTrackColor = Coral))
-                    }
+            items(project.analysis.revisionConversation, key = { it.id }) { turn ->
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    UserChatBubble(turn.request)
+                    AssistantChatBubble { Text(turn.response, color = CreamRaised, lineHeight = 20.sp) }
                 }
             }
+            if (project.analysis.completedAtEpochMs != null) {
+                item { FindingsChatBubble(read) }
+            }
+            if (review != null) {
+                item { ProposalChatBubble(review, applyProposal, rejectProposal) }
+            }
+            state.jobMessage?.let { message -> item { AssistantChatBubble(accent = Lavender) { Text(message, color = CreamRaised) } } }
+            state.capabilityMessage?.let { message -> item { AssistantChatBubble(accent = Coral) { Text("Export note: $message", color = CreamRaised) } } }
+            if (project.analysis.revisionConversation.isEmpty() && project.analysis.completedAtEpochMs == null) {
+                item { AssistantChatBubble(accent = Lavender) { Text("I’m reading your clips, transcribing the speech, and looking for the strongest cut.", color = CreamRaised) } }
+            }
         }
-        Spacer(Modifier.navigationBarsPadding())
+        Surface(color = Workspace, tonalElevation = 4.dp) {
+            Row(
+                Modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = request,
+                    onValueChange = { request = it.take(2_000) },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Ask for another change…") },
+                    maxLines = 5,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = CreamRaised, unfocusedTextColor = CreamRaised,
+                        focusedBorderColor = Lavender, unfocusedBorderColor = Border
+                    )
+                )
+                Button(
+                    onClick = { reviseStory(request); request = "" },
+                    enabled = request.isNotBlank(),
+                    modifier = Modifier.height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText)
+                ) { Text("Send", fontWeight = FontWeight.Bold) }
+            }
+        }
     }
     if (fullscreen) FullscreenPreview(state.previewUri?.let(::listOf) ?: project.orderedSources.map { it.uri }) { fullscreen = false }
+}
+
+@Composable private fun UserChatBubble(text: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Text(
+            text,
+            color = DarkText,
+            modifier = Modifier.fillMaxWidth(.86f).background(Coral, RoundedCornerShape(18.dp, 4.dp, 18.dp, 18.dp)).padding(13.dp),
+            lineHeight = 20.sp
+        )
+    }
+}
+
+@Composable private fun AssistantChatBubble(accent: Color = Lavender, content: @Composable ColumnScope.() -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+        Column(
+            Modifier.fillMaxWidth(.92f).background(Raised, RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp))
+                .border(1.dp, Border, RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp)).padding(14.dp)
+        ) {
+            Text("ctrlB", color = accent, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            Spacer(Modifier.height(5.dp))
+            content()
+        }
+    }
+}
+
+@Composable private fun FindingsChatBubble(read: EditorialRead) {
+    AssistantChatBubble {
+        Text("Here’s what I found in your footage:", color = CreamRaised, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        ChatFinding("Story", read.likelyStory.ifEmpty { listOf("I couldn’t confidently identify a complete spoken story.") })
+        if (read.repeatedTakes.isNotEmpty()) ChatFinding("Repeated takes", read.repeatedTakes.map {
+            "${it.sentence} — ${it.alternatives.size + 1} versions, ${reviewPercent(it.confidence)} confidence"
+        })
+        if (read.technicalProblems.isNotEmpty()) ChatFinding("Things to fix", read.technicalProblems)
+        if (read.usefulProductShots.isNotEmpty()) ChatFinding("Useful shots", read.usefulProductShots)
+        if (read.uncertainty.isNotEmpty()) ChatFinding("I’m less certain about", read.uncertainty)
+    }
+}
+
+@Composable private fun ChatFinding(label: String, lines: List<String>) {
+    Text(label, color = Green, fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
+    lines.forEach { Text("• $it", color = Muted, fontSize = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 3.dp)) }
+}
+
+@Composable private fun ProposalChatBubble(review: ProposalReview, apply: () -> Unit, reject: () -> Unit) {
+    AssistantChatBubble(accent = Coral) {
+        Text(review.summary, color = CreamRaised, fontWeight = FontWeight.Bold, lineHeight = 20.sp)
+        Spacer(Modifier.height(8.dp))
+        Text("${formatDuration(review.beforeDurationMs)} → ${formatDuration(review.afterDurationMs)}", color = Coral, fontWeight = FontWeight.Bold)
+        review.removals.take(4).forEach { Text("• $it", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp)) }
+        review.warnings.forEach { Text("Note: $it", color = Lavender, fontSize = 11.sp, modifier = Modifier.padding(top = 5.dp)) }
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = reject, modifier = Modifier.weight(1f), border = BorderStroke(1.dp, Border)) { Text("Not this", color = Cream) }
+            Button(
+                onClick = apply,
+                enabled = review.warnings.none { it.startsWith("This proposal targets revision") },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText)
+            ) { Text("Apply edit", fontWeight = FontWeight.Bold) }
+        }
+    }
 }
 
 @Composable private fun CreatorPreferencesCard(

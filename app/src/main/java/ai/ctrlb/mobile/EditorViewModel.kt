@@ -25,7 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.security.MessageDigest
 
-data class EditorState(val sources: List<SourceMedia> = emptyList(), val preferences: WizardPreferences = WizardPreferences(), val creatorPreferences: CreatorPreferenceProfile = CreatorPreferenceProfile(), val wizardStep: Int = 0, val project: MobileProject? = null, val capabilityMessage: String? = null, val previewUri: String? = null, val jobMessage: String? = null) {
+data class EditorState(val sources: List<SourceMedia> = emptyList(), val preferences: WizardPreferences = WizardPreferences(), val creatorPreferences: CreatorPreferenceProfile = CreatorPreferenceProfile(), val project: MobileProject? = null, val capabilityMessage: String? = null, val previewUri: String? = null, val jobMessage: String? = null) {
     val source: SourceMedia? get() = sources.firstOrNull()
 }
 
@@ -43,7 +43,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun import(uris: List<Uri>) = viewModelScope.launch {
         val sources = uris.distinct().map { uri -> readSource(uri) }
         require(sources.isNotEmpty()) { "Choose at least one video." }
-        mutable.value = EditorState(sources = sources, creatorPreferences = mutable.value.creatorPreferences, wizardStep = 1)
+        mutable.value = EditorState(sources = sources, creatorPreferences = mutable.value.creatorPreferences)
     }
 
     private suspend fun readSource(uri: Uri): SourceMedia = withContext(Dispatchers.IO) {
@@ -78,13 +78,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             ?: run { mutable.value = current.copy(sources = reordered) }
     }
 
-    fun preferences(value: WizardPreferences) { mutable.value = mutable.value.copy(preferences = value) }
-    fun next() { mutable.value = mutable.value.copy(wizardStep = (mutable.value.wizardStep + 1).coerceAtMost(3)) }
-    fun back() { mutable.value = mutable.value.copy(wizardStep = (mutable.value.wizardStep - 1).coerceAtLeast(1)) }
-
-    fun generateDraft(words: List<TranscriptWord> = emptyList()) {
+    fun generateDraft(prompt: String, words: List<TranscriptWord> = emptyList()) {
         val current = mutable.value; val sources = current.sources
-        val preferences = current.preferences.copy(captions = false)
+        val brief = prompt.trim().take(2_000)
+        require(brief.isNotEmpty()) { "Tell ctrlB what you want to make." }
+        val preferences = preferencesFromBrief(brief, current.preferences)
         val source = requireNotNull(sources.firstOrNull())
         val durationMs = sources.sumOf { it.durationMs }
         val candidates = FumbleDetector.detect(words, durationMs, preferences.pace)
@@ -109,16 +107,56 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
         val project = MobileProject(title = "Talking head edit", source = source, sources = sources, preferences = preferences, creatorPreferences = current.creatorPreferences, analysis = Analysis(words = words, lowConfidenceFumbles = candidates.filter { it.confidence < .93f }), operations = operations,
             export = ExportSettings(exportWidth, exportHeight, if (capability.allow4k) "video/hevc" else "video/avc", if (capability.allow4k) 45_000_000 else 16_000_000))
-        mutable.value = current.copy(project = project, wizardStep = 4, capabilityMessage = capability.reasons.takeIf { it.isNotEmpty() }?.joinToString(". "))
+        mutable.value = current.copy(project = project, preferences = preferences, capabilityMessage = capability.reasons.takeIf { it.isNotEmpty() }?.joinToString(". "), jobMessage = "Reading your clips and preparing a proposal…")
         viewModelScope.launch { store.save(project) }
-        val request = OneTimeWorkRequestBuilder<AnalysisWorker>().setInputData(Data.Builder().putString("projectId", project.id).build()).addTag("analysis:${project.id}").build()
+        val request = OneTimeWorkRequestBuilder<AnalysisWorker>().setInputData(
+            Data.Builder().putString("projectId", project.id).putString("prompt", brief).build()
+        ).addTag("analysis:${project.id}").build()
         val workManager = WorkManager.getInstance(getApplication())
         workManager.enqueue(request)
         viewModelScope.launch {
             val info = awaitWork(workManager, request.id)
-            if (info.state == WorkInfo.State.SUCCEEDED) { val analyzed = store.load(project.id); mutable.value = mutable.value.copy(project = analyzed, jobMessage = "Analysis complete"); renderPreview(analyzed) }
+            if (info.state == WorkInfo.State.SUCCEEDED) {
+                val analyzed = store.load(project.id)
+                mutable.value = mutable.value.copy(project = analyzed, jobMessage = "Analysis complete")
+                renderPreview(analyzed, simulatePendingProposal = analyzed.analysis.pendingProposal != null)
+            }
             else mutable.value = mutable.value.copy(capabilityMessage = info.outputData.getString("error") ?: "Video analysis failed.")
         }
+    }
+
+    private fun preferencesFromBrief(brief: String, fallback: WizardPreferences): WizardPreferences {
+        val text = brief.lowercase()
+        val platform = when {
+            "tiktok" in text -> Platform.TIKTOK
+            "instagram" in text || "reel" in text -> Platform.INSTAGRAM
+            "linkedin" in text -> Platform.LINKEDIN
+            "youtube" in text -> Platform.YOUTUBE
+            else -> fallback.platform
+        }
+        val aspectRatio = when {
+            "square" in text || "1:1" in text -> AspectRatio.SQUARE
+            "portrait" in text || "vertical" in text || "9:16" in text ||
+                platform == Platform.TIKTOK || platform == Platform.INSTAGRAM -> AspectRatio.PORTRAIT
+            "landscape" in text || "horizontal" in text || "16:9" in text -> AspectRatio.LANDSCAPE
+            else -> fallback.aspectRatio
+        }
+        val pace = when {
+            listOf("tight", "fast", "snappy", "short").any(text::contains) -> Pace.TIGHT
+            listOf("relaxed", "slow", "calm").any(text::contains) -> Pace.RELAXED
+            else -> fallback.pace
+        }
+        val music = when {
+            listOf("no music", "without music", "remove music").any(text::contains) -> MusicChoice.NONE
+            "music" in text -> MusicChoice.AUTOMATIC
+            else -> fallback.music
+        }
+        val captions = when {
+            listOf("no captions", "without captions", "no subtitles").any(text::contains) -> false
+            listOf("captions", "subtitles").any(text::contains) -> true
+            else -> fallback.captions
+        }
+        return fallback.copy(platform = platform, aspectRatio = aspectRatio, pace = pace, music = music, captions = captions)
     }
 
     fun toggle(id: String) { mutable.value.project?.let { project -> updateProject(project.replaceOperations(project.operations.map { if (it.id == id) toggle(it) else it }), true) } }
