@@ -15,4 +15,3 @@ Mobile owns:
 - [Preserve Android state while cloud repairs a malformed response](https://github.com/sparky0520/ctrlb-mobile/issues/9)
 - [Measured Android requirements and capability tiers](https://github.com/sparky0520/ctrlb-mobile/issues/10)
 - [Scene-aware speech and background-noise measurements](https://github.com/sparky0520/ctrlb-mobile/issues/11)
-- [Tracked person/object masks in Android preview and export](https://github.com/sparky0520/ctrlb-mobile/issues/12)
