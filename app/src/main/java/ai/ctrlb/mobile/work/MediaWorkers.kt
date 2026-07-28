@@ -162,7 +162,12 @@ class ExportWorker(context: Context, params: WorkerParameters) : ProgressWorker(
         val store = ProjectStore(applicationContext)
         val project = AudioAssetRepository(applicationContext).prepare(store.load(projectId))
         store.save(project)
-        val capability = DeviceCapability.evaluate(applicationContext, inputData.getLong("estimatedBytes", 0))
+        val capability = DeviceCapability.evaluate(
+            applicationContext,
+            project.export.width,
+            project.export.height,
+            inputData.getLong("estimatedBytes", 0)
+        )
         val (width, height) = project.preferences.aspectRatio.outputSize(
             if (capability.allow4k) 3840 else 1920,
             if (capability.allow4k) 2160 else 1080
@@ -173,7 +178,7 @@ class ExportWorker(context: Context, params: WorkerParameters) : ProgressWorker(
             codec = if (capability.allow4k) project.export.codec else "video/avc",
             bitrate = if (capability.allow4k) project.export.bitrate else 16_000_000
         ))
-        progress(if (capability.allow4k) "export-4k" else "export-1080p-fallback", 1)
+        progress(if (capability.allow4k) "export-4k" else "export-${height}p", 1)
         val output = java.io.File(applicationContext.filesDir, "exports/${project.id}.mp4")
         ExportCoordinator.export(applicationContext, renderProject, output)
         val values = ContentValues().apply {

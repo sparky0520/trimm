@@ -65,7 +65,11 @@ class PlannerClient(private val endpoint: String, private val accessToken: suspe
             connection.requestMethod = "POST"; connection.connectTimeout = 15_000; connection.readTimeout = 45_000; connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json"); connection.setRequestProperty("Authorization", "Bearer ${accessToken()}")
             connection.outputStream.use { it.write(json.encodeToString(PlannerRequest.serializer(), request).toByteArray()) }
-            require(connection.responseCode in 200..299) { "Planner request failed (${connection.responseCode})" }
+            val status = connection.responseCode
+            if (status !in 200..299) {
+                val detail = connection.errorStream?.bufferedReader()?.use { it.readText() }?.take(1_000).orEmpty()
+                error("Planner request failed ($status)${detail.takeIf(String::isNotBlank)?.let { ": $it" }.orEmpty()}")
+            }
             connection.inputStream.bufferedReader().use { json.decodeFromString(PlannerResponse.serializer(), it.readText()) }
         } finally { connection.disconnect() }
     }

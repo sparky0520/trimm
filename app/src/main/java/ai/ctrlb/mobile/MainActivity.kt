@@ -265,7 +265,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-            state.capabilityMessage?.let { message -> item { StatusCard("4K unavailable", "$message. Export will use 1080p.", MaterialTheme.colorScheme.error) } }
+            state.capabilityMessage?.let { message -> item { StatusCard("Export adjusted", message, MaterialTheme.colorScheme.error) } }
             state.jobMessage?.let { message -> item { StatusCard("PROCESSING", message, Lavender) } }
             item { ClipOrder(project.orderedSources, moveClip) }
             item { Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) { Text("EDIT DECISIONS", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp); HorizontalDivider(Modifier.padding(start = 10.dp), color = Border) } }

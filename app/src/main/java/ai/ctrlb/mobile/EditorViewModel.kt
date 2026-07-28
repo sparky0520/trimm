@@ -94,7 +94,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             if (source.hasAudio) { add(SetAudioCleanup()); add(SetAudioLevels()) }
             if (preferences.music == MusicChoice.AUTOMATIC) add(SetBackgroundMusic(catalogId = "automatic"))
         }
-        val capability = DeviceCapability.evaluate(getApplication())
+        val sourceSupports4k = sources.any {
+            val longSide = maxOf(it.width, it.height)
+            val shortSide = minOf(it.width, it.height)
+            longSide >= 3840 && shortSide >= 2160
+        }
+        val requestedLongSide = if (sourceSupports4k) 3840 else 1920
+        val requestedShortSide = if (sourceSupports4k) 2160 else 1080
+        val capability = DeviceCapability.evaluate(getApplication(), requestedLongSide, requestedShortSide)
         val (exportWidth, exportHeight) = when (preferences.aspectRatio) {
             AspectRatio.LANDSCAPE -> capability.recommendedWidth to capability.recommendedHeight
             AspectRatio.PORTRAIT -> capability.recommendedHeight to capability.recommendedWidth
