@@ -12,3 +12,4 @@ Mobile owns:
 - [Google Play purchase, restore, and management UI](https://github.com/sparky0520/ctrlb-mobile/issues/6)
 - [Physical-device verification](https://github.com/sparky0520/ctrlb-mobile/issues/7)
 - [Reviewable fumble hints instead of threshold-only automatic cuts](https://github.com/sparky0520/ctrlb-mobile/issues/8)
+- [Preserve Android state while cloud repairs a malformed response](https://github.com/sparky0520/ctrlb-mobile/issues/9)
