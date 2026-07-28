@@ -4,6 +4,8 @@ Shared long-lived backend for ctrlB mobile and desktop.
 
 It owns authentication and authorization, planning, transcription, derivative jobs, Layer 2 orchestration, billing state, account lifecycle, catalog ingestion, and the public privacy policy.
 
+ctrlB is now defined as a video-first multimodal editing agent. See [Product definition](docs/PRODUCT.md), [Architecture](docs/ARCHITECTURE.md), and [Roadmap](docs/ROADMAP.md).
+
 ## Run
 
 ```powershell
