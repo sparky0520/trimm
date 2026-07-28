@@ -1,0 +1,12 @@
+{
+  "manifestVersion": 1,
+  "source": "sparky0520/ctrlb-cloud",
+  "accepted": {
+    "planner": 1,
+    "evidencePacket": 1,
+    "editOperations": 1,
+    "derivativeJobs": 1,
+    "billingCatalog": 1,
+    "accountLifecycle": 1
+  }
+}
