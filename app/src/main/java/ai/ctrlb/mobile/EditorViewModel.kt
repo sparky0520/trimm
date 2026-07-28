@@ -82,8 +82,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val current = mutable.value; val sources = current.sources
         val brief = prompt.trim().take(2_000)
         require(brief.isNotEmpty()) { "Tell ctrlB what you want to make." }
-        val preferences = preferencesFromBrief(brief, current.preferences)
         val source = requireNotNull(sources.firstOrNull())
+        val preferences = preferencesFromBrief(brief, current.preferences)
+            .copy(aspectRatio = source.detectedAspectRatio())
         val durationMs = sources.sumOf { it.durationMs }
         val candidates = FumbleDetector.detect(words, durationMs, preferences.pace)
         val automatic = FumbleDetector.automatic(candidates)
@@ -92,13 +93,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             if (source.hasAudio) { add(SetAudioCleanup()); add(SetAudioLevels()) }
             if (preferences.music == MusicChoice.AUTOMATIC) add(SetBackgroundMusic(catalogId = "automatic"))
         }
-        val sourceSupports4k = sources.any {
-            val longSide = maxOf(it.width, it.height)
-            val shortSide = minOf(it.width, it.height)
-            longSide >= 3840 && shortSide >= 2160
-        }
-        val requestedLongSide = if (sourceSupports4k) 3840 else 1920
-        val requestedShortSide = if (sourceSupports4k) 2160 else 1080
+        // Export may preserve or reduce source resolution, never invent extra detail by upscaling.
+        val (requestedLongSide, requestedShortSide) = source.sourceResolutionCeiling()
         val capability = DeviceCapability.evaluate(getApplication(), requestedLongSide, requestedShortSide)
         val (exportWidth, exportHeight) = when (preferences.aspectRatio) {
             AspectRatio.LANDSCAPE -> capability.recommendedWidth to capability.recommendedHeight
@@ -134,13 +130,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             "youtube" in text -> Platform.YOUTUBE
             else -> fallback.platform
         }
-        val aspectRatio = when {
-            "square" in text || "1:1" in text -> AspectRatio.SQUARE
-            "portrait" in text || "vertical" in text || "9:16" in text ||
-                platform == Platform.TIKTOK || platform == Platform.INSTAGRAM -> AspectRatio.PORTRAIT
-            "landscape" in text || "horizontal" in text || "16:9" in text -> AspectRatio.LANDSCAPE
-            else -> fallback.aspectRatio
-        }
         val pace = when {
             listOf("tight", "fast", "snappy", "short").any(text::contains) -> Pace.TIGHT
             listOf("relaxed", "slow", "calm").any(text::contains) -> Pace.RELAXED
@@ -156,7 +145,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             listOf("captions", "subtitles").any(text::contains) -> true
             else -> fallback.captions
         }
-        return fallback.copy(platform = platform, aspectRatio = aspectRatio, pace = pace, music = music, captions = captions)
+        return fallback.copy(platform = platform, pace = pace, music = music, captions = captions)
     }
 
     fun toggle(id: String) { mutable.value.project?.let { project -> updateProject(project.replaceOperations(project.operations.map { if (it.id == id) toggle(it) else it }), true) } }

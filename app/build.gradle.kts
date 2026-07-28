@@ -4,7 +4,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
-val rootLocalEnv: Map<String, String> = rootProject.file("../../.env.local").takeIf { it.isFile }
+val rootLocalEnv: Map<String, String> = rootProject.file(".env.local").takeIf { it.isFile }
     ?.readLines()?.mapNotNull { line ->
         val trimmed = line.trim()
         if (trimmed.isEmpty() || trimmed.startsWith("#") || !trimmed.contains("=")) null
@@ -27,7 +27,10 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        val backendUrl = providers.gradleProperty("CTRLB_BACKEND_URL").orElse("").get().trimEnd('/')
+        val backendUrl = providers.gradleProperty("CTRLB_BACKEND_URL")
+            .orElse(providers.environmentVariable("CTRLB_BACKEND_URL"))
+            .orElse(rootLocalEnv["CTRLB_BACKEND_URL"] ?: "")
+            .get().trimEnd('/')
         val plannerUrl = providers.gradleProperty("CTRLB_PLANNER_URL").orElse(
             backendUrl.takeIf { it.isNotEmpty() }?.let { "$it/v1/mobile/plan" } ?: ""
         ).get()
@@ -46,7 +49,7 @@ android {
     signingConfigs {
         create("release") {
             if (uploadStorePath.isNotEmpty()) {
-                storeFile = rootProject.file("../../$uploadStorePath")
+                storeFile = rootProject.file(uploadStorePath)
                 storePassword = uploadStorePassword
                 keyAlias = uploadKeyAlias
                 keyPassword = uploadKeyPassword

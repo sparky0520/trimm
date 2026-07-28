@@ -30,6 +30,22 @@ import java.util.UUID
 )
 @Serializable enum class Platform { YOUTUBE, INSTAGRAM, TIKTOK, LINKEDIN }
 @Serializable enum class AspectRatio { LANDSCAPE, PORTRAIT, SQUARE }
+
+fun SourceMedia.detectedAspectRatio(): AspectRatio {
+    val normalizedRotation = ((rotation % 360) + 360) % 360
+    val quarterTurn = normalizedRotation == 90 || normalizedRotation == 270
+    val displayWidth = if (quarterTurn) height else width
+    val displayHeight = if (quarterTurn) width else height
+    val ratio = displayWidth.toFloat() / displayHeight.coerceAtLeast(1)
+    return when {
+        ratio in .9f..1.1f -> AspectRatio.SQUARE
+        displayWidth > displayHeight -> AspectRatio.LANDSCAPE
+        else -> AspectRatio.PORTRAIT
+    }
+}
+
+fun SourceMedia.sourceResolutionCeiling(): Pair<Int, Int> =
+    maxOf(width, height).coerceAtMost(3840) to minOf(width, height).coerceAtMost(2160)
 @Serializable enum class Pace { RELAXED, NATURAL, TIGHT }
 @Serializable enum class VisualStyle { NATURAL, WARM, CLEAN, PUNCHY }
 @Serializable enum class MusicChoice { AUTOMATIC, USER_FILE, NONE }

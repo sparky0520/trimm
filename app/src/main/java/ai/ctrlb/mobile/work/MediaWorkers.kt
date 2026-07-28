@@ -182,8 +182,8 @@ class ExportWorker(context: Context, params: WorkerParameters) : ProgressWorker(
             inputData.getLong("estimatedBytes", 0)
         )
         val (width, height) = project.preferences.aspectRatio.outputSize(
-            if (capability.allow4k) 3840 else 1920,
-            if (capability.allow4k) 2160 else 1080
+            maxOf(capability.recommendedWidth, capability.recommendedHeight),
+            minOf(capability.recommendedWidth, capability.recommendedHeight)
         )
         val renderProject = project.copy(export = project.export.copy(
             width = width,
@@ -231,7 +231,9 @@ class PreviewWorker(context: Context, params: WorkerParameters) : ProgressWorker
         }
         progress("preview", 5)
         val output = java.io.File(applicationContext.cacheDir, "previews/${prepared.id}-${prepared.revision}.mp4")
-        val (previewWidth, previewHeight) = prepared.preferences.aspectRatio.outputSize(1280, 720)
+        val previewLongSide = minOf(1280, maxOf(prepared.export.width, prepared.export.height))
+        val previewShortSide = minOf(720, minOf(prepared.export.width, prepared.export.height))
+        val (previewWidth, previewHeight) = prepared.preferences.aspectRatio.outputSize(previewLongSide, previewShortSide)
         ExportCoordinator.export(applicationContext, prepared.copy(export = prepared.export.copy(width = previewWidth, height = previewHeight, codec = "video/avc", bitrate = 5_000_000)), output)
         progress("complete", 100)
         Result.success(Data.Builder().putString("previewUri", Uri.fromFile(output).toString()).putString("warning", warning).build())
