@@ -6,7 +6,7 @@ const path = require('node:path');
 const test = require('node:test');
 
 const root = path.join(__dirname, '..', '..', '..');
-const backend = fs.readFileSync(path.join(root, 'services', 'backend', 'server', 'mobile-planner.cjs'), 'utf8');
+const backend = fs.readFileSync(path.join(root, 'services', 'backend', 'server', 'server.cjs'), 'utf8');
 const render = fs.readFileSync(path.join(root, 'render.yaml'), 'utf8');
 
 test('billing routes and database secrets belong to the Render backend only', () => {

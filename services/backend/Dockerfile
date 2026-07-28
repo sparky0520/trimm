@@ -10,4 +10,4 @@ COPY services/backend/server ./services/backend/server
 
 USER node
 EXPOSE 8787
-CMD ["node", "services/backend/server/mobile-planner.cjs"]
+CMD ["node", "services/backend/server/server.cjs"]

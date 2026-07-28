@@ -1,5 +1,7 @@
 'use strict';
 
+// Production HTTP entrypoint for the shared ctrlB backend.
+
 require('dotenv').config({ path: require('node:path').join(__dirname, '..', '..', '..', '.env.local') });
 require('dotenv').config({ path: require('node:path').join(__dirname, '..', '..', '..', '.env') });
 const http = require('node:http');

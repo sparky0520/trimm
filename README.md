@@ -35,8 +35,7 @@ Provider keys remain in the shared backend and are not placed in the Electron re
 
 - `apps/desktop/` — Electron, React/Vite, Remotion, desktop tests, and build scripts.
 - `apps/mobile/` — native Android/Compose editor and Gradle project.
-- `services/backend/` — authenticated AssemblyAI, desktop planner, and mobile Kimi planner implementations.
-- `api/` — thin Vercel adapters for the shared backend service.
+- `services/backend/` — the shared Render-hosted HTTP backend for authentication, planning, transcription, derivative jobs, billing, accounts, and the audio catalog.
 
 ## Documentation
 
@@ -45,6 +44,7 @@ Provider keys remain in the shared backend and are not placed in the Electron re
 - [Product tickets](docs/ai/tickets.md) - the single active, blocked, superseded, and completed work ledger
 - [Internal visual handbook](docs/human/index.html) — product workflow, evidence model, architecture, and contributor runbook
 - [Implementation status](docs/ai/ProjectStatus.md) — verified capabilities and code map
+- [Repository split proposal](docs/operations/Repository-Split.md) — focused mobile, desktop, and cloud ownership
 
 ## Current limits
 
