@@ -4,6 +4,7 @@ import ai.ctrlb.mobile.domain.EditOperation
 import ai.ctrlb.mobile.domain.SourceMedia
 import ai.ctrlb.mobile.domain.StagedEditorialPlan
 import ai.ctrlb.mobile.domain.WizardPreferences
+import ai.ctrlb.mobile.domain.ResolvedCreatorPreferences
 import ai.ctrlb.mobile.evidence.EvidencePacket
 import ai.ctrlb.mobile.evidence.EvidenceRetrievalQuery
 import kotlinx.serialization.Serializable
@@ -20,18 +21,20 @@ import java.net.URI
     val prompt: String,
     val media: PlannerMedia,
     val preferences: WizardPreferences,
+    val creatorPreferences: ResolvedCreatorPreferences = ResolvedCreatorPreferences(),
     val operations: List<EditOperation>,
     val projectRevision: Long,
     val evidence: EvidencePacket
 )
 
 object PlannerPrivacyBoundary {
-    fun create(prompt: String, source: SourceMedia, preferences: WizardPreferences, operations: List<EditOperation>, revision: Long, evidence: EvidencePacket): PlannerRequest {
+    fun create(prompt: String, source: SourceMedia, preferences: WizardPreferences, operations: List<EditOperation>, revision: Long, evidence: EvidencePacket, creatorPreferences: ResolvedCreatorPreferences = ResolvedCreatorPreferences()): PlannerRequest {
         require(prompt.length <= 2_000)
         return PlannerRequest(
             prompt = prompt,
             media = PlannerMedia(source.durationMs, source.width, source.height, source.rotation, source.hasAudio),
             preferences = preferences,
+            creatorPreferences = creatorPreferences,
             operations = operations,
             projectRevision = revision,
             evidence = evidence

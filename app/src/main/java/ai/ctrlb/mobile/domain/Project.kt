@@ -95,6 +95,7 @@ import java.util.UUID
     val sources: List<SourceMedia> = emptyList(),
     val proxyUri: String? = null,
     val preferences: WizardPreferences = WizardPreferences(),
+    val creatorPreferences: CreatorPreferenceProfile = CreatorPreferenceProfile(),
     val analysis: Analysis = Analysis(),
     val evidenceGraphs: List<EvidenceGraphReference> = emptyList(),
     val operations: List<EditOperation> = emptyList(),

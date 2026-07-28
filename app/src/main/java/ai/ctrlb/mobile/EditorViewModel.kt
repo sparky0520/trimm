@@ -25,7 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.security.MessageDigest
 
-data class EditorState(val sources: List<SourceMedia> = emptyList(), val preferences: WizardPreferences = WizardPreferences(), val wizardStep: Int = 0, val project: MobileProject? = null, val capabilityMessage: String? = null, val previewUri: String? = null, val jobMessage: String? = null) {
+data class EditorState(val sources: List<SourceMedia> = emptyList(), val preferences: WizardPreferences = WizardPreferences(), val creatorPreferences: CreatorPreferenceProfile = CreatorPreferenceProfile(), val wizardStep: Int = 0, val project: MobileProject? = null, val capabilityMessage: String? = null, val previewUri: String? = null, val jobMessage: String? = null) {
     val source: SourceMedia? get() = sources.firstOrNull()
 }
 
@@ -34,10 +34,16 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     val state = mutable.asStateFlow()
     private val store = ProjectStore(application)
 
+    init {
+        viewModelScope.launch {
+            mutable.value = mutable.value.copy(creatorPreferences = store.loadCreatorPreferences())
+        }
+    }
+
     fun import(uris: List<Uri>) = viewModelScope.launch {
         val sources = uris.distinct().map { uri -> readSource(uri) }
         require(sources.isNotEmpty()) { "Choose at least one video." }
-        mutable.value = EditorState(sources = sources, wizardStep = 1)
+        mutable.value = EditorState(sources = sources, creatorPreferences = mutable.value.creatorPreferences, wizardStep = 1)
     }
 
     private suspend fun readSource(uri: Uri): SourceMedia = withContext(Dispatchers.IO) {
@@ -94,7 +100,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             AspectRatio.PORTRAIT -> capability.recommendedHeight to capability.recommendedWidth
             AspectRatio.SQUARE -> capability.recommendedHeight to capability.recommendedHeight
         }
-        val project = MobileProject(title = "Talking head edit", source = source, sources = sources, preferences = preferences, analysis = Analysis(words = words, lowConfidenceFumbles = candidates.filter { it.confidence < .93f }), operations = operations,
+        val project = MobileProject(title = "Talking head edit", source = source, sources = sources, preferences = preferences, creatorPreferences = current.creatorPreferences, analysis = Analysis(words = words, lowConfidenceFumbles = candidates.filter { it.confidence < .93f }), operations = operations,
             export = ExportSettings(exportWidth, exportHeight, if (capability.allow4k) "video/hevc" else "video/avc", if (capability.allow4k) 45_000_000 else 16_000_000))
         mutable.value = current.copy(project = project, wizardStep = 4, capabilityMessage = capability.reasons.takeIf { it.isNotEmpty() }?.joinToString(". "))
         viewModelScope.launch { store.save(project) }
@@ -119,8 +125,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 return
             }
             val applied = project.replaceOperations(validated).copy(
+                creatorPreferences = CreatorPreferenceLearner.confirmedProposal(project.creatorPreferences, project, proposal),
                 analysis = project.analysis.copy(editorialPlan = proposal.plan, pendingProposal = null)
             )
+            viewModelScope.launch { store.saveCreatorPreferences(applied.creatorPreferences) }
             updateProject(applied, true)
         }
     }
@@ -152,6 +160,32 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
+    fun recordCreatorPreference(kind: CreatorPreferenceKind, value: String) {
+        val current = mutable.value
+        val profile = (current.project?.creatorPreferences ?: current.creatorPreferences)
+            .record(kind, value, "explicit:${UUID.randomUUID()}", explicit = true)
+        persistCreatorPreferences(profile)
+    }
+    fun setCreatorPreferenceEnabled(kind: CreatorPreferenceKind, value: String, enabled: Boolean) {
+        val current = mutable.value
+        val profile = (current.project?.creatorPreferences ?: current.creatorPreferences)
+            .setEnabled(kind, value, enabled)
+        persistCreatorPreferences(profile)
+    }
+    fun resetCreatorPreferences(kind: CreatorPreferenceKind? = null, value: String? = null) {
+        val current = mutable.value
+        val profile = (current.project?.creatorPreferences ?: current.creatorPreferences).reset(kind, value)
+        persistCreatorPreferences(profile)
+    }
+    private fun persistCreatorPreferences(profile: CreatorPreferenceProfile) {
+        val current = mutable.value
+        val project = current.project?.copy(creatorPreferences = profile)
+        mutable.value = current.copy(creatorPreferences = profile, project = project)
+        viewModelScope.launch {
+            store.saveCreatorPreferences(profile)
+            if (project != null) store.save(project)
+        }
+    }
     fun undo() { mutable.value.project?.let { updateProject(it.undoOnce(), true) } }
     fun export() { mutable.value.project?.let { project ->
         val estimated = (project.durationMs / 1_000.0 * project.export.bitrate / 8).toLong()
@@ -159,7 +193,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         mutable.value = mutable.value.copy(jobMessage = "Export queued")
         manager.enqueue(request); viewModelScope.launch { val info = awaitWork(manager, request.id); mutable.value = mutable.value.copy(jobMessage = if (info.state == WorkInfo.State.SUCCEEDED) "Export saved to Movies/ctrlB" else "Export failed: ${info.outputData.getString("error") ?: info.state}") }
     } }
-    private fun updateProject(project: MobileProject, preview: Boolean = false) { mutable.value = mutable.value.copy(project = project); viewModelScope.launch { store.save(project); if (preview) renderPreview(project) } }
+    private fun updateProject(project: MobileProject, preview: Boolean = false) { mutable.value = mutable.value.copy(project = project, creatorPreferences = project.creatorPreferences); viewModelScope.launch { store.save(project); if (preview) renderPreview(project) } }
     private fun renderPreview(project: MobileProject, simulatePendingProposal: Boolean = false) {
         val manager = WorkManager.getInstance(getApplication())
         val request = OneTimeWorkRequestBuilder<PreviewWorker>().setInputData(Data.Builder()

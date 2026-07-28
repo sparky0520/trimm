@@ -78,7 +78,7 @@ class MainActivity : ComponentActivity() {
     val state by vm.state.collectAsStateWithLifecycle()
     when {
         state.source == null -> ImportScreen(vm::import)
-        state.project != null -> EditorScreen(state, vm::toggle, vm::undo, vm::export, vm::moveClip, vm::applyProposal, vm::rejectProposal, vm::reviseStory)
+        state.project != null -> EditorScreen(state, vm::toggle, vm::undo, vm::export, vm::moveClip, vm::applyProposal, vm::rejectProposal, vm::reviseStory, vm::recordCreatorPreference, vm::setCreatorPreferenceEnabled, vm::resetCreatorPreferences)
         else -> WizardScreen(state, vm::preferences, vm::next, vm::back, vm::generateDraft, vm::moveClip)
     }
 }
@@ -233,7 +233,10 @@ class MainActivity : ComponentActivity() {
     moveClip: (Int, Int) -> Unit,
     applyProposal: () -> Unit,
     rejectProposal: () -> Unit,
-    reviseStory: (String) -> Unit
+    reviseStory: (String) -> Unit,
+    recordPreference: (CreatorPreferenceKind, String) -> Unit,
+    setPreferenceEnabled: (CreatorPreferenceKind, String, Boolean) -> Unit,
+    resetPreferences: (CreatorPreferenceKind?, String?) -> Unit
 ) {
     val project = requireNotNull(state.project)
     var fullscreen by rememberSaveable { mutableStateOf(false) }
@@ -245,6 +248,7 @@ class MainActivity : ComponentActivity() {
                 item { ProposalReviewCard(review, applyProposal, rejectProposal) }
             }
             item { ConversationalRevisionCard(project, reviseStory) }
+            item { CreatorPreferencesCard(project.creatorPreferences, recordPreference, setPreferenceEnabled, resetPreferences) }
             item {
                 Column(Modifier.fillMaxWidth().background(Workspace, RoundedCornerShape(18.dp)).border(1.dp, Border, RoundedCornerShape(18.dp))) {
                     Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -282,6 +286,52 @@ class MainActivity : ComponentActivity() {
         Spacer(Modifier.navigationBarsPadding())
     }
     if (fullscreen) FullscreenPreview(state.previewUri?.let(::listOf) ?: project.orderedSources.map { it.uri }) { fullscreen = false }
+}
+
+@Composable private fun CreatorPreferencesCard(
+    profile: CreatorPreferenceProfile,
+    record: (CreatorPreferenceKind, String) -> Unit,
+    setEnabled: (CreatorPreferenceKind, String, Boolean) -> Unit,
+    reset: (CreatorPreferenceKind?, String?) -> Unit
+) {
+    var kind by rememberSaveable { mutableStateOf(CreatorPreferenceKind.TERMINOLOGY) }
+    var value by rememberSaveable { mutableStateOf("") }
+    ReviewSurface("CREATOR PROFILE", "Your reusable preferences") {
+        Text("Visible taste settings only. The current brief and footage evidence always win.", color = Muted, fontSize = 11.sp)
+        Spacer(Modifier.height(10.dp))
+        Choice("Preference type", CreatorPreferenceKind.entries, kind) { kind = it }
+        OutlinedTextField(
+            value = value, onValueChange = { value = it.take(500) }, modifier = Modifier.fillMaxWidth(),
+            label = { Text("Asset, term, rule, pace, or motion limit") },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = CreamRaised, unfocusedTextColor = CreamRaised,
+                focusedBorderColor = Lavender, unfocusedBorderColor = Border
+            )
+        )
+        Button(
+            onClick = { record(kind, value); value = "" }, enabled = value.isNotBlank(),
+            modifier = Modifier.align(Alignment.End),
+            colors = ButtonDefaults.buttonColors(containerColor = Lavender, contentColor = Ink)
+        ) { Text("Save explicit preference") }
+        profile.entries.forEach { entry ->
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("${entry.kind.name.lowercase().replace('_', ' ')}: ${entry.value}", color = Cream, fontSize = 11.sp)
+                    Text(
+                        "${if (entry.active) "Active" else "Learning"} • ${entry.confirmations} confirmation(s) • decisions ${entry.decisionIds.joinToString()}",
+                        color = Muted, fontSize = 9.sp
+                    )
+                }
+                Switch(entry.enabled, { setEnabled(entry.kind, entry.value, it) })
+                TextButton(onClick = { reset(entry.kind, entry.value) }) { Text("Reset", color = Coral, fontSize = 10.sp) }
+            }
+        }
+        if (profile.entries.isNotEmpty()) {
+            OutlinedButton(onClick = { reset(null, null) }, modifier = Modifier.align(Alignment.End), border = BorderStroke(1.dp, Border)) {
+                Text("Reset all", color = Cream)
+            }
+        }
+    }
 }
 
 @Composable private fun ConversationalRevisionCard(project: MobileProject, revise: (String) -> Unit) {
