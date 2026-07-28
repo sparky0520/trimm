@@ -12,5 +12,6 @@ Current themes:
 - [Production rights-cleared audio catalog](https://github.com/sparky0520/ctrlb-cloud/issues/6)
 - [Contextual adaptive speech editing instead of fixed filler and pause rules](https://github.com/sparky0520/ctrlb-cloud/issues/7)
 - [Malformed AI proposal repair without losing the agent run](https://github.com/sparky0520/ctrlb-cloud/issues/8)
+- [Grounded semantic-mask and background-removal operations](https://github.com/sparky0520/ctrlb-cloud/issues/9)
 
 Historical monorepo ticket numbers are reference-only. New work is tracked in the repository that owns its implementation.
