@@ -11,6 +11,7 @@ test('mobile planner is configured as a non-secret package script', () => {
   assert.match(source, /process\.env\.MOONSHOT_API_KEY/);
   assert.match(source, /\/v1\/desktop\/plan/);
   assert.match(source, /\/v1\/mobile\/plan/);
+  assert.match(source, /requestUrl\.pathname !== '\/v1\/mobile\/plan'/);
   assert.match(source, /\/v1\/mobile\/orchestrate/);
   assert.match(source, /\/v1\/transcribe/);
   assert.match(source, /\/v1\/derivatives\/jobs/);

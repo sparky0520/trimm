@@ -37,6 +37,7 @@ class Authenticator {
     this.allowBootstrap = options.allowBootstrap === true;
     this.authorizedParties = new Set((Array.isArray(options.authorizedParties) ? options.authorizedParties : [])
       .filter((value) => typeof value === 'string' && value.length > 0 && value.length <= 300).slice(0, 16));
+    this.defaultScopes = Object.freeze(boundedStrings(options.defaultScopes));
     this.isRevoked = typeof options.isRevoked === 'function' ? options.isRevoked : async () => false;
     this.remoteJwks = null;
   }
@@ -64,9 +65,10 @@ class Authenticator {
       if (typeof payload.sub !== 'string' || !/^[^\s]{1,200}$/.test(payload.sub)) throw new Error('Token subject is invalid.');
       if (this.authorizedParties.size && (typeof payload.azp !== 'string' || !this.authorizedParties.has(payload.azp))) throw new Error('Token authorized party is invalid.');
       if (await this.isRevoked({ subject: payload.sub, tokenId: typeof payload.jti === 'string' ? payload.jti : null })) throw new Error('Token has been revoked.');
+      const claimedScopes = boundedStrings(payload.scope || payload.permissions);
       return Object.freeze({
         id: payload.sub,
-        scopes: Object.freeze(boundedStrings(payload.scope || payload.permissions)),
+        scopes: Object.freeze([...new Set([...this.defaultScopes, ...claimedScopes])]),
         // Paid access is resolved from ctrlB's billing store. Identity-provider
         // custom claims are intentionally not an authorization source.
         entitlements: Object.freeze([]),
@@ -88,6 +90,7 @@ function fromEnvironment(environment = process.env) {
     audience: environment.CTRLB_AUTH_AUDIENCE,
     jwksUri: derivedIssuer ? `${derivedIssuer}/.well-known/jwks.json` : environment.CTRLB_AUTH_JWKS_URL,
     authorizedParties: String(environment.CTRLB_AUTH_AUTHORIZED_PARTIES || '').split(',').map((value) => value.trim()).filter(Boolean),
+    defaultScopes: String(environment.CTRLB_AUTH_DEFAULT_SCOPES || '').split(/\s+/).filter(Boolean),
     bootstrapToken: environment.CTRLB_PLANNER_CLIENT_TOKEN,
     allowBootstrap: !production && environment.CTRLB_ALLOW_BOOTSTRAP_AUTH === 'true',
     isRevoked: ({ tokenId }) => tokenId !== null && revokedTokenIds.has(tokenId),

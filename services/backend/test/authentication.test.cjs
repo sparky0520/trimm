@@ -52,3 +52,21 @@ test('OIDC authentication verifies signature, issuer, audience, expiry, and cano
   await assert.rejects(auth.authenticate(request(await sign(issuer, audience, 'active-token', 'https://attacker.test'))), (error) => error.code === 'invalid_token');
   await assert.rejects(auth.authenticate(request('not-a-jwt')), (error) => error.code === 'invalid_token' && !error.message.includes('not-a-jwt'));
 });
+
+test('configured first-party scopes augment only verified token scope claims', async (t) => {
+  const { SignJWT, exportJWK, generateKeyPair } = await import('jose');
+  const { publicKey, privateKey } = await generateKeyPair('RS256');
+  const jwk = { ...(await exportJWK(publicKey)), kid: 'scope-key', alg: 'RS256', use: 'sig' };
+  const server = http.createServer((_request, response) => response.end(JSON.stringify({ keys: [jwk] })));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const issuer = 'https://identity.ctrlb.test/';
+  const auth = new Authenticator({
+    issuer, jwksUri: `http://127.0.0.1:${server.address().port}/jwks`,
+    defaultScopes: ['plan:create', 'transcribe:create'],
+  });
+  const sign = (claims = {}) => new SignJWT(claims).setProtectedHeader({ alg: 'RS256', kid: 'scope-key' })
+    .setSubject('mobile-user').setIssuer(issuer).setIssuedAt().setExpirationTime('5m').sign(privateKey);
+  assert.deepEqual((await auth.authenticate(request(await sign()))).scopes, ['plan:create', 'transcribe:create']);
+  assert.deepEqual((await auth.authenticate(request(await sign({ scope: 'profile:read' })))).scopes, ['plan:create', 'transcribe:create', 'profile:read']);
+});

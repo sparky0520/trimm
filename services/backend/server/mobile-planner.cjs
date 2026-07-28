@@ -330,7 +330,7 @@ const server = http.createServer(async (request, response) => {
     catch (error) { console.error('[transcribe-upload] request failed', { message: error?.message, status: error?.status }); return json(response, Number.isInteger(error?.status) ? error.status : 502, { error: error?.message || 'Transcription failed', offset: error?.offset }); }
     finally { transcriptionUploads.remove(uploadMatch[1]); }
   }
-  if (request.method === 'POST' && request.url === '/v1/transcribe') {
+  if (request.method === 'POST' && requestUrl.pathname === '/v1/transcribe') {
     try {
       transcriptionCore.validateUpload(request.headers);
       return json(response, 200, await transcriptionCore.transcribe(request));
@@ -339,7 +339,7 @@ const server = http.createServer(async (request, response) => {
       return json(response, error?.status && Number.isInteger(error.status) ? error.status : 502, { error: error?.message || 'Transcription failed' });
     }
   }
-  if (request.method === 'POST' && request.url === '/v1/desktop/plan') {
+  if (request.method === 'POST' && requestUrl.pathname === '/v1/desktop/plan') {
     try {
       const result = await planDesktop(await collect(request, 7 * 1024 * 1024));
       return json(response, result.ok ? 200 : result.error?.category === 'authentication' ? 503 : 502, result);
@@ -348,7 +348,7 @@ const server = http.createServer(async (request, response) => {
       return json(response, Number.isInteger(error?.status) ? error.status : 502, { error: error?.message || 'Planner failed' });
     }
   }
-  if (request.method === 'POST' && request.url === '/v1/mobile/orchestrate') {
+  if (request.method === 'POST' && requestUrl.pathname === '/v1/mobile/orchestrate') {
     try {
       return json(response, 200, await layer2Orchestrator.orchestrate(principal, await collect(request)));
     } catch (error) {
@@ -360,7 +360,7 @@ const server = http.createServer(async (request, response) => {
       });
     }
   }
-  if (request.method !== 'POST' || request.url !== '/v1/mobile/plan') return json(response, 404, { error: 'Not found' });
+  if (request.method !== 'POST' || requestUrl.pathname !== '/v1/mobile/plan') return json(response, 404, { error: 'Not found' });
   try {
     if (!apiKey) throw Object.assign(new Error('MOONSHOT_API_KEY is not configured'), { status: 503 });
     const payload = await collect(request);
