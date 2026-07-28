@@ -28,6 +28,7 @@ ctrlB is not a filter wizard and not a rules engine pretending to understand vid
 - Source orientation is detected from media metadata and preserved. Chat cannot silently change framing.
 - Output resolution never exceeds source resolution. Lower-quality preview/export is allowed.
 - Users choose whether original media, a high-fidelity proxy, or only selected derivatives may enter cloud analysis.
+- The initial direct-video agent uses Gemini 3.6 Flash only. Additional planning models remain out of scope until evaluation demonstrates a concrete need.
 
 ## Future enhancements
 

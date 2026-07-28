@@ -32,6 +32,12 @@ Preview locally
 Export locally
 ```
 
+The initial multimodal implementation uses Gemini 3.6 Flash for the entire
+agent loop. Do not add a second editorial reasoning model until versioned
+real-video evaluation demonstrates a specific failure that the additional
+model fixes. Kimi K3 remains only in the current legacy text/JSON planner path;
+it is not the target direct-video agent.
+
 ## Media modes
 
 The user selects a project privacy mode:
