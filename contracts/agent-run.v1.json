@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ctrlb.ai/contracts/agent-run.v1.json",
+  "title": "ctrlB agent run v1",
+  "type": "object",
+  "required": ["contractVersion", "runId", "projectId", "projectRevision", "status", "events", "decision"],
+  "properties": {
+    "contractVersion": { "const": 1 },
+    "runId": { "type": "string" },
+    "projectId": { "type": "string" },
+    "projectRevision": { "type": "integer", "minimum": 0 },
+    "status": { "enum": ["waiting_for_evidence", "waiting_for_user", "proposal_ready", "partial", "failed", "cancelled"] },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["sequence", "type", "message", "createdAt"],
+        "properties": {
+          "sequence": { "type": "integer", "minimum": 1 },
+          "type": { "enum": ["started", "index_received", "analyzing", "evidence_requested", "evidence_received", "clarification", "proposal_ready", "partial", "failed", "cancelled"] },
+          "message": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "decision": { "type": "object" }
+  },
+  "additionalProperties": false
+}

@@ -9,6 +9,9 @@ ctrlB is now defined as a video-first multimodal editing agent. See [Product def
 Start with the [cloud development guide](docs/DEVELOPMENT.md) before taking a
 ticket.
 
+The request-shaped Gemini path starts with
+[the publishable first slice](docs/PUBLISHABLE_FIRST_SLICE.md).
+
 ## Run
 
 ```powershell

@@ -19,6 +19,8 @@ const { createPaddleWebhookVerifier } = require('./paddle-billing.cjs');
 const { GooglePlayPurchaseVerifier } = require('./google-play-billing.cjs');
 const { DerivativeJobs } = require('./derivative-jobs.cjs');
 const { Layer2Orchestrator } = require('./layer2-orchestrator.cjs');
+const { AgentRuns } = require('./agent-runs.cjs');
+const { createGeminiDecisionProvider } = require('./gemini-agent.cjs');
 const plannerCore = require('./planner-core.cjs');
 
 const port = Number(process.env.PORT || 8787);
@@ -49,21 +51,9 @@ const billing = new BillingService({
 const derivativeJobs = new DerivativeJobs({ accessFor: (userId) => billing.accessFor(userId) });
 const layer2Orchestrator = new Layer2Orchestrator({
   derivativeJobs,
-  decide: async ({ systemPolicy, inventory, evidence }) => {
-    if (!apiKey) throw Object.assign(new Error('MOONSHOT_API_KEY is not configured'), { status: 503 });
-    const client = new OpenAI({ apiKey, baseURL });
-    const completion = await client.chat.completions.create({
-      model,
-      response_format: { type: 'json_object' },
-      max_completion_tokens: 4096,
-      messages: [
-        { role: 'system', content: systemPolicy },
-        { role: 'user', content: JSON.stringify({ inventory, evidence }) },
-      ],
-    });
-    return JSON.parse(completion.choices?.[0]?.message?.content);
-  },
+  decide: createGeminiDecisionProvider(),
 });
+const agentRuns = new AgentRuns({ orchestrator: layer2Orchestrator });
 const derivativeCleanupTimer = setInterval(() => derivativeJobs.cleanup(), 15 * 60 * 1000);
 derivativeCleanupTimer.unref();
 const googlePlay = process.env.CTRLB_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
@@ -78,7 +68,8 @@ function policyFor(request, pathname) {
     resourceType: 'derivative_job',
   };
   if (pathname.startsWith('/v1/transcribe')) return { scope: 'transcribe:create', action: request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'update' : 'create', resourceType: 'transcription' };
-  if (LEGACY_PLANNER_ROUTES.has(pathname) || pathname === '/v1/mobile/orchestrate') {
+  if (LEGACY_PLANNER_ROUTES.has(pathname) || pathname === '/v1/mobile/orchestrate' || pathname === '/v1/agent/runs' ||
+      /^\/v1\/agent\/runs\/[0-9a-f-]{36}(?:\/continue)?$/i.test(pathname)) {
     return { scope: 'plan:create', action: 'create', resourceType: 'plan' };
   }
   if (pathname === '/v1/billing/catalog' || pathname === '/v1/billing/status') return { action: 'read', resourceType: 'billing' };
@@ -375,6 +366,41 @@ const server = http.createServer(async (request, response) => {
         error: error?.message || 'Layer 2 orchestration failed',
         code: error?.code || 'orchestration_failed',
         requestId,
+      });
+    }
+  }
+  if (request.method === 'POST' && requestUrl.pathname === '/v1/agent/runs') {
+    try {
+      return json(response, 201, await agentRuns.start(principal, await collect(request)));
+    } catch (error) {
+      console.error('[agent-run] request failed', { message: error?.message, status: error?.status, code: error?.code });
+      return json(response, Number.isInteger(error?.status) ? error.status : 502, {
+        error: error?.message || 'Agent run failed',
+        code: error?.code || 'agent_run_failed',
+        ...(error?.run ? { run: error.run } : {}),
+        requestId,
+      });
+    }
+  }
+  const agentRunContinueMatch = requestUrl.pathname.match(/^\/v1\/agent\/runs\/([0-9a-f-]{36})\/continue$/i);
+  if (request.method === 'POST' && agentRunContinueMatch) {
+    try {
+      return json(response, 200, await agentRuns.continue(principal, agentRunContinueMatch[1], await collect(request, 16 * 1024)));
+    } catch (error) {
+      return json(response, Number.isInteger(error?.status) ? error.status : 502, {
+        error: error?.message || 'Agent run could not continue',
+        code: error?.code || 'agent_run_failed',
+        ...(error?.run ? { run: error.run } : {}),
+        requestId,
+      });
+    }
+  }
+  const agentRunMatch = requestUrl.pathname.match(/^\/v1\/agent\/runs\/([0-9a-f-]{36})$/i);
+  if (request.method === 'GET' && agentRunMatch) {
+    try { return json(response, 200, agentRuns.read(principal, agentRunMatch[1])); }
+    catch (error) {
+      return json(response, Number.isInteger(error?.status) ? error.status : 404, {
+        error: error?.message || 'Agent run not found', code: error?.code || 'agent_run_not_found', requestId,
       });
     }
   }

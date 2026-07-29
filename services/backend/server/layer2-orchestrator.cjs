@@ -23,7 +23,7 @@ const DEFAULT_BUDGETS = Object.freeze({
   maximumRequests: 8,
   retentionMs: 6 * 60 * 60 * 1000,
 });
-const SYSTEM_POLICY = `You are ctrlB's private Layer 2 mobile editorial orchestrator.
+const SYSTEM_POLICY = `You are ctrlB's private Layer 2 editorial orchestrator for desktop and mobile.
 Return one JSON object with type evidence_request, edit_program, clarification, or fallback.
 Begin with the request-shaped media index in the compact inventory. Treat its ranges as locally measured candidates and coverage, not as editorial meaning.
 Ask only for the minimum derivative evidence needed. You may request additional bounded ranges when the current index is insufficient.

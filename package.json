@@ -11,6 +11,7 @@
     "audio:import": "node services/backend/scripts/ingest-audio.cjs"
   },
   "dependencies": {
+    "@google/genai": "^2.13.0",
     "@paddle/paddle-node-sdk": "^3.8.0",
     "assemblyai": "^4.35.4",
     "dotenv": "^17.4.2",

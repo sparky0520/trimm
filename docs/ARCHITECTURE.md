@@ -39,6 +39,9 @@ real-video evaluation demonstrates a specific failure that the additional
 model fixes. Kimi K3 remains only in the current legacy text/JSON planner path;
 it is not the target direct-video agent.
 
+The executable first slice and its current limitations are documented in
+[PUBLISHABLE_FIRST_SLICE.md](PUBLISHABLE_FIRST_SLICE.md).
+
 ## Stored v1 compatibility routes
 
 The first app version remains available through two frozen compatibility
