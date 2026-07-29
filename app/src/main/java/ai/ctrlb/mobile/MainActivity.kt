@@ -196,7 +196,7 @@ class MainActivity : ComponentActivity() {
             item {
                 Box(Modifier.fillMaxWidth().background(Workspace, RoundedCornerShape(18.dp)).border(1.dp, Border, RoundedCornerShape(18.dp)).padding(10.dp)) {
                     val first = state.sources.first()
-                    VideoPreview(state.sources.map { it.uri }, Modifier.fillMaxWidth().aspectRatio(first.width.toFloat() / first.height))
+                    VideoPreview(state.sources.map { it.uri }, Modifier.fillMaxWidth().aspectRatio(first.displaySize().aspectRatio))
                     SmallAction("Expand", Modifier.align(Alignment.TopEnd).padding(8.dp)) { fullscreen = true }
                 }
             }
@@ -281,7 +281,7 @@ class MainActivity : ComponentActivity() {
     val read = EditorialReviewBuilder.editorialRead(project)
     val review = EditorialReviewBuilder.proposal(project)
     Column(Modifier.fillMaxSize().background(Ink)) {
-        BrandBar(actionLabel = "Export ${project.export.height}p", onAction = export, secondaryLabel = "Undo", onSecondary = undo)
+        BrandBar(actionLabel = "Export ${minOf(project.export.width, project.export.height)}p", onAction = export, secondaryLabel = "Undo", onSecondary = undo)
         LazyColumn(
             Modifier.weight(1f),
             contentPadding = PaddingValues(12.dp),
@@ -296,7 +296,7 @@ class MainActivity : ComponentActivity() {
                         }
                         SmallAction("Expand") { fullscreen = true }
                     }
-                    val ratio = when (project.preferences.aspectRatio) { AspectRatio.LANDSCAPE -> 16f / 9f; AspectRatio.PORTRAIT -> 9f / 16f; AspectRatio.SQUARE -> 1f }
+                    val ratio = project.export.width.toFloat() / project.export.height
                     Box(Modifier.fillMaxWidth().padding(10.dp).background(Ink, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
                         VideoPreview(state.previewUri?.let(::listOf) ?: project.orderedSources.map { it.uri }, Modifier.fillMaxWidth().aspectRatio(ratio))
                     }

@@ -33,21 +33,62 @@ import java.util.UUID
 @Serializable enum class Platform { YOUTUBE, INSTAGRAM, TIKTOK, LINKEDIN }
 @Serializable enum class AspectRatio { LANDSCAPE, PORTRAIT, SQUARE }
 
-fun SourceMedia.detectedAspectRatio(): AspectRatio {
+data class DisplaySize(val width: Int, val height: Int) {
+    init { require(width > 0 && height > 0) }
+    val longSide: Int get() = maxOf(width, height)
+    val shortSide: Int get() = minOf(width, height)
+    val aspectRatio: Float get() = width.toFloat() / height
+}
+
+fun SourceMedia.displaySize(): DisplaySize {
     val normalizedRotation = ((rotation % 360) + 360) % 360
-    val quarterTurn = normalizedRotation == 90 || normalizedRotation == 270
-    val displayWidth = if (quarterTurn) height else width
-    val displayHeight = if (quarterTurn) width else height
-    val ratio = displayWidth.toFloat() / displayHeight.coerceAtLeast(1)
+    return if (normalizedRotation == 90 || normalizedRotation == 270) {
+        DisplaySize(height, width)
+    } else {
+        DisplaySize(width, height)
+    }
+}
+
+fun SourceMedia.detectedAspectRatio(): AspectRatio {
+    val displayed = displaySize()
+    val ratio = displayed.aspectRatio
     return when {
         ratio in .9f..1.1f -> AspectRatio.SQUARE
-        displayWidth > displayHeight -> AspectRatio.LANDSCAPE
+        displayed.width > displayed.height -> AspectRatio.LANDSCAPE
         else -> AspectRatio.PORTRAIT
     }
 }
 
-fun SourceMedia.sourceResolutionCeiling(): Pair<Int, Int> =
-    maxOf(width, height).coerceAtMost(3840) to minOf(width, height).coerceAtMost(2160)
+fun SourceMedia.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): DisplaySize {
+    require(maxLongSide > 0 && maxShortSide > 0)
+    val displayed = displaySize()
+    val square = displayed.width == displayed.height
+    val maxWidth = if (square) maxShortSide else if (displayed.width > displayed.height) maxLongSide else maxShortSide
+    val maxHeight = if (square) maxShortSide else if (displayed.height > displayed.width) maxLongSide else maxShortSide
+    return displayed.fitWithin(maxWidth, maxHeight)
+}
+
+private fun DisplaySize.fitWithin(maxWidth: Int, maxHeight: Int): DisplaySize {
+    val scale = minOf(1f, maxWidth.toFloat() / width, maxHeight.toFloat() / height)
+    fun even(value: Int): Int = if (value <= 2) value else value - value % 2
+    return DisplaySize(
+        even((width * scale).toInt()).coerceAtLeast(1),
+        even((height * scale).toInt()).coerceAtLeast(1)
+    )
+}
+
+fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): DisplaySize {
+    require(isNotEmpty())
+    val displayed = map(SourceMedia::displaySize)
+    val primary = displayed.first()
+    val square = primary.width == primary.height
+    val maxWidth = if (square) maxShortSide else if (primary.width > primary.height) maxLongSide else maxShortSide
+    val maxHeight = if (square) maxShortSide else if (primary.height > primary.width) maxLongSide else maxShortSide
+    return primary.fitWithin(
+        minOf(maxWidth, displayed.minOf(DisplaySize::width)),
+        minOf(maxHeight, displayed.minOf(DisplaySize::height))
+    )
+}
 @Serializable enum class Pace { RELAXED, NATURAL, TIGHT }
 @Serializable enum class VisualStyle { NATURAL, WARM, CLEAN, PUNCHY }
 @Serializable enum class MusicChoice { AUTOMATIC, USER_FILE, NONE }

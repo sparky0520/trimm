@@ -27,7 +27,7 @@ It does not contain rendered video.
 
 Preview uses the same coordinator with a smaller resolution and bitrate. Export uses the approved project settings.
 
-Source rotation determines portrait, landscape, or square output. Chat and platform names do not change it. Preview/export resolution is source resolution or lower; ctrlB does not upscale and pretend to add detail.
+Source rotation determines the displayed width, height, and exact output aspect. Chat and platform names do not change portrait, landscape, or square framing. Draft, preview, and final export use the same ceiling calculation: device limits may reduce the output, and mixed-source projects use the lowest per-axis source ceiling, but no output dimension exceeds the available displayed source pixels.
 
 ## Current limitation
 

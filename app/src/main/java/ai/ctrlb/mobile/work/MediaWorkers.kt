@@ -238,17 +238,17 @@ class ExportWorker(context: Context, params: WorkerParameters) : ProgressWorker(
             project.export.height,
             inputData.getLong("estimatedBytes", 0)
         )
-        val (width, height) = project.preferences.aspectRatio.outputSize(
+        val renderSize = project.orderedSources.renderSizeWithin(
             maxOf(capability.recommendedWidth, capability.recommendedHeight),
             minOf(capability.recommendedWidth, capability.recommendedHeight)
         )
         val renderProject = project.copy(export = project.export.copy(
-            width = width,
-            height = height,
+            width = renderSize.width,
+            height = renderSize.height,
             codec = if (capability.allow4k) project.export.codec else "video/avc",
             bitrate = if (capability.allow4k) project.export.bitrate else 16_000_000
         ))
-        progress(if (capability.allow4k) "export-4k" else "export-${height}p", 1)
+        progress(if (capability.allow4k) "export-4k" else "export-${renderSize.shortSide}p", 1)
         val output = java.io.File(applicationContext.filesDir, "exports/${project.id}.mp4")
         ExportCoordinator.export(applicationContext, renderProject, output)
         val values = ContentValues().apply {
@@ -288,10 +288,11 @@ class PreviewWorker(context: Context, params: WorkerParameters) : ProgressWorker
         }
         progress("preview", 5)
         val output = java.io.File(applicationContext.cacheDir, "previews/${prepared.id}-${prepared.revision}.mp4")
-        val previewLongSide = minOf(1280, maxOf(prepared.export.width, prepared.export.height))
-        val previewShortSide = minOf(720, minOf(prepared.export.width, prepared.export.height))
-        val (previewWidth, previewHeight) = prepared.preferences.aspectRatio.outputSize(previewLongSide, previewShortSide)
-        ExportCoordinator.export(applicationContext, prepared.copy(export = prepared.export.copy(width = previewWidth, height = previewHeight, codec = "video/avc", bitrate = 5_000_000)), output)
+        val previewSize = prepared.orderedSources.renderSizeWithin(
+            minOf(1280, maxOf(prepared.export.width, prepared.export.height)),
+            minOf(720, minOf(prepared.export.width, prepared.export.height))
+        )
+        ExportCoordinator.export(applicationContext, prepared.copy(export = prepared.export.copy(width = previewSize.width, height = previewSize.height, codec = "video/avc", bitrate = 5_000_000)), output)
         progress("complete", 100)
         Result.success(Data.Builder().putString("previewUri", Uri.fromFile(output).toString()).putString("warning", warning).build())
     }.getOrElse { error ->
@@ -306,9 +307,3 @@ private fun Throwable.detailedMessage(fallback: String): String =
         .distinct()
         .joinToString(" → ")
         .ifBlank { fallback }
-
-private fun AspectRatio.outputSize(longSide: Int, shortSide: Int): Pair<Int, Int> = when (this) {
-    AspectRatio.LANDSCAPE -> longSide to shortSide
-    AspectRatio.PORTRAIT -> shortSide to longSide
-    AspectRatio.SQUARE -> shortSide to shortSide
-}
