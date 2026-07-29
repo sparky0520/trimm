@@ -34,6 +34,9 @@ android {
         val plannerUrl = providers.gradleProperty("CTRLB_PLANNER_URL").orElse(
             backendUrl.takeIf { it.isNotEmpty() }?.let { "$it/v1/mobile/plan" } ?: ""
         ).get()
+        val agentRunsUrl = providers.gradleProperty("CTRLB_AGENT_RUNS_URL").orElse(
+            backendUrl.takeIf { it.isNotEmpty() }?.let { "$it/v1/agent/runs" } ?: ""
+        ).get()
         val transcriptionUrl = providers.gradleProperty("CTRLB_TRANSCRIPTION_URL").orElse(
             backendUrl.takeIf { it.isNotEmpty() }?.let { "$it/v1/transcribe" } ?: ""
         ).get()
@@ -42,6 +45,7 @@ android {
             .orElse(providers.environmentVariable("CTRLB_CLERK_PUBLISHABLE_KEY"))
             .orElse(rootLocalEnv["CTRLB_CLERK_PUBLISHABLE_KEY"] ?: rootLocalEnv["VITE_CLERK_PUBLISHABLE_KEY"] ?: "").get()
         buildConfigField("String", "PLANNER_URL", "\"${plannerUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+        buildConfigField("String", "AGENT_RUNS_URL", "\"${agentRunsUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "TRANSCRIPTION_URL", "\"${transcriptionUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "AUDIO_CATALOG_URL", "\"${catalogUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "CLERK_PUBLISHABLE_KEY", "\"${clerkPublishableKey.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
