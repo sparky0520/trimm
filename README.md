@@ -10,6 +10,8 @@ This public repository stores ctrlB desktop release assets and hosts the
 official download webpage through GitHub Pages.
 
 - Website: <https://sparky0520.github.io/ctrlb-releases/>
+- Visual system explainer:
+  <https://sparky0520.github.io/ctrlb-releases/how-video-editing-works.html>
 - Latest Windows installer:
   <https://github.com/sparky0520/ctrlb-releases/releases/latest/download/ctrlb-Setup-Windows.exe>
 
