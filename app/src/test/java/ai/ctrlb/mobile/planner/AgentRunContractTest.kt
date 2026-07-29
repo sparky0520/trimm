@@ -1,8 +1,16 @@
 package ai.ctrlb.mobile.planner
 
 import ai.ctrlb.mobile.layer1.*
+import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AgentRunContractTest {
@@ -23,4 +31,104 @@ class AgentRunContractTest {
         assertEquals("analyzing", run.events.single().type)
         assertEquals("edit_program", run.decision["type"]?.toString()?.trim('"'))
     }
+
+    @Test fun `one run persists safe activity through iterative evidence passes`() = runTest {
+        val request = request()
+        val calls = mutableListOf<List<String>>()
+        val responses = ArrayDeque(listOf(
+            evidenceRun(1, "job-1", reused = false),
+            evidenceRun(3, "job-2", reused = true),
+            terminalRun()
+        ))
+        val gateway = object : AgentRunGateway {
+            override suspend fun start(request: AgentRunRequest) = responses.removeFirst()
+            override suspend fun continueWith(runId: String, evidenceJobIds: List<String>): AgentRun {
+                assertEquals("run-1", runId)
+                calls += evidenceJobIds
+                return responses.removeFirst()
+            }
+        }
+        val fulfilled = mutableListOf<String>()
+        val persisted = mutableListOf<PersistedAgentRun>()
+        val final = AgentRunCoordinator(gateway, AgentEvidenceFulfiller { job ->
+            fulfilled += job.id
+            job.id
+        }).run(request) { persisted += it }
+
+        assertEquals(listOf("job-1"), fulfilled)
+        assertEquals(listOf(listOf("job-1"), listOf("job-2")), calls)
+        assertEquals(AgentRunStatus.PROPOSAL_READY, final.status)
+        assertEquals(listOf(1, 2, 3, 4, 5), final.events.map { it.sequence })
+        assertEquals(listOf("job-1", "job-2"), final.fulfilledEvidenceJobIds)
+        assertTrue(persisted.size >= 5)
+        assertTrue(persisted.all { it.runId == "run-1" })
+    }
+
+    @Test fun `coordinator rejects unsafe activity stale state and changed continuation ids`() = runTest {
+        val request = request()
+        suspend fun rejected(run: AgentRun) {
+            assertThrows(IllegalArgumentException::class.java) {
+                kotlinx.coroutines.runBlocking {
+                    AgentRunCoordinator(object : AgentRunGateway {
+                        override suspend fun start(request: AgentRunRequest) = run
+                        override suspend fun continueWith(runId: String, evidenceJobIds: List<String>) = terminalRun()
+                    }, AgentEvidenceFulfiller { it.id }).run(request) {}
+                }
+            }
+        }
+        rejected(terminalRun().copy(projectRevision = 99))
+        rejected(terminalRun().copy(events = listOf(event(1, "provider_thought", "hidden reasoning"))))
+        rejected(terminalRun().copy(events = listOf(event(1, "analyzing", "x".repeat(501)))))
+        rejected(terminalRun().copy(events = listOf(
+            event(2, "analyzing", "Second"),
+            event(1, "started", "First")
+        )))
+    }
+
+    private fun request() = AgentRunRequest(
+        projectId = "project-1", deviceSessionId = "device-1", projectRevision = 4,
+        intent = "Make this publishable",
+        sources = listOf(Layer2SourceInventory("source-1", "a".repeat(64), 60_000, 1920, 1080, true)),
+        mediaIndex = RequestShapedMediaIndex(
+            indexId = "index-1", requestScope = MediaIndexScope.BROAD_EDITORIAL,
+            generatedAtEpochMs = 1, segments = emptyList(),
+            selections = listOf(MediaIndexSelection(
+                "selection-1", "source-1", 0, 1_000,
+                listOf(SelectionReason.REPRESENTATIVE_COVERAGE),
+                derivativeKinds = listOf(DerivativeKind.FRAME)
+            ))
+        )
+    )
+
+    private fun evidenceRun(sequence: Int, jobId: String, reused: Boolean) = AgentRun(
+        1, "run-1", "project-1", 4, AgentRunStatus.WAITING_FOR_EVIDENCE,
+        listOf(
+            event(sequence, "evidence_requested", "I need one precise range."),
+            event(sequence + 1, "analyzing", "Preparing the requested evidence.")
+        ),
+        buildJsonObject {
+            put("type", "evidence_request")
+            putJsonArray("jobs") {
+                add(buildJsonObject {
+                    put("id", jobId); put("sourceId", "source-1"); put("type", "audio")
+                    put("purpose", "Measure speech"); put("acceptedFormat", "audio/mp4")
+                    put("range", buildJsonObject { put("startMs", 1_000); put("endMs", 2_000) })
+                    put("maximumBytes", 100_000); put("maximumDurationMs", 1_000)
+                    put("expiresAt", "2026-07-29T16:00:00Z"); put("reused", reused)
+                })
+            }
+        }
+    )
+
+    private fun terminalRun() = AgentRun(
+        1, "run-1", "project-1", 4, AgentRunStatus.PROPOSAL_READY,
+        listOf(event(5, "proposal_ready", "The proposal is ready to preview.")),
+        buildJsonObject {
+            put("type", "edit_program"); put("expectedRevision", 4)
+            put("summary", "A grounded first cut."); putJsonArray("operations") {}
+        }
+    )
+
+    private fun event(sequence: Int, type: String, message: String) =
+        AgentActivityEvent(sequence, type, message, "2026-07-29T12:00:00Z")
 }

@@ -1,6 +1,7 @@
 package ai.ctrlb.mobile.domain
 
 import ai.ctrlb.mobile.layer1.RequestShapedMediaIndex
+import ai.ctrlb.mobile.planner.PersistedAgentRun
 import ai.ctrlb.mobile.evidence.TakeGroup
 import ai.ctrlb.mobile.evidence.EditorialProfile
 import ai.ctrlb.mobile.evidence.StoryGraph
@@ -92,6 +93,7 @@ fun SourceMedia.sourceResolutionCeiling(): Pair<Int, Int> =
     val editorialProfile: EditorialProfile? = null,
     val storyGraph: StoryGraph? = null,
     val mediaIndex: RequestShapedMediaIndex? = null,
+    val agentRun: PersistedAgentRun? = null,
     val editorialPlan: StagedEditorialPlan? = null,
     val pendingProposal: PendingEditorialProposal? = null,
     val revisionConversation: List<EditorialConversationTurn> = emptyList(),

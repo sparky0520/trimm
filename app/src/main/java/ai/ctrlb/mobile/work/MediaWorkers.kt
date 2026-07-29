@@ -11,6 +11,9 @@ import ai.ctrlb.mobile.planner.*
 import ai.ctrlb.mobile.evidence.*
 import ai.ctrlb.mobile.layer1.MediaIndexRequestPlanner
 import ai.ctrlb.mobile.layer1.RequestShapedMediaIndexBuilder
+import ai.ctrlb.mobile.media.AndroidDerivativeWriter
+import ai.ctrlb.mobile.media.DerivativeAuthorization
+import ai.ctrlb.mobile.media.SelectiveDerivativePreparer
 import android.net.Uri
 import android.content.Context
 import androidx.work.CoroutineWorker
@@ -122,7 +125,49 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
             revision = project.revision + 1
         )
         store.save(analyzed)
-        if (BuildConfig.PLANNER_URL.isNotBlank()) {
+        if (BuildConfig.AGENT_RUNS_URL.isNotBlank()) {
+            progress("agent-run", 94)
+            val deviceSessionId = "android-${project.id}"
+            val uploadClient = DerivativeUploadClient(
+                BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken, project.id, deviceSessionId
+            )
+            val preparer = SelectiveDerivativePreparer(
+                java.io.File(applicationContext.cacheDir, "agent-derivatives"),
+                AndroidDerivativeWriter(applicationContext)
+            )
+            val coordinator = AgentRunCoordinator(
+                AgentRunClient(BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken),
+                AgentEvidenceFulfiller { job ->
+                    val derivative = preparer.prepare(DerivativeAuthorization(job), project.orderedSources)
+                    try { uploadClient.upload(derivative) } finally { java.io.File(derivative.localPath).delete() }
+                }
+            )
+            runCatching {
+                coordinator.run(
+                    AgentRunRequest(
+                        projectId = project.id,
+                        deviceSessionId = deviceSessionId,
+                        projectRevision = analyzed.revision,
+                        intent = initialPrompt,
+                        sources = project.orderedSources.map { source ->
+                            Layer2SourceInventory(
+                                source.fingerprint, source.fingerprint, source.durationMs,
+                                source.width, source.height, source.hasAudio
+                            )
+                        },
+                        mediaIndex = requireNotNull(analyzed.analysis.mediaIndex)
+                    )
+                ) { snapshot ->
+                    analyzed = analyzed.copy(analysis = analyzed.analysis.copy(agentRun = snapshot))
+                    store.save(analyzed)
+                }
+            }.onFailure {
+                analyzed = analyzed.copy(analysis = analyzed.analysis.copy(
+                    warnings = analyzed.analysis.warnings + "Agent run could not continue. Retry when the connection is available."
+                ))
+                store.save(analyzed)
+            }
+        } else if (BuildConfig.PLANNER_URL.isNotBlank()) {
             progress("planner", 94)
             val planning = runCatching {
                 val prompt = initialPrompt

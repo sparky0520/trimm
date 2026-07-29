@@ -312,6 +312,13 @@ class MainActivity : ComponentActivity() {
                     AssistantChatBubble { Text(turn.response, color = CreamRaised, lineHeight = 20.sp) }
                 }
             }
+            project.analysis.agentRun?.let { run ->
+                items(run.events, key = { "agent-${run.runId}-${it.sequence}" }) { event ->
+                    AssistantChatBubble(accent = Lavender) {
+                        Text(event.message, color = CreamRaised, lineHeight = 20.sp)
+                    }
+                }
+            }
             if (project.analysis.completedAtEpochMs != null) {
                 item { FindingsChatBubble(read) }
             }
