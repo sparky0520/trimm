@@ -7,6 +7,7 @@ import ai.ctrlb.mobile.domain.WizardPreferences
 import ai.ctrlb.mobile.domain.ResolvedCreatorPreferences
 import ai.ctrlb.mobile.evidence.EvidencePacket
 import ai.ctrlb.mobile.evidence.EvidenceRetrievalQuery
+import ai.ctrlb.mobile.layer1.RequestShapedMediaIndex
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.json.Json
@@ -96,6 +97,7 @@ class PlannerClient(private val endpoint: String, private val accessToken: suspe
     val projectRevision: Long,
     val intent: String,
     val sources: List<Layer2SourceInventory>,
+    val mediaIndex: RequestShapedMediaIndex,
     val evidenceJobIds: List<String> = emptyList(),
     val existingOperations: List<EditOperation> = emptyList(),
     val budgets: Layer2Budgets = Layer2Budgets()
