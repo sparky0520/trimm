@@ -113,9 +113,9 @@ function validateInventory(value) {
   return inventory;
 }
 
-function evidenceFor(inventory, principal, derivativeJobs) {
-  return inventory.evidenceJobIds.map((jobId) => {
-    const job = derivativeJobs.read(jobId, principal, {
+async function evidenceFor(inventory, principal, derivativeJobs) {
+  return Promise.all(inventory.evidenceJobIds.map(async (jobId) => {
+    const job = await derivativeJobs.read(jobId, principal, {
       projectId: inventory.projectId,
       deviceSessionId: inventory.deviceSessionId,
     });
@@ -130,7 +130,7 @@ function evidenceFor(inventory, principal, derivativeJobs) {
       value: job.result.value,
       provenance: job.result.provenance,
     };
-  });
+  }));
 }
 
 function validateEvidenceRequest(decision, inventory) {
@@ -238,7 +238,7 @@ class Layer2Orchestrator {
 
   async orchestrate(principal, payload) {
     const inventory = validateInventory(payload);
-    const evidence = evidenceFor(inventory, principal, this.derivativeJobs);
+    const evidence = await evidenceFor(inventory, principal, this.derivativeJobs);
     const raw = await this.decide({
       systemPolicy: SYSTEM_POLICY,
       inventory,
@@ -288,7 +288,7 @@ class Layer2Orchestrator {
     } catch (error) {
       for (const job of jobs.filter((item) => !item.reused)) {
         try {
-          this.derivativeJobs.cancel(job.id, principal, {
+          await this.derivativeJobs.cancel(job.id, principal, {
             projectId: inventory.projectId,
             deviceSessionId: inventory.deviceSessionId,
           });

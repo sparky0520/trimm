@@ -18,6 +18,7 @@ const { PostgresBillingStore } = require('./postgres-billing-store.cjs');
 const { createPaddleWebhookVerifier } = require('./paddle-billing.cjs');
 const { GooglePlayPurchaseVerifier } = require('./google-play-billing.cjs');
 const { DerivativeJobs } = require('./derivative-jobs.cjs');
+const { PostgresDerivativeJobs } = require('./postgres-derivative-jobs.cjs');
 const { Layer2Orchestrator } = require('./layer2-orchestrator.cjs');
 const { AgentRuns } = require('./agent-runs.cjs');
 const { PostgresAgentRunStore, VolatileAgentRunStore } = require('./agent-run-store.cjs');
@@ -49,7 +50,12 @@ const billing = new BillingService({
     paddle: createPaddleWebhookVerifier({ secret: process.env.CTRLB_PADDLE_WEBHOOK_SECRET }),
   },
 });
-const derivativeJobs = new DerivativeJobs({ accessFor: (userId) => billing.accessFor(userId) });
+const derivativeJobs = process.env.SUPABASE_DB_URL
+  ? new PostgresDerivativeJobs({
+      databaseUrl: process.env.SUPABASE_DB_URL,
+      accessFor: (userId) => billing.accessFor(userId),
+    })
+  : new DerivativeJobs({ accessFor: (userId) => billing.accessFor(userId) });
 const layer2Orchestrator = new Layer2Orchestrator({
   derivativeJobs,
   decide: createGeminiDecisionProvider(),
@@ -60,7 +66,11 @@ const agentRuns = new AgentRuns({
     ? new PostgresAgentRunStore({ databaseUrl: process.env.SUPABASE_DB_URL })
     : new VolatileAgentRunStore(),
 });
-const derivativeCleanupTimer = setInterval(() => derivativeJobs.cleanup(), 15 * 60 * 1000);
+const derivativeCleanupTimer = setInterval(() => {
+  Promise.resolve(derivativeJobs.cleanup()).catch((error) => {
+    console.error(JSON.stringify({ event: 'derivative_cleanup_failed', message: error.message }));
+  });
+}, 15 * 60 * 1000);
 derivativeCleanupTimer.unref();
 const googlePlay = process.env.CTRLB_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
   ? new GooglePlayPurchaseVerifier()
@@ -285,7 +295,7 @@ const server = http.createServer(async (request, response) => {
   const derivativeMatch = requestUrl.pathname.match(/^\/v1\/derivatives\/jobs\/([0-9a-f-]{36})(\/complete)?$/i);
   if (request.method === 'POST' && requestUrl.pathname === '/v1/derivatives/jobs') {
     try {
-      derivativeJobs.cleanup();
+      await derivativeJobs.cleanup();
       const authorized = await derivativeJobs.authorize(principal, await collect(request, 16 * 1024));
       return json(response, authorized.reused ? 200 : 201, { ...derivativeView(authorized.job), reused: authorized.reused, chunkSize: 4 * 1024 * 1024, requestId });
     } catch (error) {
@@ -293,11 +303,11 @@ const server = http.createServer(async (request, response) => {
     }
   }
   if (request.method === 'GET' && requestUrl.pathname === '/v1/derivatives/activity') {
-    return json(response, 200, { activity: derivativeJobs.listActivity(principal, requestUrl.searchParams.get('projectId')), requestId });
+    return json(response, 200, { activity: await derivativeJobs.listActivity(principal, requestUrl.searchParams.get('projectId')), requestId });
   }
   if (derivativeMatch && request.method === 'HEAD' && !derivativeMatch[2]) {
     try {
-      const job = derivativeJobs.read(derivativeMatch[1], principal, derivativeContext(request));
+      const job = await derivativeJobs.read(derivativeMatch[1], principal, derivativeContext(request));
       response.writeHead(204, { 'upload-offset': job.offset, 'upload-expires': new Date(job.expiresAt).toISOString(), 'cache-control': 'no-store' });
       return response.end();
     } catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message, code: error?.code, requestId }); }
@@ -311,12 +321,12 @@ const server = http.createServer(async (request, response) => {
     }
   }
   if (derivativeMatch && request.method === 'DELETE' && !derivativeMatch[2]) {
-    try { derivativeJobs.delete(derivativeMatch[1], principal, derivativeContext(request)); response.writeHead(204); return response.end(); }
+    try { await derivativeJobs.delete(derivativeMatch[1], principal, derivativeContext(request)); response.writeHead(204); return response.end(); }
     catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message, code: error?.code, requestId }); }
   }
   if (derivativeMatch && request.method === 'POST' && derivativeMatch[2]) {
     try {
-      const completed = derivativeJobs.complete(derivativeMatch[1], principal, await collect(request, 4096), derivativeContext(request));
+      const completed = await derivativeJobs.complete(derivativeMatch[1], principal, await collect(request, 4096), derivativeContext(request));
       return json(response, 200, {
         ...derivativeView(completed.job), reused: completed.reused,
         ...(completed.result ? { result: completed.result } : {}), requestId,

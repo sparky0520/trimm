@@ -33,12 +33,12 @@ often as policy permits; there is no evidence-pass counter.
 Production run state is stored in the private Postgres schema. Every transition
 uses owner-scoped optimistic versioning, so another backend instance can read
 and continue the same run without silently overwriting concurrent activity.
-Development without `SUPABASE_DB_URL` uses a process-local store only.
-
-Broader expiry, deletion, evidence-cache reuse, and operational recovery remain
-part of the durable storage production track. Client transport and models
-exist, while media extraction/upload and chat integration remain client-owned
-steps.
+Derivative job metadata, resumable bytes, activity, usage and preserved results
+also use private transaction-locked Postgres storage in production. Versioned
+provider-context and media-index caches require exact owner, source, range,
+transform, model and analyzer identity; they retain provenance and cost/hit
+metrics and support overlap invalidation, expiry and immediate owner deletion.
+Development without `SUPABASE_DB_URL` uses process-local stores only.
 
 The cloud requires `GEMINI_API_KEY` and pins `GEMINI_MODEL` to
 `gemini-3.6-flash`. Legacy Kimi environment variables continue to serve only

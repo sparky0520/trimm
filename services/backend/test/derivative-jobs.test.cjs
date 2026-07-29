@@ -7,6 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { Readable } = require('node:stream');
 const { DerivativeJobs } = require('../server/derivative-jobs.cjs');
+const { hydrate, payloadFor } = require('../server/postgres-derivative-jobs.cjs');
 
 const principal = Object.freeze({ id: 'user-a', scopes: ['derivatives:create'], authentication: 'oidc' });
 const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(20)]);
@@ -203,4 +204,27 @@ test('content reuse is partitioned by owner and project', async (t) => {
   const completed = jobs.complete(second.id, other, { durationMs: 1000 });
   assert.equal(completed.reused, false);
   assert.notEqual(second.contentKey, first.contentKey);
+});
+
+test('serialized durable state resumes a partial upload after process restart', async (t) => {
+  const first = fixture();
+  const secondDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ctrlb-derivative-restart-'));
+  t.after(() => fs.rmSync(first.directory, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(secondDirectory, { recursive: true, force: true }));
+  const job = (await first.jobs.authorize(principal, authorization())).job;
+  await first.jobs.append(job.id, principal, 0, Readable.from(mp3.subarray(0, 8)));
+
+  const restarted = new DerivativeJobs({
+    directory: secondDirectory,
+    now: first.jobs.now,
+    ttlMs: first.jobs.ttlMs,
+    retentionMs: first.jobs.retentionMs,
+    accessFor: first.jobs.accessFor,
+  });
+  hydrate(restarted, structuredClone(payloadFor(first.jobs)));
+  fs.copyFileSync(first.jobs.mediaPath(job.id), restarted.mediaPath(job.id));
+
+  assert.equal(restarted.read(job.id, principal).offset, 8);
+  await restarted.append(job.id, principal, 8, Readable.from(mp3.subarray(8)));
+  assert.equal(restarted.complete(job.id, principal, { durationMs: 1000 }).job.status, 'completed');
 });
