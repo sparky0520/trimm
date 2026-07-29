@@ -44,12 +44,14 @@ test('Kotlin and TypeScript artifacts are deterministic and share the same fixtu
 test('generated models expose the fixture discriminators and all canonical operation names', () => {
   const fixture = readJson('contracts/fixtures/agent-contracts.v1.json');
   const ts = fs.readFileSync(path.join(root, 'contracts', 'generated', 'typescript', 'contracts.v1.ts'), 'utf8');
+  const runtime = fs.readFileSync(path.join(root, 'contracts', 'generated', 'typescript', 'contracts.v1.js'), 'utf8');
   const kt = fs.readFileSync(path.join(root, 'contracts', 'generated', 'kotlin', 'ContractsV1.kt'), 'utf8');
 
   assert.equal(fixture.evidenceRequest.type, 'evidence_request');
   assert.equal(fixture.editProgram.type, 'edit_program');
   assert.equal(fixture.agentRun.decision.type, 'edit_program');
   assert.match(ts, /type AgentDecisionV1/);
+  assert.match(runtime, /SUPPORTED_CONTRACT_VERSIONS/);
   assert.match(kt, /sealed interface AgentDecisionV1/);
   assert.match(kt, /data class EditProgramV1[\s\S]*: AgentDecisionV1/);
   for (const operation of [

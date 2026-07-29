@@ -27,6 +27,9 @@ const inventory = Object.freeze({
     grantedAt: '2026-07-29T00:00:00.000Z',
     disclosureVersion: 'media-v1',
   },
+  supportedContractVersions: {
+    agentRuns: [1], activityEvents: [1], evidenceRequests: [1], editPrograms: [1],
+  },
 });
 
 function fixture(decide) {
@@ -46,6 +49,13 @@ test('compact inventories reject cloud-private fields and source media paths', (
   assert.throws(() => validateInventory({ ...inventory, tools: [{ name: 'ffmpeg' }] }), (error) => error.code === 'cloud_boundary_violation');
   assert.throws(() => validateInventory({ ...inventory, sources: [{ ...inventory.sources[0], sourceUri: 'file:///private/video.mp4' }] }),
     (error) => error.code === 'cloud_boundary_violation');
+});
+
+test('agent sessions require a mutually supported generated contract set', () => {
+  assert.throws(() => validateInventory({
+    ...inventory,
+    supportedContractVersions: { ...inventory.supportedContractVersions, editPrograms: [2] },
+  }), (error) => error.code === 'contract_version_not_supported' && error.status === 406);
 });
 
 test('media indexes stay request-shaped and cannot invent editorial labels', () => {

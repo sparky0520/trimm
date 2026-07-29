@@ -59,6 +59,12 @@ function rejectPrivateOrExecutable(value) {
 
 function validateInventory(value) {
   if (!value || typeof value !== 'object') throw orchestrationError('Invalid project inventory.');
+  for (const name of ['agentRuns', 'activityEvents', 'evidenceRequests', 'editPrograms']) {
+    if (!Array.isArray(value.supportedContractVersions?.[name]) ||
+        !value.supportedContractVersions[name].includes(1)) {
+      throw orchestrationError('No mutually supported agent contract version.', 406, 'contract_version_not_supported');
+    }
+  }
   rejectPrivateOrExecutable(value);
   const inventory = {
     projectId: boundedString(value.projectId, 'project ID'),
@@ -77,6 +83,9 @@ function validateInventory(value) {
       ? value.evidenceJobIds.slice(0, 100).map((id) => boundedString(id, 'evidence job ID', /^[0-9a-f-]{36}$/i))
       : [],
     existingOperations: Array.isArray(value.existingOperations) ? value.existingOperations.slice(0, 200) : [],
+    supportedContractVersions: {
+      agentRuns: [1], activityEvents: [1], evidenceRequests: [1], editPrograms: [1],
+    },
   };
   if (value.mediaConsent?.mode !== 'selective_analysis' ||
       typeof value.mediaConsent.grantedAt !== 'string' || !Number.isFinite(Date.parse(value.mediaConsent.grantedAt)) ||
