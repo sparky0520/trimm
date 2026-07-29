@@ -20,6 +20,7 @@ const { GooglePlayPurchaseVerifier } = require('./google-play-billing.cjs');
 const { DerivativeJobs } = require('./derivative-jobs.cjs');
 const { Layer2Orchestrator } = require('./layer2-orchestrator.cjs');
 const { AgentRuns } = require('./agent-runs.cjs');
+const { PostgresAgentRunStore, VolatileAgentRunStore } = require('./agent-run-store.cjs');
 const { createGeminiDecisionProvider } = require('./gemini-agent.cjs');
 const plannerCore = require('./planner-core.cjs');
 
@@ -38,7 +39,7 @@ uploadCleanupTimer.unref();
 const authentication = authenticationFromEnvironment();
 const rateLimiter = new IdentityRateLimiter({ limit: Number(process.env.CTRLB_RATE_LIMIT_PER_MINUTE) || 120 });
 if (process.env.NODE_ENV === 'production' && !process.env.SUPABASE_DB_URL) {
-  throw new Error('Production billing database is not configured.');
+  throw new Error('Production billing database is not configured; agent run persistence also requires it.');
 }
 const billing = new BillingService({
   store: process.env.SUPABASE_DB_URL
@@ -53,7 +54,12 @@ const layer2Orchestrator = new Layer2Orchestrator({
   derivativeJobs,
   decide: createGeminiDecisionProvider(),
 });
-const agentRuns = new AgentRuns({ orchestrator: layer2Orchestrator });
+const agentRuns = new AgentRuns({
+  orchestrator: layer2Orchestrator,
+  store: process.env.SUPABASE_DB_URL
+    ? new PostgresAgentRunStore({ databaseUrl: process.env.SUPABASE_DB_URL })
+    : new VolatileAgentRunStore(),
+});
 const derivativeCleanupTimer = setInterval(() => derivativeJobs.cleanup(), 15 * 60 * 1000);
 derivativeCleanupTimer.unref();
 const googlePlay = process.env.CTRLB_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
@@ -397,7 +403,7 @@ const server = http.createServer(async (request, response) => {
   }
   const agentRunMatch = requestUrl.pathname.match(/^\/v1\/agent\/runs\/([0-9a-f-]{36})$/i);
   if (request.method === 'GET' && agentRunMatch) {
-    try { return json(response, 200, agentRuns.read(principal, agentRunMatch[1])); }
+    try { return json(response, 200, await agentRuns.read(principal, agentRunMatch[1])); }
     catch (error) {
       return json(response, Number.isInteger(error?.status) ? error.status : 404, {
         error: error?.message || 'Agent run not found', code: error?.code || 'agent_run_not_found', requestId,

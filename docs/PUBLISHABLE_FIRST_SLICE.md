@@ -28,12 +28,17 @@ often as policy permits; there is no evidence-pass counter.
 
 `GET /v1/agent/runs/{runId}` returns the current run snapshot.
 
-## Current boundary
+## Persistence boundary
 
-This slice locks the contract and executable loop. Run storage is currently
-process-local and must move to the durable store before production. Client
-transport and models exist, while media extraction/upload and chat integration
-remain the next client-owned steps.
+Production run state is stored in the private Postgres schema. Every transition
+uses owner-scoped optimistic versioning, so another backend instance can read
+and continue the same run without silently overwriting concurrent activity.
+Development without `SUPABASE_DB_URL` uses a process-local store only.
+
+Broader expiry, deletion, evidence-cache reuse, and operational recovery remain
+part of the durable storage production track. Client transport and models
+exist, while media extraction/upload and chat integration remain client-owned
+steps.
 
 The cloud requires `GEMINI_API_KEY` and pins `GEMINI_MODEL` to
 `gemini-3.6-flash`. Legacy Kimi environment variables continue to serve only

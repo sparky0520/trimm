@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { VolatileAgentRunStore } = require('./agent-run-store.cjs');
 
 const STATUS_FOR = Object.freeze({
   evidence_request: 'waiting_for_evidence',
@@ -17,11 +18,11 @@ const EVENT_FOR = Object.freeze({
 });
 
 class AgentRuns {
-  constructor({ orchestrator, now = () => new Date(), id = () => crypto.randomUUID() }) {
+  constructor({ orchestrator, store = new VolatileAgentRunStore(), now = () => new Date(), id = () => crypto.randomUUID() }) {
     this.orchestrator = orchestrator;
+    this.store = store;
     this.now = now;
     this.id = id;
-    this.runs = new Map();
   }
 
   event(run, type, message) {
@@ -46,7 +47,7 @@ class AgentRuns {
   }
 
   async start(principal, inventory) {
-    const run = {
+    let run = {
       id: this.id(),
       ownerId: principal.id,
       projectId: inventory.projectId,
@@ -59,22 +60,24 @@ class AgentRuns {
     this.event(run, 'started', 'Starting a request-shaped video edit.');
     this.event(run, 'index_received', 'The local media index is ready; original source media stays local.');
     this.event(run, 'analyzing', 'Reviewing the selected ranges for a publishable first cut.');
-    this.runs.set(run.id, run);
+    run = await this.store.create(run);
     try {
       run.decision = await this.orchestrator.orchestrate(principal, inventory);
       run.status = STATUS_FOR[run.decision.type];
       this.event(run, ...EVENT_FOR[run.decision.type]);
+      run = await this.store.save(run, run.stateVersion);
     } catch (error) {
       run.status = 'failed';
       run.decision = { type: 'fallback', reason: 'The analysis could not be completed.' };
       this.event(run, 'failed', 'The analysis stopped safely and can be retried.');
+      try { run = await this.store.save(run, run.stateVersion); } catch {}
       throw Object.assign(error, { run: this.view(run) });
     }
     return this.view(run);
   }
 
   async continue(principal, runId, update) {
-    const run = this.owned(principal, runId);
+    let run = await this.owned(principal, runId);
     if (run.status !== 'waiting_for_evidence') {
       throw Object.assign(new Error('Agent run is not waiting for evidence.'), { status: 409, code: 'agent_run_not_waiting' });
     }
@@ -85,29 +88,32 @@ class AgentRuns {
     run.inventory = { ...run.inventory, evidenceJobIds: [...new Set([...(run.inventory.evidenceJobIds || []), ...evidenceJobIds])] };
     this.event(run, 'evidence_received', 'The requested evidence is ready and attached to this run.');
     this.event(run, 'analyzing', 'Continuing the same edit with the new evidence.');
+    run = await this.store.save(run, run.stateVersion);
     try {
       run.decision = await this.orchestrator.orchestrate(principal, run.inventory);
       run.status = STATUS_FOR[run.decision.type];
       this.event(run, ...EVENT_FOR[run.decision.type]);
+      run = await this.store.save(run, run.stateVersion);
     } catch (error) {
       run.status = 'failed';
       run.decision = { type: 'fallback', reason: 'The analysis could not be completed.' };
       this.event(run, 'failed', 'The analysis stopped safely and can be retried.');
+      try { run = await this.store.save(run, run.stateVersion); } catch {}
       throw Object.assign(error, { run: this.view(run) });
     }
     return this.view(run);
   }
 
-  owned(principal, runId) {
-    const run = this.runs.get(runId);
-    if (!run || run.ownerId !== principal.id) {
+  async owned(principal, runId) {
+    const run = await this.store.read(principal.id, runId);
+    if (!run) {
       throw Object.assign(new Error('Agent run not found.'), { status: 404, code: 'agent_run_not_found' });
     }
     return run;
   }
 
-  read(principal, runId) {
-    return this.view(this.owned(principal, runId));
+  async read(principal, runId) {
+    return this.view(await this.owned(principal, runId));
   }
 }
 
