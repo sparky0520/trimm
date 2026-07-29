@@ -319,7 +319,7 @@ class MainActivity : ComponentActivity() {
                 item { ProposalChatBubble(review, applyProposal, rejectProposal) }
             }
             state.jobMessage?.let { message -> item { AssistantChatBubble(accent = Lavender) { Text(message, color = CreamRaised) } } }
-            state.capabilityMessage?.let { message -> item { AssistantChatBubble(accent = Coral) { Text("Export note: $message", color = CreamRaised) } } }
+            state.capabilityMessage?.let { message -> item { AssistantChatBubble(accent = Coral) { Text("Device capability: $message", color = CreamRaised) } } }
             if (project.analysis.revisionConversation.isEmpty() && project.analysis.completedAtEpochMs == null) {
                 item { AssistantChatBubble(accent = Lavender) { Text("I’m reading your clips, transcribing the speech, and looking for the strongest cut.", color = CreamRaised) } }
             }

@@ -96,6 +96,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         // Export may preserve or reduce source resolution, never invent extra detail by upscaling.
         val (requestedLongSide, requestedShortSide) = source.sourceResolutionCeiling()
         val capability = DeviceCapability.evaluate(getApplication(), requestedLongSide, requestedShortSide)
+        val capabilityReport = DeviceCapability.report(getApplication())
         val (exportWidth, exportHeight) = when (preferences.aspectRatio) {
             AspectRatio.LANDSCAPE -> capability.recommendedWidth to capability.recommendedHeight
             AspectRatio.PORTRAIT -> capability.recommendedHeight to capability.recommendedWidth
@@ -103,7 +104,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
         val project = MobileProject(title = "Talking head edit", source = source, sources = sources, preferences = preferences, creatorPreferences = current.creatorPreferences, analysis = Analysis(words = words, lowConfidenceFumbles = candidates.filter { it.confidence < .93f }), operations = operations,
             export = ExportSettings(exportWidth, exportHeight, if (capability.allow4k) "video/hevc" else "video/avc", if (capability.allow4k) 45_000_000 else 16_000_000))
-        mutable.value = current.copy(project = project, preferences = preferences, capabilityMessage = capability.reasons.takeIf { it.isNotEmpty() }?.joinToString(". "), jobMessage = "Reading your clips and preparing a proposal…")
+        mutable.value = current.copy(project = project, preferences = preferences, capabilityMessage = capabilityReport.userFacingSummary(), jobMessage = "Reading your clips and preparing a proposal…")
         viewModelScope.launch { store.save(project) }
         val request = OneTimeWorkRequestBuilder<AnalysisWorker>().setInputData(
             Data.Builder().putString("projectId", project.id).putString("prompt", brief).build()

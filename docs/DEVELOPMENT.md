@@ -25,6 +25,20 @@ The accepted cloud versions are pinned in
 `app/src/test/resources/contracts/cloud-contract.lock.json`. Do not add a
 handwritten cloud field without a matching canonical cloud contract change.
 
+## Device capability tiers
+
+At import time, the app measures API level, 64-bit ABI support, total RAM,
+free storage, H.264/HEVC decode and encode workloads, current thermal state,
+and any recorded Layer 1 model latency. It reports one provisional tier:
+minimum supported, standard editing, advanced local perception, or
+high-resolution export. Each downgraded feature says whether it will use
+Layer 2, reduce resolution, or remain unavailable. An NPU is not required.
+
+The thresholds and explanations are unit tested in `DeviceCapabilityTest`.
+They remain provisional until issue #7 records sustained physical-device
+thermal and latency evidence; that evidence is required before publishing
+final store requirements.
+
 ## Definition of done
 
 - process recreation and offline/error states are considered;
