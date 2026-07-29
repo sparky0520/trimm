@@ -7,11 +7,12 @@ Android / Desktop                         ctrlB cloud
 -----------------                         -----------
 Import media
 Read metadata and rotation
-Create upload or proxy  ----------------> Media asset service
+Build local media index
+Select request-relevant ranges --------> Media asset service
                                             |
 Chat request ----------------------------> Agent run
                                             |
-                                     Multimodal model watches video
+                                     Multimodal model watches selected ranges
                                             |
                                      Iterative specialist tools
                                      - seek/watch ranges
@@ -40,14 +41,14 @@ it is not the target direct-video agent.
 
 ## Media modes
 
-The user selects a project privacy mode:
+The user can change the project privacy mode:
 
-1. **Full video intelligence:** upload the original source when the provider and retention policy permit it.
-2. **Optimized proxy:** upload a visually faithful, lower-bitrate proxy with preserved timestamps and audio.
-3. **Selective analysis:** keep source media local and upload only agent-requested ranges, frames, crops, or audio.
+1. **Selective analysis (default):** keep source media local and upload only request-relevant or agent-requested ranges, frames, crops, or audio.
+2. **Optimized proxy:** upload a visually faithful, lower-bitrate proxy with preserved timestamps and audio when broad context is required and the user permits it.
+3. **Full video intelligence:** upload the original source only when the request genuinely requires whole-source inspection and the user explicitly permits it.
 4. **Local only:** disable cloud-dependent understanding.
 
-Full-video intelligence is the default product direction because it lets the agent understand sequence, delivery, action, screen state, and audiovisual context. Proxy and selective modes remain deliberate privacy/cost choices, not the definition of the product.
+Layer 2 activation follows the request. A broad request such as “make this publishable” first receives a Layer 1 index covering the whole source, then bounded representative, candidate, and uncertainty ranges. Gemini can request more ranges iteratively when the initial selection is insufficient. The system discloses what is selected and why.
 
 Every uploaded asset records owner, project, source fingerprint, timeline mapping, media class, consent mode, retention, deletion state, and provider disclosures.
 

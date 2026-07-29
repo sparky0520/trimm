@@ -14,11 +14,12 @@ The core experience is:
 6. Approve, revise, reject, or undo through chat.
 7. Export locally at the source orientation and at source quality or lower.
 
-ctrlB is not a filter wizard and not a rules engine pretending to understand video. Deterministic detectors are useful tools, but the editor is a multimodal agent with direct access to the authorized media.
+ctrlB is not a filter wizard and not a rules engine pretending to understand video. Deterministic detectors build a local, timestamped media index. The multimodal agent receives only the request-relevant authorized ranges and can iteratively request more.
 
 ## Product principles
 
-- The agent sees the video, not merely a lossy prose summary assembled by the client.
+- Local analysis creates the first searchable index and filters what must leave the device.
+- The agent sees the actual authorized ranges it needs, not merely prose summaries and not the whole source by default.
 - Analysis is iterative. There is no fixed two-pass evidence limit.
 - Work ends when the proposal is grounded, the agent needs the user, a policy budget is reached, the user cancels, or a tool fails terminally.
 - Operational activity is visible; hidden model chain-of-thought is not.
@@ -27,7 +28,7 @@ ctrlB is not a filter wizard and not a rules engine pretending to understand vid
 - The client validates commands because local media mutation must never trust arbitrary model output.
 - Source orientation is detected from media metadata and preserved. Chat cannot silently change framing.
 - Output resolution never exceeds source resolution. Lower-quality preview/export is allowed.
-- Users choose whether original media, a high-fidelity proxy, or only selected derivatives may enter cloud analysis.
+- Selective derivative analysis is the default. Full-source or broad proxy upload requires an explicit user choice or a request whose declared scope genuinely requires it.
 - The initial direct-video agent uses Gemini 3.6 Flash only. Additional planning models remain out of scope until evaluation demonstrates a concrete need.
 
 ## Future enhancements
