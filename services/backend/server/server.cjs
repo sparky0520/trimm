@@ -121,6 +121,11 @@ function derivativeView(job) {
     maximumBytes: job.maximumBytes, maximumDurationMs: job.maximumDurationMs,
     maximumCount: job.maximumCount, offset: job.offset, status: job.status,
     expiresAt: new Date(job.expiresAt).toISOString(), contentKey: job.contentKey,
+    mediaMode: job.mediaMode, selectionReason: job.selectionReason,
+    timelineReferences: job.timelineReferences, consent: job.consent,
+    providerDisclosures: job.providerDisclosures,
+    retentionUntil: new Date(job.deleteAt).toISOString(),
+    deletedAt: job.deletedAt ? new Date(job.deletedAt).toISOString() : null,
   };
 }
 
@@ -306,7 +311,7 @@ const server = http.createServer(async (request, response) => {
     }
   }
   if (derivativeMatch && request.method === 'DELETE' && !derivativeMatch[2]) {
-    try { derivativeJobs.cancel(derivativeMatch[1], principal, derivativeContext(request)); response.writeHead(204); return response.end(); }
+    try { derivativeJobs.delete(derivativeMatch[1], principal, derivativeContext(request)); response.writeHead(204); return response.end(); }
     catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message, code: error?.code, requestId }); }
   }
   if (derivativeMatch && request.method === 'POST' && derivativeMatch[2]) {

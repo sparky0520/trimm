@@ -21,7 +21,11 @@ const PURPOSES = Object.freeze({
   text: Object.freeze(new Set(['planning', 'transcript-analysis'])),
   evidence: Object.freeze(new Set(['planning', 'candidate-evaluation'])),
 });
-const TERMINAL = new Set(['completed', 'cancelled', 'expired']);
+const TERMINAL = new Set(['completed', 'cancelled', 'expired', 'deleted']);
+const SELECTION_REASONS = new Set([
+  'request_selected', 'agent_requested', 'representative_coverage',
+  'measured_candidate', 'uncertainty',
+]);
 const DEFAULT_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_RETENTION_MS = 6 * 60 * 60 * 1000;
 
@@ -37,6 +41,39 @@ function boundedString(value, name, pattern = /^[a-zA-Z0-9._:-]{1,200}$/) {
 function positiveInteger(value, name, ceiling = Number.MAX_SAFE_INTEGER) {
   if (!Number.isSafeInteger(value) || value <= 0 || value > ceiling) throw jobError(`Invalid ${name}.`);
   return value;
+}
+
+function timestamp(value, name) {
+  if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) throw jobError(`Invalid ${name}.`);
+  return new Date(value).toISOString();
+}
+
+function timelineReferences(value) {
+  if (!Array.isArray(value) || !value.length || value.length > 100) {
+    throw jobError('At least one exact timeline reference is required.', 400, 'timeline_mapping_required');
+  }
+  return value.map((reference) => {
+    const sourceId = boundedString(reference?.sourceId, 'timeline source ID');
+    const startMs = Number(reference?.startMs);
+    const endMs = Number(reference?.endMs);
+    if (!Number.isSafeInteger(startMs) || startMs < 0 || !Number.isSafeInteger(endMs) || endMs <= startMs) {
+      throw jobError('Invalid timeline reference.', 400, 'invalid_timeline_mapping');
+    }
+    return Object.freeze({ sourceId, startMs, endMs });
+  });
+}
+
+function providerDisclosures(value, derivativeType) {
+  if (!Array.isArray(value) || value.length > 10) throw jobError('Provider disclosures are required.');
+  return value.map((disclosure) => {
+    const provider = boundedString(disclosure?.provider, 'provider');
+    const purpose = boundedString(disclosure?.purpose, 'provider purpose');
+    if (!Array.isArray(disclosure?.dataClasses) || !disclosure.dataClasses.length ||
+        disclosure.dataClasses.some((item) => !TYPES[item]) || !disclosure.dataClasses.includes(derivativeType)) {
+      throw jobError('Provider disclosure does not cover the derivative type.', 400, 'provider_disclosure_incomplete');
+    }
+    return Object.freeze({ provider, purpose, dataClasses: Object.freeze([...new Set(disclosure.dataClasses)]) });
+  });
 }
 
 function detectedType(buffer) {
@@ -115,12 +152,34 @@ class DerivativeJobs {
     const type = boundedString(request.type, 'derivative type');
     const acceptedFormat = boundedString(request.acceptedFormat, 'accepted format', /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/);
     const idempotencyKey = boundedString(request.idempotencyKey, 'idempotency key');
+    if (request.mediaMode !== 'selective_derivative') {
+      throw jobError('Proxy and original uploads require a separate explicit upload mode.', 400, 'separate_upload_mode_required');
+    }
+    const consentMode = request.consent?.mode;
+    if (consentMode !== 'selective_analysis') throw jobError('Selective analysis consent is required.', 400, 'consent_required');
+    const consent = Object.freeze({
+      mode: consentMode,
+      grantedAt: timestamp(request.consent.grantedAt, 'consent timestamp'),
+      disclosureVersion: boundedString(request.consent.disclosureVersion, 'disclosure version'),
+    });
+    const selectionReason = boundedString(request.selectionReason, 'selection reason');
+    if (!SELECTION_REASONS.has(selectionReason)) throw jobError('Unsupported selection reason.', 400, 'selection_reason_not_allowed');
     if (!TYPES[type]?.has(acceptedFormat)) throw jobError('Derivative format is not allowed for this type.', 415, 'format_not_allowed');
     if (!PURPOSES[type]?.has(purpose)) throw jobError('Purpose is not allowed for this derivative type.', 400, 'purpose_not_allowed');
     const maximumBytes = positiveInteger(request.maximumBytes, 'maximum bytes', 100 * 1024 * 1024);
     const maximumDurationMs = request.maximumDurationMs == null ? null : positiveInteger(request.maximumDurationMs, 'maximum duration', 3 * 60 * 60 * 1000);
     const maximumCount = request.maximumCount == null ? 1 : positiveInteger(request.maximumCount, 'maximum count', 100);
     const estimatedCostMicros = request.estimatedCostMicros == null ? 0 : positiveInteger(request.estimatedCostMicros, 'estimated cost', 100_000_000);
+    const retentionMs = positiveInteger(request.retentionMs ?? this.retentionMs, 'retention', 24 * 60 * 60 * 1000);
+    const mapping = timelineReferences(request.timelineReferences);
+    const disclosures = providerDisclosures(request.providerDisclosures, type);
+    const sourceFingerprint = boundedString(request.sourceFingerprint, 'source fingerprint', /^[a-f0-9]{32,128}$/);
+    const authorizationFingerprint = crypto.createHash('sha256').update(JSON.stringify({
+      projectId, deviceSessionId, purpose, type, acceptedFormat, maximumBytes,
+      maximumDurationMs, maximumCount, estimatedCostMicros, mediaMode: request.mediaMode,
+      consent, selectionReason, providerDisclosures: disclosures, sourceFingerprint,
+      timelineReferences: mapping, retentionMs,
+    })).digest('hex');
     if (type === 'audio' && maximumDurationMs == null) throw jobError('Audio jobs require a maximum duration.');
     if ((type === 'frame' || type === 'crop') && maximumCount < 1) throw jobError('Image jobs require a maximum count.');
     const access = await this.accessFor(principal.id);
@@ -140,16 +199,21 @@ class DerivativeJobs {
     const existingId = this.idempotency.get(idemKey);
     if (existingId) {
       const existing = this.jobs.get(existingId);
-      if (existing && existing.expiresAt > this.now()) return { job: existing, reused: true };
+      if (existing && existing.expiresAt > this.now()) {
+        if (existing.authorizationFingerprint !== authorizationFingerprint) {
+          throw jobError('Idempotency key was already used for different derivative authorization.', 409, 'idempotency_conflict');
+        }
+        return { job: existing, reused: true };
+      }
     }
     const id = crypto.randomUUID();
     const job = {
       id, userId: principal.id, projectId, deviceSessionId, purpose, type, acceptedFormat,
       maximumBytes, maximumDurationMs, maximumCount, estimatedCostMicros, idempotencyKey,
-      sourceFingerprint: boundedString(request.sourceFingerprint, 'source fingerprint', /^[a-f0-9]{32,128}$/),
-      timelineReferences: Array.isArray(request.timelineReferences) ? request.timelineReferences.slice(0, 100) : [],
+      mediaMode: request.mediaMode, consent, selectionReason, providerDisclosures: disclosures,
+      sourceFingerprint, timelineReferences: mapping, retentionMs, authorizationFingerprint,
       offset: 0, status: 'authorized', createdAt: this.now(), expiresAt: this.now() + this.ttlMs,
-      deleteAt: this.now() + this.retentionMs, contentKey: null, result: null,
+      deleteAt: this.now() + retentionMs, contentKey: null, result: null,
     };
     this.jobs.set(id, job);
     this.idempotency.set(idemKey, id);
@@ -158,7 +222,11 @@ class DerivativeJobs {
       estimatedCostMicros: usage.estimatedCostMicros + estimatedCostMicros,
     });
     fs.writeFileSync(this.mediaPath(id), Buffer.alloc(0), { flag: 'wx' });
-    this.log(job, 'authorized', { format: acceptedFormat, maximumBytes, maximumDurationMs });
+    this.log(job, 'authorized', {
+      format: acceptedFormat, maximumBytes, maximumDurationMs, selectionReason,
+      consentMode: consent.mode, retentionMs, providers: disclosures.map(({ provider }) => provider),
+      timelineReferences: mapping,
+    });
     return { job, reused: false };
   }
 
@@ -216,7 +284,7 @@ class DerivativeJobs {
     validateActualContent(this.mediaPath(id), job);
     const digest = crypto.createHash('sha256').update(fs.readFileSync(this.mediaPath(id))).digest('hex');
     job.contentKey = crypto.createHash('sha256').update([
-      job.type, job.acceptedFormat, job.purpose, job.sourceFingerprint, digest,
+      job.userId, job.projectId, job.type, job.acceptedFormat, job.purpose, job.sourceFingerprint, digest,
     ].join(':')).digest('hex');
     const cached = this.results.get(job.contentKey);
     job.status = 'completed';
@@ -252,6 +320,16 @@ class DerivativeJobs {
     const job = this.read(id, principal, context);
     if (!TERMINAL.has(job.status)) { job.status = 'cancelled'; this.removeBytes(job); this.log(job, 'cancelled'); }
   }
+  delete(id, principal, context) {
+    const job = this.read(id, principal, context);
+    this.removeBytes(job);
+    if (job.contentKey) this.results.delete(job.contentKey);
+    job.result = null;
+    job.status = 'deleted';
+    job.deletedAt = this.now();
+    this.log(job, 'deleted');
+    return job;
+  }
   listActivity(principal, projectId) {
     requireAuthentication(principal);
     return (this.activity.get(principal.id) || []).filter((entry) => !projectId || entry.projectId === projectId);
@@ -268,4 +346,7 @@ class DerivativeJobs {
   }
 }
 
-module.exports = { DEFAULT_RETENTION_MS, DEFAULT_TTL_MS, DerivativeJobs, PURPOSES, TYPES, detectedType, validateActualContent };
+module.exports = {
+  DEFAULT_RETENTION_MS, DEFAULT_TTL_MS, DerivativeJobs, PURPOSES,
+  SELECTION_REASONS, TYPES, detectedType, validateActualContent,
+};

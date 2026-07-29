@@ -22,6 +22,11 @@ const inventory = Object.freeze({
     selections: [{ id: 'selection-1', sourceId: 'clip-1', startMs: 0, endMs: 10_000, reasons: ['representative_coverage'], observationIds: ['speech-1'], derivativeKinds: ['audio', 'frame'] }],
   },
   budgets: { maximumBytes: 1_000_000, maximumDurationMs: 30_000, maximumCostMicros: 1000, maximumRequests: 2, retentionMs: 60_000 },
+  mediaConsent: {
+    mode: 'selective_analysis',
+    grantedAt: '2026-07-29T00:00:00.000Z',
+    disclosureVersion: 'media-v1',
+  },
 });
 
 function fixture(decide) {
@@ -108,6 +113,9 @@ test('edit programs require completed owned evidence, valid citations, confidenc
     type: 'evidence', acceptedFormat: 'application/json', maximumBytes: 1024,
     maximumCount: 1, estimatedCostMicros: 1, idempotencyKey: 'evidence-1',
     sourceFingerprint: 'a'.repeat(64), timelineReferences: [{ sourceId: 'clip-1', startMs: 0, endMs: 2000 }],
+    mediaMode: 'selective_derivative', selectionReason: 'request_selected',
+    retentionMs: 60_000, consent: inventory.mediaConsent,
+    providerDisclosures: [{ provider: 'google-gemini', purpose: 'multimodal-planning', dataClasses: ['evidence'] }],
   });
   evidenceId = authorized.job.id;
   await setup.jobs.append(evidenceId, principal, 0, Readable.from(Buffer.from('{"words":[]}')));

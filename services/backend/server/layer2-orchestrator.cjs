@@ -78,6 +78,16 @@ function validateInventory(value) {
       : [],
     existingOperations: Array.isArray(value.existingOperations) ? value.existingOperations.slice(0, 200) : [],
   };
+  if (value.mediaConsent?.mode !== 'selective_analysis' ||
+      typeof value.mediaConsent.grantedAt !== 'string' || !Number.isFinite(Date.parse(value.mediaConsent.grantedAt)) ||
+      typeof value.mediaConsent.disclosureVersion !== 'string') {
+    throw orchestrationError('Selective media consent is required.', 400, 'consent_required');
+  }
+  inventory.mediaConsent = {
+    mode: 'selective_analysis',
+    grantedAt: new Date(value.mediaConsent.grantedAt).toISOString(),
+    disclosureVersion: boundedString(value.mediaConsent.disclosureVersion, 'disclosure version'),
+  };
   if (!inventory.sources.length) throw orchestrationError('Project inventory requires at least one source.');
   if (new Set(inventory.sources.map((source) => source.id)).size !== inventory.sources.length) {
     throw orchestrationError('Source IDs must be unique.');
@@ -240,6 +250,15 @@ class Layer2Orchestrator {
           maximumDurationMs: request.maximumDurationMs,
           maximumCount: request.maximumCount,
           estimatedCostMicros: request.estimatedCostMicros,
+          mediaMode: 'selective_derivative',
+          consent: inventory.mediaConsent,
+          selectionReason: 'agent_requested',
+          retentionMs: inventory.budgets.retentionMs,
+          providerDisclosures: [{
+            provider: 'google-gemini',
+            purpose: 'multimodal-planning',
+            dataClasses: [request.type],
+          }],
           idempotencyKey: `planner:${inventory.projectRevision}:${request.requestIndex}:${request.source.fingerprint.slice(0, 16)}`,
           sourceFingerprint: request.source.fingerprint,
           timelineReferences: [{ sourceId: request.sourceId, startMs: request.startMs, endMs: request.endMs }],
