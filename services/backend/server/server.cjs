@@ -26,6 +26,9 @@ const apiKey = process.env.MOONSHOT_API_KEY;
 const baseURL = process.env.MOONSHOT_BASE_URL || 'https://api.moonshot.ai/v1';
 const model = process.env.MOONSHOT_MODEL || 'kimi-k3';
 const MAX_BODY_BYTES = 512 * 1024;
+// Frozen v1 compatibility routes for the first ctrlB clients. Keep their
+// request/response behavior stable while new agent work moves to a new route.
+const LEGACY_PLANNER_ROUTES = new Set(['/v1/desktop/plan', '/v1/mobile/plan']);
 const privacyPolicy = fs.readFileSync(path.join(__dirname, 'privacy.html'));
 const transcriptionUploads = new TranscriptionUploads();
 const uploadCleanupTimer = setInterval(() => transcriptionUploads.cleanup(), 15 * 60 * 1000);
@@ -75,7 +78,7 @@ function policyFor(request, pathname) {
     resourceType: 'derivative_job',
   };
   if (pathname.startsWith('/v1/transcribe')) return { scope: 'transcribe:create', action: request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'update' : 'create', resourceType: 'transcription' };
-  if (pathname === '/v1/desktop/plan' || pathname === '/v1/mobile/plan' || pathname === '/v1/mobile/orchestrate') {
+  if (LEGACY_PLANNER_ROUTES.has(pathname) || pathname === '/v1/mobile/orchestrate') {
     return { scope: 'plan:create', action: 'create', resourceType: 'plan' };
   }
   if (pathname === '/v1/billing/catalog' || pathname === '/v1/billing/status') return { action: 'read', resourceType: 'billing' };
@@ -85,10 +88,23 @@ function policyFor(request, pathname) {
 
 function audit(entry) { console.info('[audit]', auditEvent(entry)); }
 
-function json(response, status, body) {
+function json(response, status, body, headers = {}) {
   const encoded = Buffer.from(JSON.stringify(body));
-  response.writeHead(status, { 'content-type': 'application/json', 'content-length': encoded.length, 'cache-control': 'no-store' });
+  response.writeHead(status, {
+    'content-type': 'application/json',
+    'content-length': encoded.length,
+    'cache-control': 'no-store',
+    ...headers,
+  });
   response.end(encoded);
+}
+
+function legacyPlannerJson(response, status, body) {
+  return json(response, status, body, {
+    deprecation: 'true',
+    'x-ctrlb-route-lifecycle': 'legacy',
+    'x-ctrlb-contract-version': '1',
+  });
 }
 
 function html(response, status, body) {
@@ -344,10 +360,10 @@ const server = http.createServer(async (request, response) => {
   if (request.method === 'POST' && requestUrl.pathname === '/v1/desktop/plan') {
     try {
       const result = await planDesktop(await collect(request, 7 * 1024 * 1024));
-      return json(response, result.ok ? 200 : result.error?.category === 'authentication' ? 503 : 502, result);
+      return legacyPlannerJson(response, result.ok ? 200 : result.error?.category === 'authentication' ? 503 : 502, result);
     } catch (error) {
       console.error('[desktop-planner] request failed', { message: error?.message, status: error?.status });
-      return json(response, Number.isInteger(error?.status) ? error.status : 502, { error: error?.message || 'Planner failed' });
+      return legacyPlannerJson(response, Number.isInteger(error?.status) ? error.status : 502, { error: error?.message || 'Planner failed' });
     }
   }
   if (request.method === 'POST' && requestUrl.pathname === '/v1/mobile/orchestrate') {
@@ -366,7 +382,7 @@ const server = http.createServer(async (request, response) => {
   try {
     if (!apiKey) throw Object.assign(new Error('MOONSHOT_API_KEY is not configured'), { status: 503 });
     const payload = await collect(request);
-    if (!validateRequest(payload)) return json(response, 400, { error: 'Invalid planner request' });
+    if (!validateRequest(payload)) return legacyPlannerJson(response, 400, { error: 'Invalid planner request' });
     const client = new OpenAI({ apiKey, baseURL });
     const completion = await client.chat.completions.create({
       model,
@@ -379,10 +395,10 @@ const server = http.createServer(async (request, response) => {
     });
     const content = completion.choices?.[0]?.message?.content;
     const proposal = validateProposal(JSON.parse(content), payload.projectRevision, new Set(payload.evidence.items.map((item) => item.id)));
-    return json(response, 200, proposal);
+    return legacyPlannerJson(response, 200, proposal);
   } catch (error) {
     console.error('[mobile-planner] request failed', { message: error?.message, status: error?.status });
-    return json(response, error?.status && Number.isInteger(error.status) ? error.status : 502, { error: error?.message || 'Planner failed' });
+    return legacyPlannerJson(response, error?.status && Number.isInteger(error.status) ? error.status : 502, { error: error?.message || 'Planner failed' });
   }
 });
 

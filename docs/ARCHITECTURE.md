@@ -39,6 +39,22 @@ real-video evaluation demonstrates a specific failure that the additional
 model fixes. Kimi K3 remains only in the current legacy text/JSON planner path;
 it is not the target direct-video agent.
 
+## Stored v1 compatibility routes
+
+The first app version remains available through two frozen compatibility
+routes:
+
+- `POST /v1/desktop/plan`
+- `POST /v1/mobile/plan`
+
+They are explicitly **legacy**. Successful and error responses include
+`Deprecation: true`, `X-ctrlB-Route-Lifecycle: legacy`, and
+`X-ctrlB-Contract-Version: 1`. Keep their wire behavior stable for old clients;
+do not add the Gemini video-agent architecture to these endpoints.
+
+`POST /v1/mobile/orchestrate` is an implementation foundation for the new
+request-shaped flow and is not part of the frozen first-version planner.
+
 ## Media modes
 
 The user can change the project privacy mode:

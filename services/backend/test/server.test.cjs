@@ -10,6 +10,9 @@ test('shared backend is configured as a non-secret package script', () => {
   assert.match(source, /process\.env\.MOONSHOT_API_KEY/);
   assert.match(source, /\/v1\/desktop\/plan/);
   assert.match(source, /\/v1\/mobile\/plan/);
+  assert.match(source, /LEGACY_PLANNER_ROUTES/);
+  assert.match(source, /x-ctrlb-route-lifecycle': 'legacy'/);
+  assert.match(source, /legacyPlannerJson/);
   assert.match(source, /requestUrl\.pathname !== '\/v1\/mobile\/plan'/);
   assert.match(source, /\/v1\/mobile\/orchestrate/);
   assert.match(source, /\/v1\/transcribe/);
