@@ -63,7 +63,11 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                         override suspend fun analyze(context: AnalyzerContext): List<EvidenceObservation> = throw failure
                     } }
                 )
-                val graph = EvidencePipeline(evidenceCache, listOf(LocalVisualAnalyzer(applicationContext), LocalSoundAnalyzer(applicationContext), speechAnalyzer) + unsupportedAnalyzers()).analyze(source)
+                val graph = EvidencePipeline(evidenceCache, listOf(
+                    LocalVisualAnalyzer(applicationContext),
+                    LocalSoundAnalyzer(applicationContext, localWords.map(TranscriptWord::range)),
+                    speechAnalyzer
+                ) + unsupportedAnalyzers()).analyze(source)
                 evidenceGraphs += graph
                 evidenceReferences += graph.reference()
             } else {

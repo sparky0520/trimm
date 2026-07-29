@@ -78,7 +78,10 @@ data class SoundEvidence(
     val kind: SoundKind, val value: Float? = null, val unit: String? = null
 ) : EvidenceObservation
 
-@Serializable enum class SoundKind { LOUDNESS, NOISE_FLOOR, CLIPPING, MUSIC, SILENCE, TRANSIENT }
+@Serializable enum class SoundKind {
+    LOUDNESS, NOISE_FLOOR, SPEECH_LEVEL, SNR, CLIPPING, MUSIC, SILENCE, TRANSIENT,
+    MEASUREMENT_UNCERTAINTY
+}
 
 @Serializable
 data class AnalyzerRun(

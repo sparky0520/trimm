@@ -19,6 +19,15 @@ confidence-derived selection reasons, and local analyzer provenance through
 the referenced evidence graph. Layer 2 receives only later-authorized selected
 ranges, never an automatic expansion of upload scope.
 
+Audio measurements use transcript timing as the primary speech mask and a
+conservative energy mask when transcript timing is unavailable. The local
+analyzer splits sustained acoustic changes into scenes, rejects transient and
+tonal/music-contaminated noise windows, and reports per-scene speech level,
+noise floor, SNR, clipping, and silence candidates. A scene without multiple
+clean speech-free windows reports measurement uncertainty instead of a
+fabricated noise floor. Silence remains a reviewable measurement and never
+authorizes a speech cut.
+
 Current frame statistics are not semantic vision:
 
 - average brightness approximates exposure;
