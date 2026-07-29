@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -25,6 +26,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,16 +45,16 @@ import com.clerk.ui.auth.AuthView
 import com.clerk.ui.userbutton.UserButton
 import kotlinx.coroutines.launch
 
-private val Ink = Color(0xFF17131F)
-private val Workspace = Color(0xFF211A2B)
-private val Raised = Color(0xFF292135)
-private val Border = Color(0xFF4A3B5A)
-private val Cream = Color(0xFFF7F2EA)
-private val CreamRaised = Color(0xFFFFFAF3)
-private val DarkText = Color(0xFF241D2C)
-private val Muted = Color(0xFF9B8FA5)
-private val Coral = Color(0xFFFF6F61)
-private val Lavender = Color(0xFFBDA7FF)
+private val Ink = Color(0xFF0B0B0D)
+private val Workspace = Color(0xFF141418)
+private val Raised = Color(0xFF1E1E23)
+private val Border = Color(0xFF29282F)
+private val Cream = Color(0xFFF6F5F2)
+private val CreamRaised = Color(0xFFF6F5F2)
+private val DarkText = Color(0xFF111111)
+private val Muted = Color(0xFF9D9CA4)
+private val Coral = Color(0xFFD8FF55)
+private val Lavender = Color(0xFFD8FF55)
 private val Green = Color(0xFF6FD49A)
 
 class MainActivity : ComponentActivity() {
@@ -94,11 +96,11 @@ class MainActivity : ComponentActivity() {
         Modifier.fillMaxWidth().background(Workspace).statusBarsPadding().height(58.dp).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(30.dp).background(Lavender, RoundedCornerShape(9.dp)), contentAlignment = Alignment.Center) {
-            Text("B", color = Ink, fontWeight = FontWeight.Black)
-        }
-        Spacer(Modifier.width(9.dp))
-        Text("ctrlB", color = CreamRaised, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Image(
+            painter = painterResource(R.drawable.ctrlb_wordmark),
+            contentDescription = "ctrlB",
+            modifier = Modifier.width(82.dp).height(24.dp)
+        )
         Spacer(Modifier.width(8.dp))
         Text("STUDIO", color = Muted, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 1.2.sp,
             modifier = Modifier.border(1.dp, Border, RoundedCornerShape(20.dp)).padding(horizontal = 7.dp, vertical = 4.dp))
