@@ -1,6 +1,7 @@
 package ai.ctrlb.mobile
 
 import ai.ctrlb.mobile.domain.*
+import ai.ctrlb.mobile.media.ExportCoordinator
 import android.net.Uri
 import android.os.Bundle
 import android.content.Intent
@@ -9,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.OptIn
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -38,7 +40,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
+import androidx.media3.common.util.ExperimentalApi
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.transformer.CompositionPlayer
 import androidx.media3.ui.PlayerView
 import com.clerk.api.Clerk
 import com.clerk.ui.auth.AuthView
@@ -298,7 +303,7 @@ class MainActivity : ComponentActivity() {
                     }
                     val ratio = project.export.width.toFloat() / project.export.height
                     Box(Modifier.fillMaxWidth().padding(10.dp).background(Ink, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                        VideoPreview(state.previewUri?.let(::listOf) ?: project.orderedSources.map { it.uri }, Modifier.fillMaxWidth().aspectRatio(ratio))
+                        CanonicalVideoPreview(project, Modifier.fillMaxWidth().aspectRatio(ratio))
                     }
                     Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("00:00", color = Muted, fontSize = 10.sp)
@@ -359,7 +364,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-    if (fullscreen) FullscreenPreview(state.previewUri?.let(::listOf) ?: project.orderedSources.map { it.uri }) { fullscreen = false }
+    if (fullscreen) FullscreenProjectPreview(project) { fullscreen = false }
 }
 
 @Composable private fun UserChatBubble(text: String) {
@@ -620,6 +625,32 @@ private fun reviewPercent(value: Float) = "${(value * 100).toInt()}%"
             SmallAction("Close", Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(20.dp), close)
         }
     }
+}
+
+@Composable private fun FullscreenProjectPreview(project: MobileProject, close: () -> Unit) {
+    Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            CanonicalVideoPreview(project, Modifier.fillMaxSize())
+            SmallAction("Close", Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(20.dp), close)
+        }
+    }
+}
+
+@OptIn(UnstableApi::class, ExperimentalApi::class)
+@Composable private fun CanonicalVideoPreview(project: MobileProject, modifier: Modifier) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val player = remember(project.revision, project.operations, project.export, project.orderedSources) {
+        CompositionPlayer.Builder(context).build().apply {
+            setComposition(ExportCoordinator.composition(context, project))
+            prepare()
+        }
+    }
+    DisposableEffect(player) { onDispose { player.release() } }
+    AndroidView(
+        factory = { PlayerView(it).apply { this.player = player; setBackgroundColor(android.graphics.Color.BLACK) } },
+        update = { it.player = player },
+        modifier = modifier
+    )
 }
 
 @Composable private fun VideoPreview(uris: List<String>, modifier: Modifier) {

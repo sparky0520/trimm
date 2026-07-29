@@ -146,7 +146,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         return fallback.copy(platform = platform, pace = pace, music = music, captions = captions)
     }
 
-    fun toggle(id: String) { mutable.value.project?.let { project -> updateProject(project.replaceOperations(project.operations.map { if (it.id == id) toggle(it) else it }), true) } }
+    fun toggle(id: String) { mutable.value.project?.let { project -> updateProject(project.replaceOperations(project.operations.map { if (it.id == id) toggle(it) else it })) } }
     fun applyProposal() {
         mutable.value.project?.let { project ->
             val proposal = project.analysis.pendingProposal ?: return
@@ -161,7 +161,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 analysis = project.analysis.copy(editorialPlan = proposal.plan, pendingProposal = null)
             )
             viewModelScope.launch { store.saveCreatorPreferences(applied.creatorPreferences) }
-            updateProject(applied, true)
+            updateProject(applied)
+            mutable.value = mutable.value.copy(jobMessage = "Proposal applied to the interactive preview")
         }
     }
     fun rejectProposal() {
@@ -218,7 +219,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             if (project != null) store.save(project)
         }
     }
-    fun undo() { mutable.value.project?.let { updateProject(it.undoOnce(), true) } }
+    fun undo() { mutable.value.project?.let { updateProject(it.undoOnce()) } }
     fun export() { mutable.value.project?.let { project ->
         val estimated = (project.durationMs / 1_000.0 * project.export.bitrate / 8).toLong()
         val manager = WorkManager.getInstance(getApplication()); val request = OneTimeWorkRequestBuilder<ExportWorker>().setInputData(Data.Builder().putString("projectId", project.id).putLong("estimatedBytes", estimated).build()).addTag("export:${project.id}").build()

@@ -16,7 +16,7 @@ It does not contain rendered video.
 
 ## Preview and export
 
-`ExportCoordinator` converts the project into a Media3 `Composition`:
+`ExportCoordinator` converts the project into one canonical Media3 `Composition`:
 
 1. `RemoveFumbles` becomes retained source ranges.
 2. Each retained range becomes a clipped `MediaItem`.
@@ -25,10 +25,10 @@ It does not contain rendered video.
 5. video effects apply color, captions, semantic overlays, and supported reframing.
 6. Media3 `Transformer` encodes H.264 or HEVC.
 
-Preview uses the same coordinator with a smaller resolution and bitrate. Export uses the approved project settings.
+The interactive `CompositionPlayer` and final `Transformer` export consume that same composition factory. Applying, toggling, reordering, or undoing an edit changes the persisted project revision and recreates the interactive player immediately; export later loads that same persisted revision. A lower-resolution rendered preview remains available for proposal simulation and fallback, but is not the editor's source of truth.
 
 Source rotation determines the displayed width, height, and exact output aspect. Chat and platform names do not change portrait, landscape, or square framing. Draft, preview, and final export use the same ceiling calculation: device limits may reduce the output, and mixed-source projects use the lowest per-axis source ceiling, but no output dimension exceeds the available displayed source pixels.
 
 ## Current limitation
 
-Preview is still a rendered MP4, so it is slower than desktop’s interactive Remotion player. The target is a canonical Media3 playback composition that updates immediately while the final export continues to use `Transformer`.
+`CompositionPlayer` is still an experimental Media3 API. The canonical composition factory isolates that dependency so player API changes do not create a second edit interpretation.

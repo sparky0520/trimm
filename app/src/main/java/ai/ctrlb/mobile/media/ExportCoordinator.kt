@@ -34,8 +34,7 @@ import kotlin.math.pow
 
 @OptIn(UnstableApi::class)
 object ExportCoordinator {
-    suspend fun export(context: Context, project: MobileProject, output: File): File = withContext(Dispatchers.Main) {
-        output.parentFile?.mkdirs(); output.delete()
+    fun composition(context: Context, project: MobileProject): Composition {
         val cuts = project.operations.filterIsInstance<RemoveFumbles>().filter { it.enabled }.flatMap { it.ranges }
         val retained = retainedRanges(project.durationMs, TimelineMapper(cuts).removals)
         val timelineMapper = TimelineMapper(cuts)
@@ -152,7 +151,12 @@ object ExportCoordinator {
             if (outputAt > 0) builder.addGap(outputAt * 1_000)
             sequences += builder.addItem(item).build()
         }
-        val composition = Composition.Builder(sequences).setEffects(Effects(emptyList(), videoEffects)).build()
+        return Composition.Builder(sequences).setEffects(Effects(emptyList(), videoEffects)).build()
+    }
+
+    suspend fun export(context: Context, project: MobileProject, output: File): File = withContext(Dispatchers.Main) {
+        output.parentFile?.mkdirs(); output.delete()
+        val composition = composition(context, project)
         suspendCancellableCoroutine { continuation ->
             val transformer = Transformer.Builder(context)
                 .setVideoMimeType(if (project.export.codec == "video/hevc") MimeTypes.VIDEO_H265 else MimeTypes.VIDEO_H264)
