@@ -9,6 +9,8 @@ import ai.ctrlb.mobile.BuildConfig
 import ai.ctrlb.mobile.auth.AuthTokenProvider
 import ai.ctrlb.mobile.planner.*
 import ai.ctrlb.mobile.evidence.*
+import ai.ctrlb.mobile.layer1.MediaIndexRequestPlanner
+import ai.ctrlb.mobile.layer1.RequestShapedMediaIndexBuilder
 import android.net.Uri
 import android.content.Context
 import androidx.work.CoroutineWorker
@@ -88,6 +90,13 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
             TakeConstraints(mustKeepWording = listOf(project.preferences.mustKeep).filter(String::isNotBlank))
         )
         val storyGraph = StoryGraphDeriver.derive(evidenceGraphs, takeGroups, project.preferences.mustKeep)
+        val mediaIndex = RequestShapedMediaIndexBuilder.build(
+            evidenceGraphs,
+            MediaIndexRequestPlanner.plan(
+                initialPrompt,
+                evidenceGraphs.map { it.sourceFingerprint to it.sourceDurationMs }
+            )
+        )
         if (project.preferences.captions && captions.isNotEmpty()) retained += AddCaptions(cues = captions)
         progress("persist", 90)
         var analyzed = project.copy(
@@ -98,6 +107,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                 takeGroups = takeGroups,
                 editorialProfile = editorialProfile,
                 storyGraph = storyGraph,
+                mediaIndex = mediaIndex,
                 revisionConversation = listOf(EditorialConversationTurn(
                     request = initialPrompt,
                     response = "I analyzed the clips and prepared an evidence-backed first cut."

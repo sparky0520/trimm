@@ -1,6 +1,23 @@
 # Android perception
 
-Android currently performs metadata inspection, sparse frame sampling, simple pixel statistics, PCM waveform analysis, and transcript-derived structure.
+Android performs metadata inspection, sparse frame sampling, simple pixel
+statistics, PCM waveform analysis, and transcript-derived structure. Before
+cloud-assisted planning, those measurements are assembled into a persisted,
+request-shaped Layer 1 index:
+
+- timestamp requests select a narrow four-second neighborhood and only the
+  derivative kinds relevant to the request;
+- specialist requests select the required signal kinds without assigning
+  editorial meaning;
+- broad requests interleave whole-source representative coverage,
+  confidence-scored measured candidates, and explicit uncertainty ranges;
+- weak observations expand to a denser follow-up neighborhood instead of
+  being presented as certain.
+
+The index contains timestamps, signal kinds, observation IDs, source identity,
+confidence-derived selection reasons, and local analyzer provenance through
+the referenced evidence graph. Layer 2 receives only later-authorized selected
+ranges, never an automatic expansion of upload scope.
 
 Current frame statistics are not semantic vision:
 
@@ -11,9 +28,8 @@ Current frame statistics are not semantic vision:
 
 Face detection, OCR, screen understanding, product/action recognition, and music classification are not implemented in production.
 
-## Planned implementation
+## Planned semantic analyzers
 
-- Build the first whole-source, timestamped Layer 1 index locally. Its depth follows the request.
 - Face/person: ML Kit or MediaPipe when relevant to range selection or a requested edit.
 - OCR: ML Kit Text Recognition when screen or text evidence is relevant.
 - Screen/UI: local text, layout, and motion candidates used to select exact ranges for Layer 2.
