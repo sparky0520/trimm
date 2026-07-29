@@ -44,13 +44,16 @@ object EditorialReviewBuilder {
             },
             repeatedTakes = groups.map(::comparison),
             technicalProblems = buildList {
-                project.analysis.lowConfidenceFumbles.forEach { add("${it.reason} at ${formatRange(it.range)} (${percent(it.confidence)} confidence)") }
                 addAll(project.analysis.warnings)
             }.distinct(),
             usefulProductShots = graph?.beats.orEmpty()
                 .filter { it.role == "demonstration" || it.supportingVisualEvidenceIds.isNotEmpty() }
                 .map { beat -> "${beat.claims.firstOrNull()?.text ?: beat.role} — ${beat.supportingVisualEvidenceIds.size} supporting visual cue(s)" },
             uncertainty = buildList {
+                (project.analysis.speechHints + project.analysis.lowConfidenceFumbles).distinctBy { it.range to it.reason }.forEach {
+                    val surrounding = listOf(it.contextBefore, it.context, it.contextAfter).filter(String::isNotBlank).joinToString(" | ")
+                    add("${it.reason} at ${formatRange(it.range)} (${percent(it.confidence)} measurement confidence)${if (surrounding.isBlank()) "" else ": $surrounding"}")
+                }
                 graph?.beats.orEmpty().filter { it.status == StoryMaterialStatus.CONFLICTING || it.confidence < .7f }
                     .forEach { add("${it.role.replaceFirstChar(Char::uppercase)} is ${percent(it.confidence)} confident.") }
                 groups.filter { it.alternativeTakeIds.isNotEmpty() }.forEach { add("The repeated sentence “${it.candidates.firstOrNull()?.transcript.orEmpty()}” has viable alternatives.") }

@@ -28,6 +28,14 @@ clean speech-free windows reports measurement uncertainty instead of a
 fabricated noise floor. Silence remains a reviewable measurement and never
 authorizes a speech cut.
 
+Pause, filler, repeated-phrase, and uncertain-transcript detections are stored
+as timestamped speech hints with surrounding words, speaker IDs, measurement
+confidence, and local provenance. Different speaking speeds adjust which
+pauses are worth reviewing. Explicitly different speakers are never grouped
+as one repeated take. These hints appear under uncertainty and never create an
+enabled removal operation; contextual speech decisions must come back from
+Layer 2 and pass normal proposal validation and preview.
+
 Current frame statistics are not semantic vision:
 
 - average brightness approximates exposure;

@@ -87,9 +87,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             .copy(aspectRatio = source.detectedAspectRatio())
         val durationMs = sources.sumOf { it.durationMs }
         val candidates = FumbleDetector.detect(words, durationMs, preferences.pace)
-        val automatic = FumbleDetector.automatic(candidates)
         val operations = buildList<EditOperation> {
-            if (automatic.isNotEmpty()) add(RemoveFumbles(ranges = automatic.map { it.range }, confidence = automatic.minOf { it.confidence }, reasons = automatic.map { it.reason }.distinct()))
             if (source.hasAudio) { add(SetAudioCleanup()); add(SetAudioLevels()) }
             if (preferences.music == MusicChoice.AUTOMATIC) add(SetBackgroundMusic(catalogId = "automatic"))
         }
@@ -102,7 +100,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             AspectRatio.PORTRAIT -> capability.recommendedHeight to capability.recommendedWidth
             AspectRatio.SQUARE -> capability.recommendedHeight to capability.recommendedHeight
         }
-        val project = MobileProject(title = "Talking head edit", source = source, sources = sources, preferences = preferences, creatorPreferences = current.creatorPreferences, analysis = Analysis(words = words, lowConfidenceFumbles = candidates.filter { it.confidence < .93f }), operations = operations,
+        val project = MobileProject(title = "Talking head edit", source = source, sources = sources, preferences = preferences, creatorPreferences = current.creatorPreferences, analysis = Analysis(words = words, speechHints = candidates), operations = operations,
             export = ExportSettings(exportWidth, exportHeight, if (capability.allow4k) "video/hevc" else "video/avc", if (capability.allow4k) 45_000_000 else 16_000_000))
         mutable.value = current.copy(project = project, preferences = preferences, capabilityMessage = capabilityReport.userFacingSummary(), jobMessage = "Reading your clips and preparing a proposal…")
         viewModelScope.launch { store.save(project) }

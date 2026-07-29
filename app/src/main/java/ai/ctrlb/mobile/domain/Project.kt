@@ -85,6 +85,8 @@ fun SourceMedia.sourceResolutionCeiling(): Pair<Int, Int> =
 @Serializable data class Analysis(
     val words: List<TranscriptWord> = emptyList(),
     val captions: List<CaptionCue> = emptyList(),
+    val speechHints: List<FumbleCandidate> = emptyList(),
+    // Retained for decoding existing projects; new analysis writes speechHints.
     val lowConfidenceFumbles: List<FumbleCandidate> = emptyList(),
     val takeGroups: List<TakeGroup> = emptyList(),
     val editorialProfile: EditorialProfile? = null,
@@ -98,7 +100,19 @@ fun SourceMedia.sourceResolutionCeiling(): Pair<Int, Int> =
     val completedAtEpochMs: Long? = null
 )
 @Serializable data class EvidenceGraphReference(val sourceFingerprint: String, val schemaVersion: Int = 1, val relativeCachePath: String, val analyzerVersions: Map<String, String>, val partial: Boolean)
-@Serializable data class FumbleCandidate(val range: TimeRange, val confidence: Float, val reason: String)
+@Serializable data class FumbleCandidate(
+    val range: TimeRange,
+    // Confidence describes the local measurement, never confidence that the
+    // speech should be removed.
+    val confidence: Float,
+    val reason: String,
+    val contextBefore: String = "",
+    val context: String = "",
+    val contextAfter: String = "",
+    val transcriptConfidence: Float? = null,
+    val speakerIds: Set<String> = emptySet(),
+    val provenance: String = "local-transcript-timing"
+)
 @Serializable data class ExportSettings(val width: Int = 1920, val height: Int = 1080, val codec: String = "video/avc", val bitrate: Int = 16_000_000)
 @Serializable data class ProjectSnapshot(
     val operations: List<EditOperation>,

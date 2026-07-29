@@ -20,27 +20,66 @@ object FumbleDetector {
         } ?: fallbackPauseLimit
         words.zipWithNext().forEach { (a, b) ->
             val gap = b.range.startMs - a.range.endMs
-            if (gap >= pauseLimit) out += FumbleCandidate(TimeRange(a.range.endMs + 180, b.range.startMs - 180), min(.98f, .82f + gap / 20_000f), "long-pause")
+            if (gap >= pauseLimit) {
+                out += hint(
+                    words, listOf(words.indexOf(a), words.indexOf(b)),
+                    TimeRange(a.range.endMs + 180, b.range.startMs - 180),
+                    min(.98f, .82f + gap / 20_000f), "pause-candidate"
+                )
+            }
         }
         words.forEachIndexed { index, word ->
-            if (word.text.lowercase().trim('.', ',', ' ') in fillers && word.confidence >= .75f) {
+            if (word.text.lowercase().trim('.', ',', ' ') in fillers) {
                 val start = max(0, word.range.startMs - 70); val end = min(durationMs, word.range.endMs + 90)
-                if (end > start) out += FumbleCandidate(TimeRange(start, end), .91f, "filler")
+                if (end > start) out += hint(
+                    words, listOf(index), TimeRange(start, end), word.confidence,
+                    if (word.confidence < .75f) "possible-filler-transcript-uncertain" else "possible-filler"
+                )
+            }
+            if (word.confidence < .75f) {
+                out += hint(words, listOf(index), word.range, word.confidence, "transcript-uncertainty")
             }
             if (index >= 2) {
-                val phrase = words.subList(index - 2, index).joinToString(" ") { it.text.lowercase() }
-                val next = words.drop(index).take(2).joinToString(" ") { it.text.lowercase() }
-                if (phrase == next && next.isNotBlank()) out += FumbleCandidate(TimeRange(words[index - 2].range.startMs, words[index].range.startMs), .96f, "immediate-retake")
+                val left = words.subList(index - 2, index)
+                val right = words.drop(index).take(2)
+                val phrase = left.joinToString(" ") { it.text.lowercase() }
+                val next = right.joinToString(" ") { it.text.lowercase() }
+                val speakers = (left + right).mapNotNull { it.speakerId }.distinct()
+                if (phrase == next && next.isNotBlank() && speakers.size <= 1) {
+                    out += hint(
+                        words, (index - 2 until min(index + 2, words.size)).toList(),
+                        TimeRange(words[index - 2].range.startMs, words[index].range.startMs),
+                        (left + right).minOf(TranscriptWord::confidence), "repeated-phrase-candidate"
+                    )
+                }
             }
         }
-        return merge(out.sortedBy { it.range.startMs })
+        return out.distinctBy { Triple(it.range, it.reason, it.context) }.sortedWith(
+            compareBy<FumbleCandidate> { it.range.startMs }.thenBy { it.reason }
+        )
     }
-    fun automatic(candidates: List<FumbleCandidate>, profile: EditorialProfile? = null) =
-        candidates.filter { it.confidence >= (profile?.policy?.automaticCutConfidence ?: .93f) }
-    private fun merge(input: List<FumbleCandidate>): List<FumbleCandidate> = input.fold(mutableListOf()) { acc, value ->
-        val last = acc.lastOrNull()
-        if (last != null && value.range.startMs <= last.range.endMs + 80) acc[acc.lastIndex] = FumbleCandidate(TimeRange(last.range.startMs, max(last.range.endMs, value.range.endMs)), max(last.confidence, value.confidence), "${last.reason}+${value.reason}") else acc += value
-        acc
+
+    private fun hint(
+        words: List<TranscriptWord>,
+        indexes: List<Int>,
+        range: TimeRange,
+        confidence: Float,
+        reason: String
+    ): FumbleCandidate {
+        val first = indexes.minOrNull() ?: 0
+        val last = indexes.maxOrNull() ?: first
+        val selected = indexes.mapNotNull(words::getOrNull)
+        return FumbleCandidate(
+            range = range,
+            confidence = confidence.coerceIn(0f, 1f),
+            reason = reason,
+            contextBefore = words.subList(max(0, first - 4), first).joinToString(" ", transform = TranscriptWord::text),
+            context = selected.joinToString(" ", transform = TranscriptWord::text),
+            contextAfter = words.subList(min(words.size, last + 1), min(words.size, last + 5))
+                .joinToString(" ", transform = TranscriptWord::text),
+            transcriptConfidence = selected.minOfOrNull(TranscriptWord::confidence),
+            speakerIds = selected.mapNotNull(TranscriptWord::speakerId).toSet()
+        )
     }
 }
 

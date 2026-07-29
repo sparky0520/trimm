@@ -81,13 +81,11 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
             offset += source.durationMs
         }
         val editorialProfile = EditorialProfileDeriver.derive(evidenceGraphs, project.preferences)
-        progress("fumbles", 65)
+        progress("speech-hints", 65)
         val candidates = FumbleDetector.detect(words, project.durationMs, project.preferences.pace, editorialProfile)
-        val automatic = FumbleDetector.automatic(candidates, editorialProfile)
         val retained = project.operations.filter {
             it !is RemoveFumbles && it !is AddCaptions && OperationValidator.isPlannerAvailable(it)
         }.toMutableList()
-        if (automatic.isNotEmpty()) retained += RemoveFumbles(ranges = automatic.map { it.range }, confidence = automatic.minOf { it.confidence }, reasons = automatic.map { it.reason }.distinct())
         val captions = CaptionSegmenter.segment(words)
         val takeGroups = TakeRanker(profile = editorialProfile).detectAndRank(
             TakeCandidateGenerator.fromEvidence(evidenceGraphs),
@@ -107,7 +105,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
             analysis = Analysis(
                 words = words,
                 captions = captions,
-                lowConfidenceFumbles = candidates.filter { it.confidence < editorialProfile.policy.automaticCutConfidence },
+                speechHints = candidates,
                 takeGroups = takeGroups,
                 editorialProfile = editorialProfile,
                 storyGraph = storyGraph,
