@@ -16,7 +16,8 @@ export type AgentRunStatus =
 
 export type ActivityType =
   | 'started' | 'index_received' | 'analyzing' | 'evidence_requested'
-  | 'evidence_received' | 'clarification' | 'proposal_ready'
+  | 'evidence_received' | 'proposal_repairing' | 'proposal_repaired'
+  | 'proposal_repair_failed' | 'clarification' | 'proposal_ready'
   | 'partial' | 'failed' | 'cancelled';
 
 export interface ActivityEventV1 {
@@ -129,6 +130,9 @@ enum class ActivityType {
     @SerialName("analyzing") ANALYZING,
     @SerialName("evidence_requested") EVIDENCE_REQUESTED,
     @SerialName("evidence_received") EVIDENCE_RECEIVED,
+    @SerialName("proposal_repairing") PROPOSAL_REPAIRING,
+    @SerialName("proposal_repaired") PROPOSAL_REPAIRED,
+    @SerialName("proposal_repair_failed") PROPOSAL_REPAIR_FAILED,
     @SerialName("clarification") CLARIFICATION,
     @SerialName("proposal_ready") PROPOSAL_READY,
     @SerialName("partial") PARTIAL,
@@ -247,7 +251,8 @@ export const AGENT_RUN_STATUSES = Object.freeze([
 ]);
 export const ACTIVITY_TYPES = Object.freeze([
   'started', 'index_received', 'analyzing', 'evidence_requested',
-  'evidence_received', 'clarification', 'proposal_ready',
+  'evidence_received', 'proposal_repairing', 'proposal_repaired',
+  'proposal_repair_failed', 'clarification', 'proposal_ready',
   'partial', 'failed', 'cancelled',
 ]);
 export const DECISION_TYPES = Object.freeze([

@@ -7,7 +7,8 @@ export type AgentRunStatus =
 
 export type ActivityType =
   | 'started' | 'index_received' | 'analyzing' | 'evidence_requested'
-  | 'evidence_received' | 'clarification' | 'proposal_ready'
+  | 'evidence_received' | 'proposal_repairing' | 'proposal_repaired'
+  | 'proposal_repair_failed' | 'clarification' | 'proposal_ready'
   | 'partial' | 'failed' | 'cancelled';
 
 export interface ActivityEventV1 {
