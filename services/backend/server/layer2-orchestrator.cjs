@@ -1,5 +1,6 @@
 'use strict';
 
+const { validateMediaIndex } = require('./media-index-contract.cjs');
 const ALLOWED_OPERATIONS = new Set([
   'remove_fumbles', 'set_audio_cleanup', 'set_audio_levels',
   'add_sound_effect', 'set_background_music', 'add_captions', 'semantic_visual',
@@ -24,7 +25,8 @@ const DEFAULT_BUDGETS = Object.freeze({
 });
 const SYSTEM_POLICY = `You are ctrlB's private Layer 2 mobile editorial orchestrator.
 Return one JSON object with type evidence_request, edit_program, clarification, or fallback.
-Begin with the compact inventory. Ask only for the minimum derivative evidence needed.
+Begin with the request-shaped media index in the compact inventory. Treat its ranges as locally measured candidates and coverage, not as editorial meaning.
+Ask only for the minimum derivative evidence needed. You may request additional bounded ranges when the current index is insufficient.
 Never request source video, rendered output, executable instructions, provider credentials, or tools.
 Every edit operation must cite supplied evidence IDs and include confidence from 0 to 1.
 Do not invent evidence. When evidence is missing or uncertain, request bounded evidence, clarify, or fall back.
@@ -80,6 +82,7 @@ function validateInventory(value) {
   if (new Set(inventory.sources.map((source) => source.id)).size !== inventory.sources.length) {
     throw orchestrationError('Source IDs must be unique.');
   }
+  inventory.mediaIndex = validateMediaIndex(value.mediaIndex, inventory.sources);
   const requested = value.budgets || {};
   inventory.budgets = {
     maximumBytes: boundedInteger(requested.maximumBytes ?? DEFAULT_BUDGETS.maximumBytes, 'byte budget', 100 * 1024 * 1024),

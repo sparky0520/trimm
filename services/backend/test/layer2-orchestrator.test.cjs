@@ -16,6 +16,11 @@ const inventory = Object.freeze({
   projectRevision: 4,
   intent: 'Make a concise product demo',
   sources: [{ id: 'clip-1', fingerprint: 'a'.repeat(64), durationMs: 60_000, width: 1920, height: 1080, hasAudio: true }],
+  mediaIndex: {
+    schemaVersion: 1, indexId: 'index-1', requestScope: 'broad_editorial', generatedAtEpochMs: 1,
+    segments: [{ id: 'segment-1', sourceId: 'clip-1', startMs: 0, endMs: 10_000, signalKinds: ['speech'], observationIds: ['speech-1'] }],
+    selections: [{ id: 'selection-1', sourceId: 'clip-1', startMs: 0, endMs: 10_000, reasons: ['representative_coverage'], observationIds: ['speech-1'], derivativeKinds: ['audio', 'frame'] }],
+  },
   budgets: { maximumBytes: 1_000_000, maximumDurationMs: 30_000, maximumCostMicros: 1000, maximumRequests: 2, retentionMs: 60_000 },
 });
 
@@ -36,6 +41,24 @@ test('compact inventories reject cloud-private fields and source media paths', (
   assert.throws(() => validateInventory({ ...inventory, tools: [{ name: 'ffmpeg' }] }), (error) => error.code === 'cloud_boundary_violation');
   assert.throws(() => validateInventory({ ...inventory, sources: [{ ...inventory.sources[0], sourceUri: 'file:///private/video.mp4' }] }),
     (error) => error.code === 'cloud_boundary_violation');
+});
+
+test('media indexes stay request-shaped and cannot invent editorial labels', () => {
+  assert.equal(validateInventory(inventory).mediaIndex.requestScope, 'broad_editorial');
+  assert.throws(() => validateInventory({
+    ...inventory,
+    mediaIndex: {
+      ...inventory.mediaIndex,
+      segments: [{ ...inventory.mediaIndex.segments[0], label: 'failed take' }],
+    },
+  }), (error) => error.code === 'invalid_media_index');
+  assert.throws(() => validateInventory({
+    ...inventory,
+    mediaIndex: {
+      ...inventory.mediaIndex,
+      selections: [{ ...inventory.mediaIndex.selections[0], endMs: 70_000 }],
+    },
+  }), (error) => error.code === 'invalid_media_index');
 });
 
 test('planner requests become scoped jobs only within byte, duration, cost, and count budgets', async (t) => {
