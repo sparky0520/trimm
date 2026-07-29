@@ -36,6 +36,16 @@ as one repeated take. These hints appear under uncertainty and never create an
 enabled removal operation; contextual speech decisions must come back from
 Layer 2 and pass normal proposal validation and preview.
 
+Selective derivative preparation accepts only an authorized evidence job for a
+currently selected source. It validates type, format, exact source-time range,
+duration, byte budget, purpose, and expiry before writing into an app-owned
+job directory. Android prepares bounded audio/audiovisual MP4 clips with
+Media3 and exact timestamped frames or normalized crops locally. Completed
+artifacts record purpose, source fingerprint/range, format, byte length,
+SHA-256, creation time, and expiry. Cancellation, failure, budget overflow,
+and expiry remove local bytes. Whole-source audiovisual proxies require an
+explicit opt-in separate from selective evidence authorization.
+
 Current frame statistics are not semantic vision:
 
 - average brightness approximates exposure;
