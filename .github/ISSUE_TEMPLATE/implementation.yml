@@ -1,0 +1,31 @@
+name: Cloud implementation
+description: Scoped backend, contract, infrastructure, billing, or agent work
+title: ""
+labels: ["type:implementation"]
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: What observable cloud behavior should exist?
+    validations:
+      required: true
+  - type: textarea
+    id: boundary
+    attributes:
+      label: Repository boundary
+      description: State what cloud owns and what remains in mobile or desktop.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: "- [ ] ..."
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Tests, fixtures, security checks, and production evidence.
