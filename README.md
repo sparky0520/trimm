@@ -4,6 +4,9 @@ Android-first conversational video editor. Import clips, describe the edit in ch
 
 See [Android rendering](docs/RENDERING.md), [Perception](docs/PERCEPTION.md), and the [Mobile roadmap](docs/ROADMAP.md).
 
+Start with the [Android development guide](docs/DEVELOPMENT.md) before taking a
+ticket.
+
 ## Build
 
 Requirements:
@@ -17,6 +20,9 @@ Open this repository in Android Studio and run the `app` configuration, or run:
 .\gradlew.bat testDebugUnitTest
 .\gradlew.bat assembleDebug
 ```
+
+Copy `.env.local.example` to the ignored `.env.local` for endpoint,
+authentication, and optional signing configuration.
 
 Runtime endpoints and public client configuration belong in user Gradle properties or CI secrets. Set `CTRLB_BACKEND_URL` to the deployed `ctrlb-cloud` HTTPS origin.
 

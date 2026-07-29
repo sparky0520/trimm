@@ -15,3 +15,8 @@ Mobile owns:
 - [Preserve Android state while cloud repairs a malformed response](https://github.com/sparky0520/ctrlb-mobile/issues/9)
 - [Measured Android requirements and capability tiers](https://github.com/sparky0520/ctrlb-mobile/issues/10)
 - [Scene-aware speech and background-noise measurements](https://github.com/sparky0520/ctrlb-mobile/issues/11)
+
+Recommended implementation order: #4 and the index foundation in #1, then #2,
+#5, #3, and #9. Issues #8 and #11 refine the evidence feeding that path.
+Billing (#6) and the capability/device program (#7 and #10) can proceed in
+parallel where they do not change the cloud contract.
