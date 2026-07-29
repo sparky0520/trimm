@@ -32,7 +32,18 @@
       "confidence": 0.96,
       "evidenceIds": ["job-1"],
       "ranges": [{ "startMs": 1000, "endMs": 1500 }],
-      "reasons": ["repeated phrase"]
+      "reasons": ["repeated phrase"],
+      "speechDecision": {
+        "meaningPreserved": true,
+        "completeDeliverySelected": true,
+        "rationale": "The alternate take completes the same thought with a continuous delivery.",
+        "contextEvidenceIds": ["job-1"],
+        "locatorSignals": ["repeated_phrase"],
+        "contextSignals": ["surrounding_context", "speaker_scene_cadence", "word_phoneme_timing", "alternate_takes", "user_intent", "proposal_simulation"],
+        "transcriptUncertain": false,
+        "uncertaintyAction": "none",
+        "technicalTieBreakerOnly": true
+      }
     }]
   },
   "agentRun": {
@@ -58,7 +69,18 @@
         "confidence": 0.96,
         "evidenceIds": ["job-1"],
         "ranges": [{ "startMs": 1000, "endMs": 1500 }],
-        "reasons": ["repeated phrase"]
+        "reasons": ["repeated phrase"],
+        "speechDecision": {
+          "meaningPreserved": true,
+          "completeDeliverySelected": true,
+          "rationale": "The alternate take completes the same thought with a continuous delivery.",
+          "contextEvidenceIds": ["job-1"],
+          "locatorSignals": ["repeated_phrase"],
+          "contextSignals": ["surrounding_context", "speaker_scene_cadence", "word_phoneme_timing", "alternate_takes", "user_intent", "proposal_simulation"],
+          "transcriptUncertain": false,
+          "uncertaintyAction": "none",
+          "technicalTieBreakerOnly": true
+        }
       }]
     }
   }

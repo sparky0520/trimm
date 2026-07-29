@@ -99,10 +99,24 @@ data class EditOperationV1(
     val ranges: List<TimeRangeV1>? = null,
     val range: TimeRangeV1? = null,
     val reasons: List<String>? = null,
+    val speechDecision: SpeechDecisionV1? = null,
     val intent: String? = null,
     val treatment: String? = null,
     val subject: JsonElement? = null,
     val framing: JsonElement? = null
+)
+
+@Serializable
+data class SpeechDecisionV1(
+    val meaningPreserved: Boolean,
+    val completeDeliverySelected: Boolean,
+    val rationale: String,
+    val contextEvidenceIds: List<String>,
+    val locatorSignals: List<String>,
+    val contextSignals: List<String>,
+    val transcriptUncertain: Boolean,
+    val uncertaintyAction: String,
+    val technicalTieBreakerOnly: Boolean
 )
 
 @Serializable

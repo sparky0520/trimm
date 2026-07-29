@@ -48,6 +48,7 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1, "maxLength": 500 }
         },
+        "speechDecision": { "$ref": "#/$defs/speechDecision" },
         "intent": { "enum": ["INTRODUCE", "POINT_OUT", "TRANSITION", "REVEAL", "EMPHASIZE", "RECAP"] },
         "treatment": { "enum": ["CALLOUT", "SPOTLIGHT", "REFRAME"] },
         "subject": { "$ref": "#/$defs/subject" },
@@ -63,6 +64,22 @@
           { "required": ["renderedOutput"] }
         ]
       }
+    },
+    "speechDecision": {
+      "type": "object",
+      "required": ["meaningPreserved", "completeDeliverySelected", "rationale", "contextEvidenceIds", "locatorSignals", "contextSignals", "transcriptUncertain", "uncertaintyAction", "technicalTieBreakerOnly"],
+      "properties": {
+        "meaningPreserved": { "const": true },
+        "completeDeliverySelected": { "const": true },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "contextEvidenceIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 200 } },
+        "locatorSignals": { "type": "array", "uniqueItems": true, "items": { "enum": ["possible_filler", "pause_candidate", "repeated_phrase", "transcript_uncertainty", "delivery_discontinuity"] } },
+        "contextSignals": { "type": "array", "minItems": 6, "uniqueItems": true, "items": { "enum": ["surrounding_context", "speaker_scene_cadence", "word_phoneme_timing", "user_intent", "alternate_takes", "waveform_scene_noise", "surrounding_video", "proposal_simulation"] } },
+        "transcriptUncertain": { "type": "boolean" },
+        "uncertaintyAction": { "enum": ["none", "re_listened", "alternate_transcription", "escalated"] },
+        "technicalTieBreakerOnly": { "type": "boolean" }
+      },
+      "additionalProperties": false
     },
     "timeRange": {
       "type": "object",

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "fixturePolicy": "Expected judgments are versioned here. Private real-video media and signed result artifacts must be supplied by the governed evaluation store before model qualification.",
+  "candidateModels": [
+    {
+      "model": "gemini-3.6-flash",
+      "status": "pending_real_media_evaluation",
+      "capabilities": ["native_video_audio", "timestamp_grounding", "tool_use", "structured_output", "cached_context"]
+    },
+    {
+      "model": "gemini-3.6-pro",
+      "role": "ambiguity_escalation",
+      "status": "pending_real_media_evaluation",
+      "capabilities": ["native_video_audio", "timestamp_grounding", "tool_use", "structured_output", "cached_context"]
+    }
+  ],
+  "cases": [
+    {"id":"slow-delivery-v1","scenario":"slow","decision":"keep","basis":["pause_threshold"],"transcriptUncertain":false},
+    {"id":"fast-delivery-v1","scenario":"fast","decision":"keep","basis":["word_list"],"transcriptUncertain":false},
+    {"id":"non-native-v1","scenario":"non_native","decision":"keep","basis":["confidence_threshold"],"transcriptUncertain":true,"uncertaintyAction":"alternate_transcription"},
+    {"id":"emotional-v1","scenario":"emotional","decision":"keep","basis":["pause_threshold"],"transcriptUncertain":false},
+    {"id":"comedic-v1","scenario":"comedic","decision":"keep","basis":["pause_threshold"],"transcriptUncertain":false},
+    {"id":"instructional-v1","scenario":"instructional","decision":"cut","basis":["delivery_comparison","meaning"],"meaningPreserved":true,"completeDeliverySelected":true,"contextSignals":["surrounding_context","speaker_scene_cadence","word_phoneme_timing","alternate_takes","user_intent","proposal_simulation"],"transcriptUncertain":false,"uncertaintyAction":"none"},
+    {"id":"multi-speaker-v1","scenario":"multi_speaker","decision":"keep","basis":["quality_score"],"transcriptUncertain":false},
+    {"id":"noisy-uncertain-v1","scenario":"noisy_uncertain","decision":"cut","basis":["delivery_comparison","meaning"],"meaningPreserved":true,"completeDeliverySelected":true,"contextSignals":["surrounding_context","speaker_scene_cadence","waveform_scene_noise","surrounding_video","user_intent","proposal_simulation"],"transcriptUncertain":true,"uncertaintyAction":"re_listened"}
+  ]
+}

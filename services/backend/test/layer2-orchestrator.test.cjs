@@ -115,6 +115,17 @@ test('edit programs require completed owned evidence, valid citations, confidenc
       id: 'op-1', type: 'remove_fumbles', enabled: true,
       ranges: [{ startMs: 1000, endMs: 1500 }], reasons: ['repeated phrase'],
       confidence: 0.96, evidenceIds: [evidence[0].id],
+      speechDecision: {
+        meaningPreserved: true,
+        completeDeliverySelected: true,
+        rationale: 'The alternate take completes the same thought with a continuous delivery.',
+        contextEvidenceIds: [evidence[0].id],
+        locatorSignals: ['repeated_phrase'],
+        contextSignals: ['surrounding_context', 'speaker_scene_cadence', 'word_phoneme_timing', 'alternate_takes', 'user_intent', 'proposal_simulation'],
+        transcriptUncertain: false,
+        uncertaintyAction: 'none',
+        technicalTieBreakerOnly: true,
+      },
     }],
   }));
   t.after(() => fs.rmSync(setup.directory, { recursive: true, force: true }));

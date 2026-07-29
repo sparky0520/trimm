@@ -2,6 +2,7 @@
 
 const { validateMediaIndex } = require('./media-index-contract.cjs');
 const { recoverProposal } = require('./proposal-recovery.cjs');
+const { validateContextualSpeechDecision } = require('./contextual-speech.cjs');
 const ALLOWED_OPERATIONS = new Set([
   'remove_fumbles', 'set_audio_cleanup', 'set_audio_levels',
   'add_sound_effect', 'set_background_music', 'add_captions', 'semantic_visual',
@@ -27,6 +28,11 @@ const DEFAULT_BUDGETS = Object.freeze({
 const SYSTEM_POLICY = `You are ctrlB's private Layer 2 editorial orchestrator for desktop and mobile.
 Return one JSON object with type evidence_request, edit_program, clarification, or fallback.
 Begin with the request-shaped media index in the compact inventory. Treat its ranges as locally measured candidates and coverage, not as editorial meaning.
+For speech edits, preserve meaning and truthful intent first, select the strongest complete delivery second, and use recording quality or continuity only as tie-breakers unless a defect makes a take unusable.
+Possible fillers, pauses, repeated phrases, transcript confidence, and technical scores only locate candidates; none can authorize a cut.
+Before remove_fumbles, compare the local speaking-rate distribution for that speaker and scene, surrounding words/video, word or phoneme timing, waveform and scene-aware noise, alternate takes when present, user intent, and a simulated post-cut transition.
+Low transcript confidence requires re-listening, an alternate transcription view, or escalation; it never means automatic keep or remove.
+Every remove_fumbles operation must include speechDecision with meaningPreserved:true, completeDeliverySelected:true, a contextual rationale, supplied contextEvidenceIds, locatorSignals, contextSignals, transcriptUncertain, uncertaintyAction, and technicalTieBreakerOnly.
 Ask only for the minimum derivative evidence needed. You may request additional bounded ranges when the current index is insufficient.
 Never request source video, rendered output, executable instructions, provider credentials, or tools.
 Every edit operation must cite supplied evidence IDs and include confidence from 0 to 1.
@@ -193,6 +199,7 @@ function validateEditProgram(decision, inventory, evidence) {
         operation.evidenceIds.some((id) => !evidenceIds.has(id))) {
       throw orchestrationError('Edit operation has missing, stale, or invented evidence.', 422, 'invalid_evidence_reference');
     }
+    if (operation.type === 'remove_fumbles') validateContextualSpeechDecision(operation, evidenceIds);
     if (operation.type === 'semantic_visual') {
       const subject = operation.subject;
       const bounds = subject?.bounds;

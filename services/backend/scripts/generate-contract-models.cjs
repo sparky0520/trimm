@@ -66,9 +66,22 @@ export interface EditOperationV1 {
   ranges?: TimeRangeV1[];
   range?: TimeRangeV1;
   reasons?: string[];
+  speechDecision?: SpeechDecisionV1;
   intent?: 'INTRODUCE' | 'POINT_OUT' | 'TRANSITION' | 'REVEAL' | 'EMPHASIZE' | 'RECAP';
   treatment?: 'CALLOUT' | 'SPOTLIGHT' | 'REFRAME';
   [operationParameter: string]: unknown;
+}
+
+export interface SpeechDecisionV1 {
+  meaningPreserved: true;
+  completeDeliverySelected: true;
+  rationale: string;
+  contextEvidenceIds: string[];
+  locatorSignals: string[];
+  contextSignals: string[];
+  transcriptUncertain: boolean;
+  uncertaintyAction: 'none' | 're_listened' | 'alternate_transcription' | 'escalated';
+  technicalTieBreakerOnly: boolean;
 }
 
 export interface EditProgramV1 {
@@ -204,10 +217,24 @@ data class EditOperationV1(
     val ranges: List<TimeRangeV1>? = null,
     val range: TimeRangeV1? = null,
     val reasons: List<String>? = null,
+    val speechDecision: SpeechDecisionV1? = null,
     val intent: String? = null,
     val treatment: String? = null,
     val subject: JsonElement? = null,
     val framing: JsonElement? = null
+)
+
+@Serializable
+data class SpeechDecisionV1(
+    val meaningPreserved: Boolean,
+    val completeDeliverySelected: Boolean,
+    val rationale: String,
+    val contextEvidenceIds: List<String>,
+    val locatorSignals: List<String>,
+    val contextSignals: List<String>,
+    val transcriptUncertain: Boolean,
+    val uncertaintyAction: String,
+    val technicalTieBreakerOnly: Boolean
 )
 
 @Serializable

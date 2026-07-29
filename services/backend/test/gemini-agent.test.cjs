@@ -18,4 +18,22 @@ test('new agent path is pinned to Gemini 3.6 Flash and requests JSON', async () 
   assert.equal(request.config.responseMimeType, 'application/json');
   assert.deepEqual(JSON.parse(decision.rawText), { type: 'fallback', reason: 'More evidence is needed.' });
   assert.equal(typeof decide.repair, 'function');
+  assert.equal(typeof decide.escalate, 'function');
+  assert.deepEqual(decide.capabilities, {
+    nativeVideoAudio: true,
+    timestampGrounding: true,
+    toolUse: true,
+    structuredOutput: true,
+    reusableCachedContext: true,
+    primaryModel: 'gemini-3.6-flash',
+    escalationModel: 'gemini-3.6-pro',
+  });
+
+  await decide.escalate({
+    systemPolicy: 'policy', inventory: { projectId: 'p' }, evidence: [],
+    cachedContent: 'cachedContents/project-1', tools: [{ functionDeclarations: [] }],
+  });
+  assert.equal(request.model, 'gemini-3.6-pro');
+  assert.equal(request.config.cachedContent, 'cachedContents/project-1');
+  assert.equal(request.config.tools.length, 1);
 });
