@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ctrlb.ai/contracts/activity-event.v1.json",
+  "title": "ctrlB safe activity event v1",
+  "type": "object",
+  "required": ["sequence", "type", "message", "createdAt"],
+  "properties": {
+    "sequence": { "type": "integer", "minimum": 1 },
+    "type": {
+      "enum": [
+        "started",
+        "index_received",
+        "analyzing",
+        "evidence_requested",
+        "evidence_received",
+        "clarification",
+        "proposal_ready",
+        "partial",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "message": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

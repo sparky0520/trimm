@@ -1,0 +1,65 @@
+{
+  "contractVersion": 1,
+  "activityEvent": {
+    "sequence": 4,
+    "type": "evidence_requested",
+    "message": "I need a few precise ranges before proposing edits.",
+    "createdAt": "2026-07-29T10:00:00.000Z"
+  },
+  "evidenceRequest": {
+    "type": "evidence_request",
+    "jobs": [{
+      "id": "job-1",
+      "sourceId": "clip-1",
+      "type": "audio",
+      "purpose": "transcription",
+      "acceptedFormat": "audio/mpeg",
+      "range": { "startMs": 10000, "endMs": 30000 },
+      "maximumBytes": 500000,
+      "maximumDurationMs": 20000,
+      "expiresAt": "2026-07-29T16:00:00.000Z",
+      "reused": false
+    }]
+  },
+  "editProgram": {
+    "type": "edit_program",
+    "expectedRevision": 4,
+    "summary": "Remove the transcript-grounded fumble.",
+    "operations": [{
+      "id": "op-1",
+      "type": "remove_fumbles",
+      "enabled": true,
+      "confidence": 0.96,
+      "evidenceIds": ["job-1"],
+      "ranges": [{ "startMs": 1000, "endMs": 1500 }],
+      "reasons": ["repeated phrase"]
+    }]
+  },
+  "agentRun": {
+    "contractVersion": 1,
+    "runId": "run-1",
+    "projectId": "project-1",
+    "projectRevision": 4,
+    "status": "proposal_ready",
+    "events": [{
+      "sequence": 4,
+      "type": "proposal_ready",
+      "message": "The proposed edit is ready to preview.",
+      "createdAt": "2026-07-29T10:01:00.000Z"
+    }],
+    "decision": {
+      "type": "edit_program",
+      "expectedRevision": 4,
+      "summary": "Remove the transcript-grounded fumble.",
+      "operations": [{
+        "id": "op-1",
+        "type": "remove_fumbles",
+        "enabled": true,
+        "confidence": 0.96,
+        "evidenceIds": ["job-1"],
+        "ranges": [{ "startMs": 1000, "endMs": 1500 }],
+        "reasons": ["repeated phrase"]
+      }]
+    }
+  }
+}

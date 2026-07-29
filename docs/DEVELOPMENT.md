@@ -33,6 +33,11 @@ either client repository.
 Breaking changes require a new explicit version and coordinated adoption
 tickets in both client repositories.
 
+Run `npm run contracts:generate` after changing a canonical agent schema.
+Generated Kotlin and TypeScript models and their identical conformance fixture
+live under `contracts/generated`. `npm run contracts:check` fails when a
+checked-in artifact is stale.
+
 ## Definition of done
 
 - server behavior has bounded validation and authorization tests;

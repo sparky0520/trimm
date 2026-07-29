@@ -12,19 +12,33 @@
     "status": { "enum": ["waiting_for_evidence", "waiting_for_user", "proposal_ready", "partial", "failed", "cancelled"] },
     "events": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["sequence", "type", "message", "createdAt"],
-        "properties": {
-          "sequence": { "type": "integer", "minimum": 1 },
-          "type": { "enum": ["started", "index_received", "analyzing", "evidence_requested", "evidence_received", "clarification", "proposal_ready", "partial", "failed", "cancelled"] },
-          "message": { "type": "string" },
-          "createdAt": { "type": "string", "format": "date-time" }
-        },
-        "additionalProperties": false
-      }
+      "items": { "$ref": "activity-event.v1.json" }
     },
-    "decision": { "type": "object" }
+    "decision": {
+      "oneOf": [
+        { "$ref": "evidence-request.v1.json" },
+        { "$ref": "edit-program.v1.json" },
+        {
+          "type": "object",
+          "required": ["type", "question", "options"],
+          "properties": {
+            "type": { "const": "clarification" },
+            "question": { "type": "string", "minLength": 1, "maxLength": 500 },
+            "options": { "type": "array", "maxItems": 5, "items": {} }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "reason"],
+          "properties": {
+            "type": { "const": "fallback" },
+            "reason": { "type": "string", "minLength": 1, "maxLength": 1000 }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
   },
   "additionalProperties": false
 }

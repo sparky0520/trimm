@@ -12,7 +12,7 @@ affected repositories green.
 
 | Order | Repository | Ticket | Finish this slice before moving on |
 | ---: | --- | --- | --- |
-| 1 | `ctrlb-cloud` | [#4 — generated canonical contracts](https://github.com/sparky0520/ctrlb-cloud/issues/4) | Generate and publish the agent-run, activity, evidence-request and edit-program models with compatibility fixtures for Kotlin and TypeScript. The handwritten v1 contract foundation already exists. |
+| 1 | `ctrlb-cloud` | [#4 — generated canonical contracts](https://github.com/sparky0520/ctrlb-cloud/issues/4) | ✅ Done — generated and published the agent-run, activity, evidence-request and edit-program models with shared compatibility fixtures for Kotlin and TypeScript. |
 | 2 | `ctrlb-cloud` | [#1 — persistent multimodal agent loop](https://github.com/sparky0520/ctrlb-cloud/issues/1) | Start and continue the same Gemini 3.6 Flash run, emit safe activity, request bounded evidence, and return clarification, partial result or a validated proposal. The process-local first slice already exists; do not treat that as production persistence. |
 | 3 | `ctrlb-cloud` | [#2 — selective derivative ingestion](https://github.com/sparky0520/ctrlb-cloud/issues/2) | Authorize, receive, inspect, retain and delete request-selected derivatives. Original/proxy upload must remain a separate, explicit mode. |
 | 4 | `ctrlb-desktop` | [#5 — connect the desktop media index to the agent](https://github.com/sparky0520/ctrlb-desktop/issues/5) | Complete one real “Make this video publishable” journey: local index → selected derivatives → same cloud run → typed proposal → preview/apply. |
