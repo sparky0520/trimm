@@ -15,7 +15,7 @@ Current themes:
 
 Historical monorepo ticket numbers are reference-only. New work is tracked in the repository that owns its implementation.
 
-Recommended implementation order: #4, #3, #2, #1, #8, then #7. Billing (#5)
-and catalog operations (#6) can proceed independently. The ordering is a
-dependency guide, not a requirement to finish an entire issue before landing a
-tested vertical slice.
+The authoritative cross-repository sequence is
+[Canonical implementation order](IMPLEMENTATION_ORDER.md). It identifies the
+next acceptance slice across cloud, desktop and Android; issue numbers alone are
+not chronological.
