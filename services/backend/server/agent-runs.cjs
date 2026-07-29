@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { VolatileAgentRunStore } = require('./agent-run-store.cjs');
+const { ProposalRecoveryError } = require('./proposal-recovery.cjs');
 
 const STATUS_FOR = Object.freeze({
   evidence_request: 'waiting_for_evidence',
@@ -46,6 +47,44 @@ class AgentRuns {
     };
   }
 
+  applyDecision(run, outcome) {
+    run.attempts ||= [];
+    const recovery = outcome?._recovery;
+    const decision = recovery ? Object.fromEntries(Object.entries(outcome).filter(([key]) => key !== '_recovery')) : outcome;
+    if (recovery) {
+      this.event(run, 'proposal_repairing', 'The proposal needed a bounded structural repair.');
+      run.attempts.push(...recovery.attempts);
+      run.recovery = { status: recovery.status, canRetry: false, canClarify: false };
+      this.event(run, 'proposal_repaired', 'The repaired proposal passed validation without changing the edit intent.');
+    } else if (run.recovery?.status === 'repair_failed') {
+      run.recovery = { ...run.recovery, status: 'resolved', canRetry: false, canClarify: false };
+    }
+    run.decision = decision;
+    run.status = STATUS_FOR[decision.type];
+    this.event(run, ...EVENT_FOR[decision.type]);
+  }
+
+  recoverFailure(run, error) {
+    if (!(error instanceof ProposalRecoveryError)) return false;
+    run.attempts ||= [];
+    this.event(run, 'proposal_repairing', 'The proposal was malformed, so a bounded structural repair was attempted.');
+    run.attempts.push(...error.recovery.attempts);
+    run.recovery = {
+      status: 'repair_failed',
+      canRetry: true,
+      canClarify: true,
+      attemptCount: error.recovery.attempts.length,
+    };
+    run.status = 'waiting_for_user';
+    run.decision = {
+      type: 'clarification',
+      question: 'The proposal could not be repaired safely. Would you like to retry or clarify the edit?',
+      options: ['retry', 'clarify'],
+    };
+    this.event(run, 'proposal_repair_failed', 'Nothing was applied. Your project and accepted edits are unchanged; you can retry or clarify.');
+    return true;
+  }
+
   async start(principal, inventory) {
     let run = {
       id: this.id(),
@@ -56,17 +95,21 @@ class AgentRuns {
       events: [],
       inventory,
       decision: { type: 'fallback', reason: 'The run has not started.' },
+      attempts: [],
+      recovery: null,
     };
     this.event(run, 'started', 'Starting a request-shaped video edit.');
     this.event(run, 'index_received', 'The local media index is ready; original source media stays local.');
     this.event(run, 'analyzing', 'Reviewing the selected ranges for a publishable first cut.');
     run = await this.store.create(run);
     try {
-      run.decision = await this.orchestrator.orchestrate(principal, inventory);
-      run.status = STATUS_FOR[run.decision.type];
-      this.event(run, ...EVENT_FOR[run.decision.type]);
+      this.applyDecision(run, await this.orchestrator.orchestrate(principal, inventory));
       run = await this.store.save(run, run.stateVersion);
     } catch (error) {
+      if (this.recoverFailure(run, error)) {
+        run = await this.store.save(run, run.stateVersion);
+        return this.view(run);
+      }
       run.status = 'failed';
       run.decision = { type: 'fallback', reason: 'The analysis could not be completed.' };
       this.event(run, 'failed', 'The analysis stopped safely and can be retried.');
@@ -78,23 +121,44 @@ class AgentRuns {
 
   async continue(principal, runId, update) {
     let run = await this.owned(principal, runId);
-    if (run.status !== 'waiting_for_evidence') {
+    const recovering = run.status === 'waiting_for_user' && run.recovery?.status === 'repair_failed';
+    if (!recovering && run.status !== 'waiting_for_evidence') {
       throw Object.assign(new Error('Agent run is not waiting for evidence.'), { status: 409, code: 'agent_run_not_waiting' });
     }
-    const evidenceJobIds = Array.isArray(update?.evidenceJobIds) ? update.evidenceJobIds : [];
-    if (!evidenceJobIds.length) {
-      throw Object.assign(new Error('Completed evidence is required.'), { status: 400, code: 'evidence_required' });
+    if (recovering) {
+      if (!['retry', 'clarify'].includes(update?.action)) {
+        throw Object.assign(new Error('Retry or clarification is required.'), { status: 400, code: 'recovery_action_required' });
+      }
+      if (update.action === 'clarify') {
+        if (typeof update.clarification !== 'string' || !update.clarification.trim() || update.clarification.length > 500) {
+          throw Object.assign(new Error('A bounded clarification is required.'), { status: 400, code: 'clarification_required' });
+        }
+        run.inventory = {
+          ...run.inventory,
+          clarifications: [...(run.inventory.clarifications || []), update.clarification.trim()].slice(-10),
+        };
+      }
+      this.event(run, 'analyzing', update.action === 'retry'
+        ? 'Retrying the same request without applying the malformed proposal.'
+        : 'Retrying the same request with your clarification.');
+    } else {
+      const evidenceJobIds = Array.isArray(update?.evidenceJobIds) ? update.evidenceJobIds : [];
+      if (!evidenceJobIds.length) {
+        throw Object.assign(new Error('Completed evidence is required.'), { status: 400, code: 'evidence_required' });
+      }
+      run.inventory = { ...run.inventory, evidenceJobIds: [...new Set([...(run.inventory.evidenceJobIds || []), ...evidenceJobIds])] };
+      this.event(run, 'evidence_received', 'The requested evidence is ready and attached to this run.');
+      this.event(run, 'analyzing', 'Continuing the same edit with the new evidence.');
     }
-    run.inventory = { ...run.inventory, evidenceJobIds: [...new Set([...(run.inventory.evidenceJobIds || []), ...evidenceJobIds])] };
-    this.event(run, 'evidence_received', 'The requested evidence is ready and attached to this run.');
-    this.event(run, 'analyzing', 'Continuing the same edit with the new evidence.');
     run = await this.store.save(run, run.stateVersion);
     try {
-      run.decision = await this.orchestrator.orchestrate(principal, run.inventory);
-      run.status = STATUS_FOR[run.decision.type];
-      this.event(run, ...EVENT_FOR[run.decision.type]);
+      this.applyDecision(run, await this.orchestrator.orchestrate(principal, run.inventory));
       run = await this.store.save(run, run.stateVersion);
     } catch (error) {
+      if (this.recoverFailure(run, error)) {
+        run = await this.store.save(run, run.stateVersion);
+        return this.view(run);
+      }
       run.status = 'failed';
       run.decision = { type: 'fallback', reason: 'The analysis could not be completed.' };
       this.event(run, 'failed', 'The analysis stopped safely and can be retried.');

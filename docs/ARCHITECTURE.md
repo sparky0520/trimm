@@ -115,6 +115,14 @@ Both sides validate for different reasons:
 
 This turns schema mismatch into a deployment compatibility check rather than a runtime surprise.
 
+Malformed model output is retained only as bounded, redacted, non-executable
+review material. The cloud makes one separate structural-repair call with the
+validation errors and original editorial context, validates the result again,
+and rejects any repair that changes known editorial intent. Both attempts and
+safe repair activity are durable. If repair fails, the same run offers retry or
+clarification while its project revision, accepted operations, evidence, and
+conversation activity remain intact.
+
 ## Rendering boundary
 
 The agent decides what the edit should be. Device rendering decides how an approved typed operation becomes pixels and sound.

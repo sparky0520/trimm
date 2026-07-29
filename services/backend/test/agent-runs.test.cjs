@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { AgentRuns } = require('../server/agent-runs.cjs');
 const { VolatileAgentRunStore } = require('../server/agent-run-store.cjs');
+const { ProposalRecoveryError } = require('../server/proposal-recovery.cjs');
 
 const principal = { id: 'user-1' };
 const inventory = { projectId: 'project-1', projectRevision: 0 };
@@ -111,4 +112,61 @@ test('clarification and bounded fallback become safe persisted run states', asyn
     assert.equal(result.events.at(-1).type, eventType);
     assert.equal((await runs.read(principal, result.runId)).status, status);
   }
+});
+
+test('failed repair preserves the project, accepted edits, attempts and offers retry or clarification', async () => {
+  const store = new VolatileAgentRunStore();
+  const accepted = [{ id: 'accepted-1', type: 'set_audio_levels', enabled: true }];
+  const attempts = [{
+    rawText: '{"type":"edit_program","operations":[{"type":"invented"}]}',
+    originalBytes: 62,
+    truncated: false,
+    providerTruncated: false,
+    finishReason: 'STOP',
+    validationErrors: [{ code: 'unknown_operation', message: 'Unknown operation.' }],
+  }];
+  const runs = new AgentRuns({
+    store,
+    orchestrator: { orchestrate: async () => {
+      throw new ProposalRecoveryError('repair failed', {
+        status: 'repair_failed', attempts, canRetry: true, canClarify: true,
+      });
+    } },
+    id: () => 'run-repair-failed',
+  });
+  const result = await runs.start(principal, { ...inventory, existingOperations: accepted });
+  assert.equal(result.status, 'waiting_for_user');
+  assert.equal(result.decision.type, 'clarification');
+  assert.deepEqual(result.decision.options, ['retry', 'clarify']);
+  assert.deepEqual(result.events.slice(-2).map(({ type }) => type), ['proposal_repairing', 'proposal_repair_failed']);
+  const persisted = await store.read(principal.id, result.runId);
+  assert.deepEqual(persisted.inventory.existingOperations, accepted);
+  assert.deepEqual(persisted.attempts, attempts);
+  assert.equal(persisted.recovery.canRetry, true);
+});
+
+test('retry continues the same failed-repair run and preserves prior attempts', async () => {
+  const store = new VolatileAgentRunStore();
+  let calls = 0;
+  const runs = new AgentRuns({
+    store,
+    orchestrator: { orchestrate: async () => {
+      calls += 1;
+      if (calls === 1) throw new ProposalRecoveryError('repair failed', {
+        status: 'repair_failed',
+        attempts: [{ rawText: '{bad', validationErrors: [{ code: 'invalid_proposal_json' }] }],
+        canRetry: true,
+        canClarify: true,
+      });
+      return { type: 'edit_program', expectedRevision: 0, summary: 'Recovered cut', operations: [] };
+    } },
+    id: () => 'run-retry',
+  });
+  const failed = await runs.start(principal, inventory);
+  const retried = await runs.continue(principal, failed.runId, { action: 'retry' });
+  assert.equal(retried.runId, failed.runId);
+  assert.equal(retried.status, 'proposal_ready');
+  const persisted = await store.read(principal.id, failed.runId);
+  assert.equal(persisted.attempts.length, 1);
+  assert.equal(persisted.inventory.projectRevision, 0);
 });

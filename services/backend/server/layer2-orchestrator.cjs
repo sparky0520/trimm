@@ -1,6 +1,7 @@
 'use strict';
 
 const { validateMediaIndex } = require('./media-index-contract.cjs');
+const { recoverProposal } = require('./proposal-recovery.cjs');
 const ALLOWED_OPERATIONS = new Set([
   'remove_fumbles', 'set_audio_cleanup', 'set_audio_levels',
   'add_sound_effect', 'set_background_music', 'add_captions', 'semantic_visual',
@@ -83,6 +84,14 @@ function validateInventory(value) {
       ? value.evidenceJobIds.slice(0, 100).map((id) => boundedString(id, 'evidence job ID', /^[0-9a-f-]{36}$/i))
       : [],
     existingOperations: Array.isArray(value.existingOperations) ? value.existingOperations.slice(0, 200) : [],
+    clarifications: Array.isArray(value.clarifications)
+      ? value.clarifications.slice(-10).map((item) => {
+          if (typeof item !== 'string' || !item.trim() || item.length > 500) {
+            throw orchestrationError('Invalid user clarification.', 400, 'invalid_clarification');
+          }
+          return item.trim();
+        })
+      : [],
     supportedContractVersions: {
       agentRuns: [1], activityEvents: [1], evidenceRequests: [1], editPrograms: [1],
     },
@@ -230,10 +239,11 @@ function validateDecision(decision, inventory, evidence) {
 }
 
 class Layer2Orchestrator {
-  constructor({ derivativeJobs, decide }) {
+  constructor({ derivativeJobs, decide, repair = decide?.repair }) {
     if (!derivativeJobs || typeof decide !== 'function') throw new TypeError('Layer2Orchestrator dependencies are required.');
     this.derivativeJobs = derivativeJobs;
     this.decide = decide;
+    this.repair = repair;
   }
 
   async orchestrate(principal, payload) {
@@ -244,8 +254,17 @@ class Layer2Orchestrator {
       inventory,
       evidence,
     });
-    const decision = validateDecision(raw, inventory, evidence);
-    if (decision.type !== 'evidence_request') return decision;
+    const recovered = await recoverProposal({
+      primary: raw,
+      repair: this.repair,
+      validate: (value) => validateDecision(value, inventory, evidence),
+      originalRequest: inventory,
+      editorialIntent: inventory.intent,
+    });
+    const decision = recovered.decision;
+    if (decision.type !== 'evidence_request') {
+      return recovered.recovery ? { ...decision, _recovery: recovered.recovery } : decision;
+    }
     const jobs = [];
     try {
       for (const request of decision.requests) {
@@ -296,7 +315,11 @@ class Layer2Orchestrator {
       }
       throw error;
     }
-    return { type: 'evidence_request', jobs };
+    return {
+      type: 'evidence_request',
+      jobs,
+      ...(recovered.recovery ? { _recovery: recovered.recovery } : {}),
+    };
   }
 }
 

@@ -9,6 +9,10 @@ const migration = fs.readFileSync(
   path.join(__dirname, '..', '..', '..', 'supabase', 'migrations', '20260729103000_create_agent_runs.sql'),
   'utf8',
 );
+const recoveryMigration = fs.readFileSync(
+  path.join(__dirname, '..', '..', '..', 'supabase', 'migrations', '20260729180000_add_agent_proposal_recovery.sql'),
+  'utf8',
+);
 const store = fs.readFileSync(path.join(__dirname, '..', 'server', 'agent-run-store.cjs'), 'utf8');
 
 test('agent runs are durable, private, owner scoped, and versioned', () => {
@@ -23,4 +27,11 @@ test('agent runs are durable, private, owner scoped, and versioned', () => {
 test('Postgres run updates use ownership and optimistic concurrency', () => {
   assert.match(store, /where id = \$\{run\.id\}[\s\S]*owner_id = \$\{run\.ownerId\}[\s\S]*state_version = \$\{expectedVersion\}/i);
   assert.match(store, /state_version = state_version \+ 1/i);
+});
+
+test('malformed and repaired proposal attempts are durable private run state', () => {
+  assert.match(recoveryMigration, /add column attempts jsonb not null default '\[\]'/i);
+  assert.match(recoveryMigration, /add column recovery jsonb/i);
+  assert.match(store, /attempts = \$\{this\.sql\.json\(run\.attempts \|\| \[\]\)\}/i);
+  assert.match(store, /recovery = \$\{this\.sql\.json\(run\.recovery\)\}/i);
 });
