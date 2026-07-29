@@ -3,6 +3,11 @@ package ai.ctrlb.mobile
 import ai.ctrlb.mobile.domain.*
 import ai.ctrlb.mobile.data.ProjectStore
 import ai.ctrlb.mobile.media.DeviceCapability
+import ai.ctrlb.mobile.media.AndroidDerivativeWriter
+import ai.ctrlb.mobile.media.SelectiveDerivativePreparer
+import ai.ctrlb.mobile.media.DerivativeAuthorization
+import ai.ctrlb.mobile.auth.AuthTokenProvider
+import ai.ctrlb.mobile.planner.*
 import ai.ctrlb.mobile.work.AnalysisWorker
 import ai.ctrlb.mobile.work.ExportWorker
 import ai.ctrlb.mobile.work.PreviewWorker
@@ -190,6 +195,64 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             renderPreview(result.project, simulatePendingProposal = true)
                         }
                     }
+            }
+        }
+    }
+    fun recoverAgent(action: AgentRecoveryAction) {
+        val current = mutable.value
+        val project = current.project ?: return
+        val previous = project.analysis.agentRun ?: return
+        val mediaIndex = project.analysis.mediaIndex ?: return
+        viewModelScope.launch {
+            val deviceSessionId = "android-${project.id}"
+            val uploadClient = DerivativeUploadClient(
+                BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken, project.id, deviceSessionId
+            )
+            val preparer = SelectiveDerivativePreparer(
+                java.io.File(getApplication<Application>().cacheDir, "agent-derivatives"),
+                AndroidDerivativeWriter(getApplication())
+            )
+            val coordinator = AgentRunCoordinator(
+                AgentRunClient(BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken),
+                AgentEvidenceFulfiller { job ->
+                    val derivative = preparer.prepare(DerivativeAuthorization(job), project.orderedSources)
+                    try { uploadClient.upload(derivative) }
+                    finally { java.io.File(derivative.localPath).delete() }
+                }
+            )
+            val request = AgentRunRequest(
+                projectId = project.id,
+                deviceSessionId = deviceSessionId,
+                projectRevision = previous.projectRevision,
+                intent = project.analysis.revisionConversation.firstOrNull()?.request
+                    ?: "Make this video publishable",
+                sources = project.orderedSources.map { source ->
+                    Layer2SourceInventory(
+                        source.fingerprint, source.fingerprint, source.durationMs,
+                        source.width, source.height, source.hasAudio
+                    )
+                },
+                mediaIndex = mediaIndex
+            )
+            runCatching {
+                coordinator.recover(previous, request, action) { snapshot ->
+                    val latest = store.load(project.id)
+                    val updated = latest.copy(analysis = latest.analysis.copy(agentRun = snapshot))
+                    store.save(updated)
+                    mutable.value = mutable.value.copy(project = updated)
+                }
+            }.onSuccess { snapshot ->
+                mutable.value = mutable.value.copy(
+                    jobMessage = when {
+                        action == AgentRecoveryAction.REVIEW_ISSUE -> "The issue is shown below. Nothing was applied."
+                        snapshot.status == AgentRunStatus.PROPOSAL_READY -> "Repaired proposal ready to review"
+                        else -> "Response-format recovery updated"
+                    }
+                )
+            }.onFailure { error ->
+                mutable.value = mutable.value.copy(
+                    jobMessage = "Recovery could not continue: ${error.message ?: "check the connection and retry"}"
+                )
             }
         }
     }

@@ -56,14 +56,47 @@ data class AgentRunRequest(
 @Serializable
 data class ContinueAgentRunRequest(val evidenceJobIds: List<String>)
 
+@Serializable
+data class RecoverAgentRunRequest(val action: String, val clarification: String? = null)
+
 interface AgentRunGateway {
     suspend fun start(request: AgentRunRequest): AgentRun
     suspend fun continueWith(runId: String, evidenceJobIds: List<String>): AgentRun
+    suspend fun recover(runId: String, action: String, clarification: String? = null): AgentRun
 }
 
 fun interface AgentEvidenceFulfiller {
     suspend fun fulfill(job: AuthorizedEvidenceJob): String
 }
+
+@Serializable
+enum class AgentRecoveryStatus {
+    @SerialName("repair_failed") REPAIR_FAILED,
+    @SerialName("retrying") RETRYING,
+    @SerialName("resolved") RESOLVED
+}
+
+@Serializable
+enum class AgentRecoveryAction {
+    @SerialName("retry_repair") RETRY_REPAIR,
+    @SerialName("regenerate_proposal") REGENERATE_PROPOSAL,
+    @SerialName("review_issue") REVIEW_ISSUE
+}
+
+@Serializable
+data class AgentRecoveryTurn(
+    val action: AgentRecoveryAction,
+    val message: String,
+    val createdAt: String
+)
+
+@Serializable
+data class AgentRecoveryState(
+    val status: AgentRecoveryStatus,
+    val issue: String = "The response format could not be fixed safely. Nothing was applied.",
+    val reviewRequested: Boolean = false,
+    val conversation: List<AgentRecoveryTurn> = emptyList()
+)
 
 @Serializable
 data class PersistedAgentRun(
@@ -74,7 +107,8 @@ data class PersistedAgentRun(
     val status: AgentRunStatus,
     val events: List<AgentActivityEvent>,
     val decision: JsonObject,
-    val fulfilledEvidenceJobIds: List<String> = emptyList()
+    val fulfilledEvidenceJobIds: List<String> = emptyList(),
+    val recovery: AgentRecoveryState? = null
 )
 
 @Serializable
@@ -88,6 +122,7 @@ class AgentRunCoordinator(
     private val json = Json { ignoreUnknownKeys = false }
     private val allowedActivityTypes = setOf(
         "started", "index_received", "analyzing", "evidence_requested", "evidence_received",
+        "proposal_repairing", "proposal_repaired", "proposal_repair_failed",
         "clarification", "proposal_ready", "partial", "failed", "cancelled"
     )
 
@@ -97,6 +132,58 @@ class AgentRunCoordinator(
     ): PersistedAgentRun {
         var snapshot = reduce(null, gateway.start(request), request)
         onPersist(snapshot)
+        return advance(snapshot, request, onPersist)
+    }
+
+    suspend fun recover(
+        previous: PersistedAgentRun,
+        request: AgentRunRequest,
+        action: AgentRecoveryAction,
+        onPersist: suspend (PersistedAgentRun) -> Unit
+    ): PersistedAgentRun {
+        require(previous.recovery?.status == AgentRecoveryStatus.REPAIR_FAILED) {
+            "Agent run has no recoverable proposal."
+        }
+        val message = when (action) {
+            AgentRecoveryAction.RETRY_REPAIR -> "Retry repair"
+            AgentRecoveryAction.REGENERATE_PROPOSAL -> "Regenerate proposal"
+            AgentRecoveryAction.REVIEW_ISSUE -> "Review issue"
+        }
+        val turn = AgentRecoveryTurn(action, message, java.time.Instant.now().toString())
+        val recorded = previous.copy(recovery = previous.recovery.copy(
+            reviewRequested = previous.recovery.reviewRequested || action == AgentRecoveryAction.REVIEW_ISSUE,
+            conversation = previous.recovery.conversation + turn
+        ))
+        onPersist(recorded)
+        if (action == AgentRecoveryAction.REVIEW_ISSUE) return recorded
+
+        val retrying = recorded.copy(recovery = recorded.recovery?.copy(status = AgentRecoveryStatus.RETRYING))
+        onPersist(retrying)
+        val run = try {
+            when (action) {
+                AgentRecoveryAction.RETRY_REPAIR -> gateway.recover(retrying.runId, "retry")
+                AgentRecoveryAction.REGENERATE_PROPOSAL -> gateway.recover(
+                    retrying.runId,
+                    "clarify",
+                    "Regenerate the proposal from the accepted request and current project state."
+                )
+                AgentRecoveryAction.REVIEW_ISSUE -> error("Handled above")
+            }
+        } catch (error: Throwable) {
+            onPersist(recorded)
+            throw error
+        }
+        val snapshot = reduce(retrying, run, request)
+        onPersist(snapshot)
+        return advance(snapshot, request, onPersist)
+    }
+
+    private suspend fun advance(
+        initial: PersistedAgentRun,
+        request: AgentRunRequest,
+        onPersist: suspend (PersistedAgentRun) -> Unit
+    ): PersistedAgentRun {
+        var snapshot = initial
         var passes = 0
         while (snapshot.status == AgentRunStatus.WAITING_FOR_EVIDENCE) {
             if (++passes > maximumEvidencePasses) throw IllegalStateException("Agent requested too many evidence passes.")
@@ -124,7 +211,13 @@ class AgentRunCoordinator(
             require(event.sequence > 0 && event.type in allowedActivityTypes) { "Unsafe agent activity." }
             require(event.message.isNotBlank() && event.message.length <= 500) { "Unsafe agent activity message." }
             require(runCatching { java.time.Instant.parse(event.createdAt) }.isSuccess) { "Invalid agent activity timestamp." }
-            event.copy(message = event.message.replace(Regex("[\\r\\n]+"), " ").trim())
+            val safeMessage = when (event.type) {
+                "proposal_repairing" -> "I’m fixing the response format before anything can be applied."
+                "proposal_repaired" -> "The response format is fixed and the proposal passed validation."
+                "proposal_repair_failed" -> "I couldn’t safely fix the response format. Nothing was applied."
+                else -> event.message.replace(Regex("[\\r\\n]+"), " ").trim()
+            }
+            event.copy(message = safeMessage)
         }
         require(incoming.zipWithNext().all { (left, right) -> right.sequence > left.sequence }) {
             "Agent activity is out of order."
@@ -137,9 +230,19 @@ class AgentRunCoordinator(
         require(run.decision["type"]?.jsonPrimitive?.content in setOf("evidence_request", "edit_program", "clarification", "fallback")) {
             "Unsupported agent decision."
         }
+        val recovery = when {
+            merged.any { it.type == "proposal_repair_failed" } &&
+                incoming.none { it.type == "proposal_repaired" } ->
+                (previous?.recovery ?: AgentRecoveryState(AgentRecoveryStatus.REPAIR_FAILED))
+                    .copy(status = AgentRecoveryStatus.REPAIR_FAILED)
+            incoming.any { it.type == "proposal_repaired" } ->
+                previous?.recovery?.copy(status = AgentRecoveryStatus.RESOLVED)
+                    ?: AgentRecoveryState(AgentRecoveryStatus.RESOLVED)
+            else -> previous?.recovery
+        }
         return PersistedAgentRun(
             run.contractVersion, run.runId, run.projectId, run.projectRevision, run.status,
-            merged, run.decision, previous?.fulfilledEvidenceJobIds.orEmpty()
+            merged, run.decision, previous?.fulfilledEvidenceJobIds.orEmpty(), recovery
         )
     }
 }
@@ -158,6 +261,19 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
         post(
             URI("${runsEndpoint.toString().trimEnd('/')}/$runId/continue"),
             json.encodeToString(ContinueAgentRunRequest.serializer(), ContinueAgentRunRequest(evidenceJobIds))
+        )
+    }
+
+    override suspend fun recover(runId: String, action: String, clarification: String?): AgentRun = withContext(Dispatchers.IO) {
+        require(runId.isNotBlank() && runId.length <= 200)
+        require(action in setOf("retry", "clarify"))
+        if (action == "clarify") require(!clarification.isNullOrBlank() && clarification.length <= 500)
+        post(
+            URI("${runsEndpoint.toString().trimEnd('/')}/$runId/continue"),
+            json.encodeToString(
+                RecoverAgentRunRequest.serializer(),
+                RecoverAgentRunRequest(action, clarification)
+            )
         )
     }
 

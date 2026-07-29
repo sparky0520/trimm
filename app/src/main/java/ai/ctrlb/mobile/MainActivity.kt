@@ -2,6 +2,8 @@ package ai.ctrlb.mobile
 
 import ai.ctrlb.mobile.domain.*
 import ai.ctrlb.mobile.media.ExportCoordinator
+import ai.ctrlb.mobile.planner.AgentRecoveryAction
+import ai.ctrlb.mobile.planner.AgentRecoveryStatus
 import android.net.Uri
 import android.os.Bundle
 import android.content.Intent
@@ -49,6 +51,7 @@ import com.clerk.api.Clerk
 import com.clerk.ui.auth.AuthView
 import com.clerk.ui.userbutton.UserButton
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.jsonPrimitive
 
 private val Ink = Color(0xFF0B0B0D)
 private val Workspace = Color(0xFF141418)
@@ -85,7 +88,10 @@ class MainActivity : ComponentActivity() {
     val state by vm.state.collectAsStateWithLifecycle()
     when {
         state.source == null -> ImportScreen(vm::import)
-        state.project != null -> EditorScreen(state, vm::undo, vm::export, vm::applyProposal, vm::rejectProposal, vm::reviseStory)
+        state.project != null -> EditorScreen(
+            state, vm::undo, vm::export, vm::applyProposal, vm::rejectProposal,
+            vm::reviseStory, vm::recoverAgent
+        )
         else -> NewEditChatScreen(state, vm::generateDraft, vm::moveClip)
     }
 }
@@ -279,6 +285,7 @@ class MainActivity : ComponentActivity() {
     applyProposal: () -> Unit,
     rejectProposal: () -> Unit,
     reviseStory: (String) -> Unit,
+    recoverAgent: (AgentRecoveryAction) -> Unit,
 ) {
     val project = requireNotNull(state.project)
     var fullscreen by rememberSaveable { mutableStateOf(false) }
@@ -321,6 +328,36 @@ class MainActivity : ComponentActivity() {
                 items(run.events, key = { "agent-${run.runId}-${it.sequence}" }) { event ->
                     AssistantChatBubble(accent = Lavender) {
                         Text(event.message, color = CreamRaised, lineHeight = 20.sp)
+                    }
+                }
+                run.recovery?.let { recovery ->
+                    items(recovery.conversation, key = { "recovery-${it.createdAt}-${it.action}" }) { turn ->
+                        UserChatBubble(turn.message)
+                    }
+                    if (recovery.reviewRequested) {
+                        item {
+                            AssistantChatBubble(accent = Coral) {
+                                Text("Response-format issue", color = CreamRaised, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(6.dp))
+                                Text(recovery.issue, color = Muted, lineHeight = 19.sp)
+                            }
+                        }
+                    }
+                    if (recovery.status == AgentRecoveryStatus.REPAIR_FAILED) {
+                        item { AgentRecoveryCard(recoverAgent) }
+                    } else if (recovery.status == AgentRecoveryStatus.RESOLVED) {
+                        item {
+                            AssistantChatBubble(accent = Green) {
+                                Text("Repaired proposal ready to review", color = CreamRaised, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    run.decision["summary"]?.jsonPrimitive?.content
+                                        ?: "The final canonical proposal passed validation.",
+                                    color = Muted,
+                                    lineHeight = 19.sp
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -623,6 +660,32 @@ private fun reviewPercent(value: Float) = "${(value * 100).toInt()}%"
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             VideoPreview(uris, Modifier.fillMaxSize())
             SmallAction("Close", Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(20.dp), close)
+        }
+    }
+}
+
+@Composable private fun AgentRecoveryCard(recover: (AgentRecoveryAction) -> Unit) {
+    AssistantChatBubble(accent = Coral) {
+        Text("I’m keeping your current edit and conversation unchanged.", color = CreamRaised, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(6.dp))
+        Text("Choose how to continue fixing the response format.", color = Muted, lineHeight = 19.sp)
+        Spacer(Modifier.height(12.dp))
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            AssistChip(
+                onClick = { recover(AgentRecoveryAction.RETRY_REPAIR) },
+                label = { Text("Retry repair") }
+            )
+            AssistChip(
+                onClick = { recover(AgentRecoveryAction.REGENERATE_PROPOSAL) },
+                label = { Text("Regenerate proposal") }
+            )
+            AssistChip(
+                onClick = { recover(AgentRecoveryAction.REVIEW_ISSUE) },
+                label = { Text("Review issue") }
+            )
         }
     }
 }
