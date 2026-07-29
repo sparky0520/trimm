@@ -13,10 +13,11 @@ Face detection, OCR, screen understanding, product/action recognition, and music
 
 ## Planned implementation
 
-- Face/person: ML Kit or MediaPipe when supported, with a cloud fallback.
-- OCR: ML Kit Text Recognition for quick local results; cloud OCR for selected high-resolution material.
-- Screen/UI: local text/rectangle candidates plus cloud multimodal understanding of screen state and actions.
-- Music/audio: a small TFLite classifier locally where practical and a cloud audio model for richer meaning.
-- General meaning: the cloud video agent watches the authorized original or proxy directly.
+- Build the first whole-source, timestamped Layer 1 index locally. Its depth follows the request.
+- Face/person: ML Kit or MediaPipe when relevant to range selection or a requested edit.
+- OCR: ML Kit Text Recognition when screen or text evidence is relevant.
+- Screen/UI: local text, layout, and motion candidates used to select exact ranges for Layer 2.
+- Music/audio: local speech, noise, music, and transient measurements used for indexing and range selection.
+- General meaning: Gemini 3.6 Flash watches only request-relevant authorized ranges by default and may request more iteratively.
 
-Capability negotiation must inspect API level, available hardware acceleration, RAM, thermal state, storage, codec support, and model availability. Unsupported local analysis falls back to cloud or produces an honest unavailable state.
+Capability negotiation must inspect API level, available hardware acceleration, RAM, thermal state, storage, codec support, and model availability. Unsupported local analysis produces an honest partial or unavailable index entry; it does not silently expand cloud upload scope.
