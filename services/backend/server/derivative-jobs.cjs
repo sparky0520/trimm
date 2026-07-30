@@ -98,6 +98,36 @@ function detectedType(buffer) {
   return null;
 }
 
+function detectedMp4TrackType(file) {
+  const descriptor = fs.openSync(file, 'r');
+  const chunk = Buffer.alloc(64 * 1024);
+  let carry = Buffer.alloc(0);
+  let hasAudio = false;
+  try {
+    for (;;) {
+      const read = fs.readSync(descriptor, chunk, 0, chunk.length, null);
+      if (!read) break;
+      const sample = Buffer.concat([carry, chunk.subarray(0, read)]);
+      let offset = 0;
+      for (;;) {
+        const marker = sample.indexOf('hdlr', offset, 'ascii');
+        if (marker < 0) break;
+        const handlerOffset = marker + 12;
+        if (handlerOffset + 4 <= sample.length) {
+          const handler = sample.subarray(handlerOffset, handlerOffset + 4).toString('ascii');
+          if (handler === 'vide') return 'video/mp4';
+          if (handler === 'soun') hasAudio = true;
+        }
+        offset = marker + 4;
+      }
+      carry = sample.subarray(Math.max(0, sample.length - 16));
+    }
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  return hasAudio ? 'audio/mp4' : null;
+}
+
 function validateActualContent(file, job) {
   const head = Buffer.alloc(32);
   const descriptor = fs.openSync(file, 'r');
@@ -105,6 +135,9 @@ function validateActualContent(file, job) {
   fs.closeSync(descriptor);
   const sample = head.subarray(0, read);
   let actual = detectedType(sample);
+  if (sample.length >= 12 && sample.subarray(4, 8).toString('ascii') === 'ftyp') {
+    actual = detectedMp4TrackType(file) || actual;
+  }
   if (actual === 'webm') actual = job.acceptedFormat === 'audio/webm' ? 'audio/webm' : 'video/webm';
   if (job.type === 'text' || job.type === 'evidence') {
     const body = fs.readFileSync(file, 'utf8');
@@ -113,7 +146,7 @@ function validateActualContent(file, job) {
     }
     actual = job.acceptedFormat;
   }
-  if (actual.startsWith('video/')) throw jobError('Source-video containers are forbidden.', 415, 'source_video_forbidden');
+  if (actual?.startsWith('video/')) throw jobError('Source-video containers are forbidden.', 415, 'source_video_forbidden');
   if (actual !== job.acceptedFormat) throw jobError('Derivative media type does not match its authorization.', 415, 'media_type_mismatch');
   return actual;
 }

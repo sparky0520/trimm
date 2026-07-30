@@ -13,6 +13,10 @@ const principal = Object.freeze({ id: 'user-a', scopes: ['derivatives:create'], 
 const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(20)]);
 const mp3 = Buffer.concat([Buffer.from('ID3'), Buffer.alloc(20)]);
 const video = Buffer.concat([Buffer.alloc(4), Buffer.from('ftyp'), Buffer.from('isom'), Buffer.alloc(20)]);
+const androidAudioMp4 = Buffer.concat([
+  Buffer.alloc(4), Buffer.from('ftyp'), Buffer.from('mp42'), Buffer.alloc(24),
+  Buffer.from('hdlr'), Buffer.alloc(8), Buffer.from('soun'), Buffer.alloc(20),
+]);
 
 function fixture(options = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ctrlb-derivative-test-'));
@@ -116,6 +120,17 @@ test('content keys reuse results, preserve provenance, delete bytes, and produce
   assert.deepEqual(reused.result.value, { labels: ['screen'] });
   assert.deepEqual(jobs.listActivity(principal, 'project-1').map((entry) => entry.action),
     ['authorized', 'transferred', 'result_preserved', 'authorized', 'reused']);
+});
+
+test('generic Android MP4 brands are accepted when the container has only an audio track', async (t) => {
+  const { directory, jobs } = fixture();
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const job = (await jobs.authorize(principal, authorization({
+    acceptedFormat: 'audio/mp4',
+    maximumBytes: 128,
+  }))).job;
+  await jobs.append(job.id, principal, 0, Readable.from(androidAudioMp4));
+  assert.equal(jobs.complete(job.id, principal, { durationMs: 1000 }).job.status, 'completed');
 });
 
 test('expiry, cancellation, and retention cleanup remove temporary derivatives', async (t) => {
