@@ -5,11 +5,11 @@ const { GoogleGenAI } = require('@google/genai');
 function createGeminiDecisionProvider({
   apiKey = process.env.GEMINI_API_KEY,
   model = process.env.GEMINI_MODEL || 'gemini-3.6-flash',
-  escalationModel = process.env.GEMINI_ESCALATION_MODEL || 'gemini-3.6-pro',
+  escalationModel = process.env.GEMINI_ESCALATION_MODEL || 'gemini-3.1-pro-preview',
   client,
 } = {}) {
   if (model !== 'gemini-3.6-flash') throw new Error('The video agent is pinned to gemini-3.6-flash.');
-  if (escalationModel !== 'gemini-3.6-pro') throw new Error('The ambiguity escalation model is pinned to gemini-3.6-pro.');
+  if (escalationModel !== 'gemini-3.1-pro-preview') throw new Error('The ambiguity escalation model is pinned to gemini-3.1-pro-preview.');
   const ai = client || (apiKey ? new GoogleGenAI({ apiKey }) : null);
   async function generate({ systemPolicy, contents, temperature, selectedModel = model, cachedContent, tools }) {
     if (!ai) throw Object.assign(new Error('GEMINI_API_KEY is not configured'), { status: 503, code: 'gemini_unconfigured' });
