@@ -128,11 +128,8 @@ class MainActivity : ComponentActivity() {
         Image(
             painter = painterResource(R.drawable.ctrlb_wordmark),
             contentDescription = "ctrlB",
-            modifier = Modifier.width(82.dp).height(24.dp)
+            modifier = Modifier.width(90.dp).height(24.dp)
         )
-        Spacer(Modifier.width(8.dp))
-        Text("STUDIO", color = Muted, fontWeight = FontWeight.Bold, fontSize = 9.sp, letterSpacing = 1.2.sp,
-            modifier = Modifier.border(1.dp, Border, RoundedCornerShape(20.dp)).padding(horizontal = 7.dp, vertical = 4.dp))
         Spacer(Modifier.weight(1f))
         AccountControl()
         if (secondaryLabel != null && onSecondary != null) {
