@@ -103,6 +103,9 @@ class PostgresDerivativeJobs {
   preserveResult(id, principal, result) {
     return this.withOwner(principal.id, (engine) => engine.preserveResult(id, principal, result));
   }
+  readCompletedBytes(id, principal, context) {
+    return this.withOwner(principal.id, (engine) => engine.readCompletedBytes(id, principal, context));
+  }
   cancel(id, principal, context) { return this.withOwner(principal.id, (engine) => engine.cancel(id, principal, context)); }
   delete(id, principal, context) { return this.withOwner(principal.id, (engine) => engine.delete(id, principal, context)); }
   listActivity(principal, projectId) {

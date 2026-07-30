@@ -23,6 +23,7 @@ const { Layer2Orchestrator } = require('./layer2-orchestrator.cjs');
 const { AgentRuns } = require('./agent-runs.cjs');
 const { PostgresAgentRunStore, VolatileAgentRunStore } = require('./agent-run-store.cjs');
 const { createGeminiDecisionProvider } = require('./gemini-agent.cjs');
+const { createGeminiEvidenceAnalyzer } = require('./gemini-evidence.cjs');
 const plannerCore = require('./planner-core.cjs');
 
 const port = Number(process.env.PORT || 8787);
@@ -60,6 +61,7 @@ const layer2Orchestrator = new Layer2Orchestrator({
   derivativeJobs,
   decide: createGeminiDecisionProvider(),
 });
+const analyzeEvidence = createGeminiEvidenceAnalyzer();
 const agentRuns = new AgentRuns({
   orchestrator: layer2Orchestrator,
   store: process.env.SUPABASE_DB_URL
@@ -327,9 +329,17 @@ const server = http.createServer(async (request, response) => {
   if (derivativeMatch && request.method === 'POST' && derivativeMatch[2]) {
     try {
       const completed = await derivativeJobs.complete(derivativeMatch[1], principal, await collect(request, 4096), derivativeContext(request));
+      let result = completed.result;
+      if (!completed.reused) {
+        const derivative = await derivativeJobs.readCompletedBytes(
+          derivativeMatch[1], principal, derivativeContext(request),
+        );
+        result = await analyzeEvidence(derivative);
+        result = await derivativeJobs.preserveResult(derivativeMatch[1], principal, result);
+      }
       return json(response, 200, {
         ...derivativeView(completed.job), reused: completed.reused,
-        ...(completed.result ? { result: completed.result } : {}), requestId,
+        ...(result ? { result } : {}), requestId,
       });
     } catch (error) {
       return json(response, Number.isInteger(error?.status) ? error.status : 400, { error: error?.message, code: error?.code, requestId });

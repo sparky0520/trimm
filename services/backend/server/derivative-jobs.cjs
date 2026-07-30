@@ -355,6 +355,14 @@ class DerivativeJobs {
     return record;
   }
 
+  readCompletedBytes(id, principal, context) {
+    const job = this.read(id, principal, context);
+    if (job.status !== 'completed' || !job.contentKey) {
+      throw jobError('Derivative job is not complete.', 409, 'job_incomplete');
+    }
+    return { job, bytes: fs.readFileSync(this.mediaPath(id)) };
+  }
+
   removeBytes(job) { try { fs.unlinkSync(this.mediaPath(job.id)); } catch {} }
   cancel(id, principal, context) {
     const job = this.read(id, principal, context);
