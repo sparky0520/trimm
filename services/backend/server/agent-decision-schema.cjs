@@ -19,6 +19,30 @@ const operationSchema = {
   additionalProperties: true,
 };
 
+const evidenceRequestBase = {
+  sourceId: { type: 'string' },
+  startMs: { type: 'integer', minimum: 0 },
+  endMs: { type: 'integer', minimum: 1 },
+  maximumBytes: { type: 'integer', minimum: 1 },
+  maximumDurationMs: { type: 'integer', minimum: 1 },
+  maximumCount: { type: 'integer', minimum: 1 },
+  estimatedCostMicros: { type: 'integer', minimum: 0 },
+};
+
+function evidenceRequestVariant(type, purposes, formats) {
+  return {
+    type: 'object',
+    required: ['sourceId', 'type', 'purpose', 'acceptedFormat', 'maximumBytes'],
+    properties: {
+      ...evidenceRequestBase,
+      type: { type: 'string', enum: [type] },
+      purpose: { type: 'string', enum: purposes },
+      acceptedFormat: { type: 'string', enum: formats },
+    },
+    additionalProperties: false,
+  };
+}
+
 // Keep provider-side structure intentionally smaller than the executable contract.
 // Gemini constrains the envelope here; the deterministic validators remain the
 // authority for evidence, ranges, operation semantics, privacy and project revision.
@@ -33,21 +57,33 @@ const AGENT_DECISION_SCHEMA = Object.freeze({
           type: 'array',
           minItems: 1,
           items: {
-            type: 'object',
-            required: ['sourceId', 'type', 'purpose', 'acceptedFormat', 'maximumBytes'],
-            properties: {
-              sourceId: { type: 'string' },
-              type: { type: 'string', enum: ['audio', 'frame', 'crop', 'text', 'evidence'] },
-              purpose: { type: 'string' },
-              acceptedFormat: { type: 'string' },
-              startMs: { type: 'integer', minimum: 0 },
-              endMs: { type: 'integer', minimum: 1 },
-              maximumBytes: { type: 'integer', minimum: 1 },
-              maximumDurationMs: { type: 'integer', minimum: 1 },
-              maximumCount: { type: 'integer', minimum: 1 },
-              estimatedCostMicros: { type: 'integer', minimum: 0 },
-            },
-            additionalProperties: false,
+            anyOf: [
+              evidenceRequestVariant(
+                'audio',
+                ['transcription', 'speech-analysis', 'audio-analysis'],
+                ['audio/mpeg', 'audio/mp4', 'audio/ogg'],
+              ),
+              evidenceRequestVariant(
+                'frame',
+                ['visual-analysis', 'shot-analysis', 'planner-evidence'],
+                ['image/jpeg', 'image/webp'],
+              ),
+              evidenceRequestVariant(
+                'crop',
+                ['ocr', 'ui-analysis', 'planner-evidence'],
+                ['image/jpeg', 'image/webp'],
+              ),
+              evidenceRequestVariant(
+                'text',
+                ['planning', 'transcript-analysis'],
+                ['text/plain', 'application/json'],
+              ),
+              evidenceRequestVariant(
+                'evidence',
+                ['planning', 'candidate-evaluation'],
+                ['application/json'],
+              ),
+            ],
           },
         },
       },

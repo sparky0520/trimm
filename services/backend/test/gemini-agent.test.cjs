@@ -21,6 +21,16 @@ test('new agent path is pinned to Gemini 3.6 Flash and requests JSON', async () 
     request.config.responseJsonSchema.anyOf.map((variant) => variant.properties.type.enum[0]),
     ['evidence_request', 'edit_program', 'clarification', 'fallback'],
   );
+  const evidenceVariants = request.config.responseJsonSchema.anyOf[0]
+    .properties.requests.items.anyOf;
+  assert.deepEqual(
+    evidenceVariants.map((variant) => variant.properties.type.enum[0]),
+    ['audio', 'frame', 'crop', 'text', 'evidence'],
+  );
+  assert.deepEqual(
+    evidenceVariants[0].properties.acceptedFormat.enum,
+    ['audio/mpeg', 'audio/mp4', 'audio/ogg'],
+  );
   assert.deepEqual(JSON.parse(decision.rawText), { type: 'fallback', reason: 'More evidence is needed.' });
   assert.equal(typeof decide.repair, 'function');
   assert.equal(typeof decide.escalate, 'function');
