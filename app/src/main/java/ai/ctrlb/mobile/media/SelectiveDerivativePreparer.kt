@@ -148,7 +148,9 @@ class SelectiveDerivativePreparer(
 
     private fun validateFormat(type: SelectiveDerivativeType, value: String) {
         val allowed = when (type) {
-            SelectiveDerivativeType.AUDIO -> setOf("audio/mp4", "audio/aac", "audio/wav")
+            // AndroidDerivativeWriter produces an MP4 audio derivative. Reject
+            // other otherwise-valid audio MIME types before any media work.
+            SelectiveDerivativeType.AUDIO -> setOf("audio/mp4")
             SelectiveDerivativeType.FRAME, SelectiveDerivativeType.CROP -> setOf("image/jpeg", "image/png", "image/webp")
             SelectiveDerivativeType.AUDIOVISUAL -> setOf("video/mp4")
         }

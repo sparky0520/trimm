@@ -56,6 +56,8 @@ class SelectiveDerivativePreparerTest {
         }
 
         rejected(authorization("audio", "audio/mp4", 0, 1_000), emptyList())
+        rejected(authorization("audio", "audio/aac", 0, 1_000))
+        rejected(authorization("audio", "audio/wav", 0, 1_000))
         rejected(authorization("audio", "image/jpeg", 0, 1_000))
         rejected(authorization("audio", "audio/mp4", 59_000, 61_000))
         rejected(authorization("audio", "audio/mp4", 0, 2_000, maximumDurationMs = 1_000))
