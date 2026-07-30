@@ -31,6 +31,44 @@ emulator data.
 The fixture itself is not committed. Temporary host copies are kept outside
 the repository and the original device media is never modified.
 
+## 2026-07-30 - Xiaomi 22041216I with 4K input
+
+- App revision: `1fcf7b3`
+- OS/ABI: Android 14 (API 34), `arm64-v8a`
+- Capability tier: minimum supported (provisional), reduced-resolution export
+- Fixture: newest user-authorized DCIM camera video; 23.563 s, H.264/AAC,
+  3840x2160 at 60 fps with -90-degree display rotation, 370,422,008 bytes
+- Free storage before the run: approximately 181 GB
+
+| Check | Result |
+| --- | --- |
+| 4K input and preview | Pass: the 4K60 source imported with correct portrait presentation. Local evidence persisted and preview completed without a decoder failure. |
+| Speech/perception | Partial: the saved Clerk token expired during the run, so transcription ended with an authenticated HTTP 401 and no speech words were persisted. The evidence graph and safe agent clarification state still persisted. |
+| Destructive false positives | Pass for this fixture: no destructive operation was applied. |
+| Time to interactive preview | Partial/pass: analysis completed in 282.4 s and preview in 298.0 s from submission. Approximately four minutes were attributable to the failed transcription request, so this is not a representative local-processing latency. |
+| Memory | Pass for the minimum tier: sampled app PSS remained approximately 194-289 MB. |
+| Thermal | Partial: the already-warm device rose from 38.3 C before import to 40.8 C after export, peaking at 40.8 C. No thermal shutdown or disconnect occurred. |
+| Export | Pass with required downgrade: export completed in 15.25 s as H.264/AAC 1280x720 at 60 fps, producing 22,940,724 bytes. The device did not qualify for 4K output. |
+| Orientation/timing parity | Pass: -90-degree display rotation and 60 fps were preserved. Export duration was 23.583 s, approximately +19.3 ms from source. |
+| Pixel parity | Partial/pass at provisional tolerance: whole-clip SSIM was 0.8776 after proportional 4K-to-720p downscale and device H.264 encoding. |
+
+## 2026-07-30 - OnePlus CPH2487 with 4K input
+
+- App revision: `1fcf7b3`
+- OS/ABI: Android 14 (API 34), `arm64-v8a`
+- Fixture: the same 23.563 s 4K60 camera video used above
+- Blocking capability measurement: only approximately 743 MB storage was free,
+  below the 1 GB minimum and 8 GB high-resolution threshold
+
+| Check | Result |
+| --- | --- |
+| Analysis and preview | Pass: analysis completed in 61.2 s and preview in 78.0 s from submission. One evidence graph, seven timed words, four captions and three reviewable speech hints persisted. |
+| Destructive false positives | Pass: malformed proposal output was rejected into safe retry/clarify recovery and no destructive operation was applied. |
+| Memory and thermal | Sampled app PSS was approximately 138-190 MB. Battery temperature moved from 35.6 C to 36.4 C without shutdown or disconnect. |
+| Export | Pass with storage-driven downgrade: 15.7 s to H.264/AAC 1280x720 at 60 fps, 29,094,574 bytes. The device cannot be counted as high-resolution capable until it has at least 8 GB free and is rerun. |
+| Orientation/timing parity | Pass: -90-degree display rotation and 60 fps were preserved; duration drift was approximately +19.3 ms. |
+| Pixel parity | Partial/pass at provisional tolerance: whole-clip downscaled SSIM was 0.8758. |
+
 ## 2026-07-30 - Xiaomi 22041216I rerun
 
 - App revision: `1fcf7b3`
