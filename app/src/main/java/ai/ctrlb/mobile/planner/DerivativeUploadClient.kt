@@ -1,6 +1,7 @@
 package ai.ctrlb.mobile.planner
 
 import ai.ctrlb.mobile.media.PreparedDerivative
+import ai.ctrlb.mobile.media.SelectiveDerivativeType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -29,7 +30,11 @@ class DerivativeUploadClient(
                 offset = put(endpoint, token, offset, buffer, count)
             }
         }
-        complete(endpoint, token, derivative.sourceRange.durationMs)
+        complete(
+            endpoint,
+            token,
+            derivative.sourceRange.durationMs.takeIf { derivative.type == SelectiveDerivativeType.AUDIO }
+        )
         derivative.jobId
     }
 
@@ -57,14 +62,21 @@ class DerivativeUploadClient(
         } finally { connection.disconnect() }
     }
 
-    private fun complete(endpoint: URI, token: String, durationMs: Long) {
+    private fun complete(endpoint: URI, token: String, durationMs: Long?) {
         val connection = open(URI("${endpoint}/complete"), token, "POST").apply {
             doOutput = true
             setRequestProperty("Content-Type", "application/json")
         }
         try {
-            connection.outputStream.use { it.write("""{"durationMs":$durationMs}""".toByteArray()) }
-            require(connection.responseCode in 200..299) { "Could not complete derivative upload." }
+            val declaration = durationMs?.let { """{"durationMs":$it}""" } ?: "{}"
+            connection.outputStream.use { it.write(declaration.toByteArray()) }
+            val responseCode = connection.responseCode
+            require(responseCode in 200..299) {
+                val detail = connection.errorStream?.bufferedReader()?.use { it.readText() }
+                    ?.take(500)
+                    ?.takeIf { it.isNotBlank() }
+                "Could not complete derivative upload ($responseCode)${detail?.let { ": $it" } ?: "."}"
+            }
         } finally { connection.disconnect() }
     }
 
