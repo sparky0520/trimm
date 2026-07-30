@@ -7,6 +7,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import androidx.media3.common.MediaItem
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
@@ -14,6 +16,8 @@ import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -85,7 +89,7 @@ class AndroidDerivativeWriter(private val context: Context) : DerivativeWriter {
         removeAudio: Boolean,
         removeVideo: Boolean,
         destination: File
-    ) = suspendCancellableCoroutine { continuation ->
+    ) = withContext(Dispatchers.Main.immediate) { suspendCancellableCoroutine { continuation ->
         val mediaItem = MediaItem.Builder()
             .setUri(source.uri)
             .setClippingConfiguration(
@@ -111,8 +115,10 @@ class AndroidDerivativeWriter(private val context: Context) : DerivativeWriter {
         }
         transformer = Transformer.Builder(context).addListener(listener).build()
         continuation.invokeOnCancellation {
-            transformer.cancel()
-            destination.delete()
+            Handler(Looper.getMainLooper()).post {
+                transformer.cancel()
+                destination.delete()
+            }
         }
         transformer.start(
             EditedMediaItem.Builder(mediaItem)
@@ -121,5 +127,5 @@ class AndroidDerivativeWriter(private val context: Context) : DerivativeWriter {
                 .build(),
             destination.absolutePath
         )
-    }
+    } }
 }

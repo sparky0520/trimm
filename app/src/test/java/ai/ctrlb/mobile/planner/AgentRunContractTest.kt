@@ -32,6 +32,15 @@ class AgentRunContractTest {
         assertEquals("edit_program", run.decision["type"]?.toString()?.trim('"'))
     }
 
+    @Test fun `agent inventory declares selective consent and canonical contract versions`() {
+        val request = request()
+        assertEquals("selective_analysis", request.mediaConsent.mode)
+        assertEquals("media-v1", request.mediaConsent.disclosureVersion)
+        assertTrue(runCatching { java.time.Instant.parse(request.mediaConsent.grantedAt) }.isSuccess)
+        assertEquals(listOf(1), request.supportedContractVersions.agentRuns)
+        assertEquals(listOf(1), request.supportedContractVersions.editPrograms)
+    }
+
     @Test fun `one run persists safe activity through iterative evidence passes`() = runTest {
         val request = request()
         val calls = mutableListOf<List<String>>()

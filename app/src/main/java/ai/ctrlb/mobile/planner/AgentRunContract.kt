@@ -50,7 +50,24 @@ data class AgentRunRequest(
     val mediaIndex: RequestShapedMediaIndex,
     val evidenceJobIds: List<String> = emptyList(),
     val existingOperations: List<JsonObject> = emptyList(),
-    val budgets: Layer2Budgets = Layer2Budgets()
+    val budgets: Layer2Budgets = Layer2Budgets(),
+    val mediaConsent: Layer2MediaConsent = Layer2MediaConsent(),
+    val supportedContractVersions: Layer2ContractVersions = Layer2ContractVersions()
+)
+
+@Serializable
+data class Layer2MediaConsent(
+    val mode: String = "selective_analysis",
+    val grantedAt: String = java.time.Instant.now().toString(),
+    val disclosureVersion: String = "media-v1"
+)
+
+@Serializable
+data class Layer2ContractVersions(
+    val agentRuns: List<Int> = listOf(1),
+    val activityEvents: List<Int> = listOf(1),
+    val evidenceRequests: List<Int> = listOf(1),
+    val editPrograms: List<Int> = listOf(1)
 )
 
 @Serializable
@@ -287,7 +304,19 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("Authorization", "Bearer ${accessToken()}")
             connection.outputStream.use { it.write(body.toByteArray()) }
-            require(connection.responseCode in 200..299) { "Agent run failed (${connection.responseCode})" }
+            val responseCode = connection.responseCode
+            if (responseCode !in 200..299) {
+                val error = connection.errorStream
+                    ?.bufferedReader()
+                    ?.use { it.readText().take(1_000) }
+                    ?.takeIf(String::isNotBlank)
+                throw IllegalArgumentException(
+                    buildString {
+                        append("Agent run failed ($responseCode)")
+                        if (error != null) append(": $error")
+                    }
+                )
+            }
             connection.inputStream.bufferedReader().use {
                 json.decodeFromString(AgentRun.serializer(), it.readText())
             }

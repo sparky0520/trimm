@@ -14,6 +14,7 @@ import ai.ctrlb.mobile.layer1.RequestShapedMediaIndexBuilder
 import ai.ctrlb.mobile.media.AndroidDerivativeWriter
 import ai.ctrlb.mobile.media.DerivativeAuthorization
 import ai.ctrlb.mobile.media.SelectiveDerivativePreparer
+import ai.ctrlb.mobile.media.SelectiveDerivativeType
 import android.net.Uri
 import android.content.Context
 import androidx.work.CoroutineWorker
@@ -48,10 +49,28 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
             if (isStopped) return Result.failure()
             progress("transcript-${index + 1}-of-${project.orderedSources.size}", 10 + index * 45 / project.orderedSources.size)
             if (source.hasAudio) {
-                val transcription: kotlin.Result<List<TranscriptWord>> = transcriber?.let { client -> runCatching { client.transcribe(applicationContext, Uri.parse(source.uri)) { uploaded, total ->
-                    val sourceShare = ((uploaded * 45L / total) / project.orderedSources.size).toInt()
-                    progress("upload-${index + 1}-of-${project.orderedSources.size}", 10 + index * 45 / project.orderedSources.size + sourceShare)
-                } } } ?: runCatching { throw IllegalStateException("Transcription service is not configured.") }
+                val transcription: kotlin.Result<List<TranscriptWord>> = transcriber?.let { client -> runCatching {
+                    val transcriptionRoot = java.io.File(applicationContext.cacheDir, "transcription").apply { mkdirs() }
+                    val audio = java.io.File(transcriptionRoot, "${source.fingerprint}.mp4")
+                    audio.delete()
+                    try {
+                        AndroidDerivativeWriter(applicationContext).write(
+                            SelectiveDerivativeType.AUDIO,
+                            source,
+                            TimeRange(0, source.durationMs),
+                            null,
+                            "audio/mp4",
+                            audio
+                        )
+                        client.transcribe(audio) { uploaded, total ->
+                            val sourceShare = ((uploaded * 45L / total) / project.orderedSources.size).toInt()
+                            progress("upload-${index + 1}-of-${project.orderedSources.size}", 10 + index * 45 / project.orderedSources.size + sourceShare)
+                        }
+                    } finally {
+                        audio.delete()
+                        transcriptionRoot.takeIf { it.listFiles().isNullOrEmpty() }?.delete()
+                    }
+                } } ?: runCatching { throw IllegalStateException("Transcription service is not configured.") }
                 val localWords = transcription.getOrElse { error ->
                     analysisWarnings += "Speech analyzer (${source.fingerprint.take(8)}): ${error.message ?: "failed"}"
                     emptyList()
@@ -162,6 +181,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                     store.save(analyzed)
                 }
             }.onFailure {
+                Log.w("AnalysisWorker", "Agent run could not continue", it)
                 analyzed = analyzed.copy(analysis = analyzed.analysis.copy(
                     warnings = analyzed.analysis.warnings + "Agent run could not continue. Retry when the connection is available."
                 ))
@@ -209,7 +229,10 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
         }
         progress("complete", 100)
         Result.success()
-    }.getOrElse { Result.failure(Data.Builder().putString("error", it.message).build()) }
+    }.getOrElse { error ->
+        Log.e("AnalysisWorker", "Analysis failed", error)
+        Result.failure(Data.Builder().putString("error", error.message).build())
+    }
 }
 
 private fun EvidenceGraph.reference() = EvidenceGraphReference(

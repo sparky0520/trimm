@@ -45,6 +45,25 @@ class EvidencePipelineTest {
         assertEquals(AnalyzerStatus.CACHED, cached.analyzerRuns.single().status)
     }
 
+    @Test fun `duplicate provider observations are collapsed before graph validation`() = runTest {
+        val root = Files.createTempDirectory("evidence-duplicate-test").toFile()
+        val duplicate = analyzer("transcript", "1") { context ->
+            val range = TimeRange(0, 100)
+            val observation = SpeechEvidence(
+                stableEvidenceId(context.source.fingerprint, identity, "WORD", range, "hello"),
+                context.source.fingerprint, range, .9f,
+                EvidenceProvenance(identity, context.source.fingerprint),
+                SpeechKind.WORD, "hello"
+            )
+            listOf(observation, observation)
+        }
+
+        val graph = EvidencePipeline(EvidenceCache(root), listOf(duplicate)).analyze(source)
+
+        assertEquals(1, graph.observations.size)
+        assertEquals(1, graph.analyzerRuns.single().observationCount)
+    }
+
     @Test fun `speech evidence derives sentences pauses disfluencies and stable ids`() = runTest {
         val words = listOf(
             TranscriptWord("Um", TimeRange(0, 100), .9f, "speaker-A"),

@@ -30,12 +30,13 @@ class EvidencePipeline(
     suspend fun analyze(source: SourceMedia): EvidenceGraph = coroutineScope {
         val results = analyzers.map { analyzer -> async {
             cache.readAnalyzer(source, analyzer.identity)?.let { cached ->
-                return@async AnalyzerResult(cached, AnalyzerRun(analyzer.identity, AnalyzerStatus.CACHED, clock(), clock(), cached.size))
+                val unique = cached.distinctBy(EvidenceObservation::id)
+                return@async AnalyzerResult(unique, AnalyzerRun(analyzer.identity, AnalyzerStatus.CACHED, clock(), clock(), unique.size))
             }
             val started = clock()
             runCatching {
                 val context = AnalyzerContext(source, cache.artifactDirectory(source, analyzer.identity))
-                analyzer.analyze(context).also { observations ->
+                analyzer.analyze(context).distinctBy(EvidenceObservation::id).also { observations ->
                     require(observations.all { it.sourceFingerprint == source.fingerprint })
                     cache.writeAnalyzer(source, analyzer.identity, observations)
                 }
@@ -48,7 +49,8 @@ class EvidencePipeline(
             sourceFingerprint = source.fingerprint,
             sourceDurationMs = source.durationMs,
             createdAtEpochMs = clock(),
-            observations = results.flatMap(AnalyzerResult::observations).sortedWith(compareBy({ it.range.startMs }, { it.id })),
+            observations = results.flatMap(AnalyzerResult::observations).distinctBy(EvidenceObservation::id)
+                .sortedWith(compareBy({ it.range.startMs }, { it.id })),
             analyzerRuns = results.map(AnalyzerResult::run),
             disclosure = EvidenceDisclosure(
                 computedLocally = analyzers.filter { it.identity.execution == ExecutionLocation.LOCAL_DEVICE }.map { it.identity.name }.sorted(),

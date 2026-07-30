@@ -14,6 +14,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.IOException
+import java.io.File
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URI
 import kotlin.coroutines.coroutineContext
@@ -37,11 +39,29 @@ class TranscriptionClient(private val endpoint: String, private val accessToken:
         val size = contentLength(context, source)
         require(size > 0) { "The selected media size is unavailable." }
         val contentType = context.contentResolver.getType(source) ?: "application/octet-stream"
+        transcribeMedia(size, contentType, { context.contentResolver.openInputStream(source) }, onProgress)
+    }
+
+    suspend fun transcribe(
+        source: File,
+        contentType: String = "audio/mp4",
+        onProgress: suspend (uploadedBytes: Long, totalBytes: Long) -> Unit = { _, _ -> },
+    ): List<TranscriptWord> = withContext(Dispatchers.IO) {
+        require(source.isFile && source.length() > 0) { "The prepared transcription audio is unavailable." }
+        transcribeMedia(source.length(), contentType, source::inputStream, onProgress)
+    }
+
+    private suspend fun transcribeMedia(
+        size: Long,
+        contentType: String,
+        openInput: () -> InputStream?,
+        onProgress: suspend (uploadedBytes: Long, totalBytes: Long) -> Unit,
+    ): List<TranscriptWord> {
         val session = createSession(contentType, size)
         var completed = false
-        try {
+        return try {
             var offset = session.offset
-            context.contentResolver.openInputStream(source).use { input ->
+            openInput().use { input ->
                 requireNotNull(input) { "Could not open source media for transcription." }
                 skipFully(input, offset)
                 val buffer = ByteArray(session.chunkSize.coerceIn(256 * 1024, 8 * 1024 * 1024))
