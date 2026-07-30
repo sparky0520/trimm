@@ -25,6 +25,7 @@ function createGeminiDecisionProvider({
         responseMimeType: 'application/json',
         responseJsonSchema,
         temperature,
+        maxOutputTokens: 8192,
         ...(cachedContent ? { cachedContent } : {}),
         ...(tools?.length ? { tools } : {}),
       },
