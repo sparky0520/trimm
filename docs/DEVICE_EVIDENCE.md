@@ -52,7 +52,7 @@ the repository and the original device media is never modified.
 | Export | Pass: final H.264/AAC export completed in 26.5 s and produced 63,284,271 bytes at 1920x1088 coded dimensions and 30 fps. |
 | Orientation/timing parity | Pass: portrait presentation remained correct in preview. Export duration was 56.607 s, approximately +24 ms from source (less than one 30 fps frame). |
 | Pixel parity | Not re-scored: the prior whole-clip SSIM of 0.9090 remains the only measurement for this device/fixture. Cross-tier acceptance tolerance is still provisional. |
-| Cloud proposal | Blocked outside the device pipeline: the authenticated agent-run request reached the deployed backend but returned HTTP 502. Local evidence, safe baseline edit, preview and export continued successfully. |
+| Cloud proposal | Pass with safe recovery: after the production migrations and Gemini runtime secret were installed, the authenticated run persisted and completed model inference. Its malformed proposal was rejected without applying destructive edits, persisted as `waiting_for_user` with retry/clarify options, and the safe baseline preview completed. |
 
 ## Remaining matrix
 
