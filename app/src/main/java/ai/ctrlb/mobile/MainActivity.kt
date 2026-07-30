@@ -2,11 +2,14 @@ package ai.ctrlb.mobile
 
 import ai.ctrlb.mobile.domain.*
 import ai.ctrlb.mobile.media.ExportCoordinator
+import ai.ctrlb.mobile.media.DeviceCapability
+import ai.ctrlb.mobile.work.ExportWorker
 import ai.ctrlb.mobile.planner.AgentRecoveryAction
 import ai.ctrlb.mobile.planner.AgentRecoveryStatus
 import android.net.Uri
 import android.os.Bundle
 import android.content.Intent
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -41,6 +44,9 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
@@ -68,6 +74,18 @@ private val Green = Color(0xFF6FD49A)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.i("DeviceCapability", DeviceCapability.report(this).diagnosticSummary())
+        if (BuildConfig.FORCE_4K_EXPORT) {
+            intent.getStringExtra("forceExportProjectId")?.takeIf(String::isNotBlank)?.let { projectId ->
+                Log.w("ExportWorker", "Enqueuing debug-only forced 4K export for project $projectId")
+                WorkManager.getInstance(this).enqueue(
+                    OneTimeWorkRequestBuilder<ExportWorker>()
+                        .setInputData(workDataOf("projectId" to projectId))
+                        .addTag("forced-4k-export:$projectId")
+                        .build(),
+                )
+            }
+        }
         if (BuildConfig.CLERK_PUBLISHABLE_KEY.isNotBlank()) {
             lifecycleScope.launch { Clerk.auth.handle(intent.data) }
         }

@@ -26,7 +26,11 @@ data class CodecWorkload(
     val canDecode1080p30: Boolean = false,
     val canEncode1080p30: Boolean = false,
     val canEncode4k30: Boolean = false,
-    val hardwareAccelerated: Boolean = false
+    val hardwareAccelerated: Boolean = false,
+    val encoderNames: List<String> = emptyList(),
+    val widthAlignment: Int = 1,
+    val heightAlignment: Int = 1,
+    val usedAligned1080Probe: Boolean = false
 )
 
 data class DeviceWorkloadProfile(
@@ -51,6 +55,30 @@ data class DeviceCapabilityReport(
     // Thresholds remain provisional until the physical-device matrix in #7.
     val provisional: Boolean = true
 ) {
+    fun diagnosticSummary(): String = buildString {
+        append(userFacingSummary())
+        append(
+            " Measurements: api=${measurements.apiLevel}, " +
+                "abis=${measurements.abis}, ram=${measurements.memoryClassMb}MB, " +
+                "freeStorage=${measurements.freeStorageBytes}B, " +
+                "thermal=${measurements.thermalClass}, " +
+                "layer1Latency=${measurements.layer1ModelLatencyMs}ms, codecs=",
+        )
+        append(
+            measurements.codecs.joinToString(prefix = "[", postfix = "]") { codec ->
+                "${codec.mime}(" +
+                    "decode720p=${codec.canDecode720p30}," +
+                    "decode1080p=${codec.canDecode1080p30}," +
+                    "encode1080p=${codec.canEncode1080p30}," +
+                    "encode4k=${codec.canEncode4k30}," +
+                    "hardware=${codec.hardwareAccelerated}," +
+                    "alignment=${codec.widthAlignment}x${codec.heightAlignment}," +
+                    "aligned1080Probe=${codec.usedAligned1080Probe}," +
+                    "encoders=${codec.encoderNames})"
+            },
+        )
+    }
+
     fun userFacingSummary(): String {
         val tierName = tier.name.lowercase().replace('_', ' ')
         val downgrades = features.entries.filter { it.value.mode != CapabilityMode.LOCAL }
@@ -72,6 +100,7 @@ data class ExportCapability(
 object DeviceCapability {
     const val GIB: Long = 1024L * 1024L * 1024L
     const val LAYER_1_LATENCY_BUDGET_MS = 2_000L
+    const val HIGH_RESOLUTION_MEMORY_MB = 7 * 1024
 
     fun assess(profile: DeviceWorkloadProfile): DeviceCapabilityReport {
         val avc = profile.codecs.firstOrNull { it.mime == MediaFormat.MIMETYPE_VIDEO_AVC }
@@ -101,7 +130,9 @@ object DeviceCapability {
             if (profile.memoryClassMb < 4 * 1024) add("4 GB of device RAM is needed for standard 1080p editing.")
             if (profile.freeStorageBytes < 2 * GIB) add("2 GB free storage is needed for standard editing.")
             if (avc?.canDecode1080p30 != true) add("The device cannot decode H.264 1080p30.")
-            if (avc?.canEncode1080p30 != true) add("The device cannot encode H.264 1080p30.")
+            if (avc?.canEncode1080p30 != true && avc?.canEncode4k30 != true) {
+                add("The device cannot encode H.264 1080p30.")
+            }
             if (profile.thermalClass >= ThermalClass.SEVERE) add("The device is currently too warm for sustained 1080p editing.")
         }
         val standard = standardReasons.isEmpty()
@@ -119,7 +150,9 @@ object DeviceCapability {
         val advanced = perceptionReasons.isEmpty()
         val highResolutionReasons = buildList {
             if (!standard) addAll(standardReasons)
-            if (profile.memoryClassMb < 8 * 1024) add("8 GB of device RAM is needed for high-resolution export.")
+            if (profile.memoryClassMb < HIGH_RESOLUTION_MEMORY_MB) {
+                add("An 8 GB-class device is needed for high-resolution export.")
+            }
             if (profile.freeStorageBytes < 8 * GIB) add("8 GB free storage is needed for safe high-resolution export.")
             if (listOfNotNull(avc, hevc).none { it.canEncode4k30 && it.hardwareAccelerated }) {
                 add("No hardware H.264/HEVC 4K30 encoder is available.")
@@ -194,20 +227,43 @@ object DeviceCapability {
         val codecs = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
         val support = listOf(MediaFormat.MIMETYPE_VIDEO_AVC, MediaFormat.MIMETYPE_VIDEO_HEVC).map { mime ->
             val matching = codecs.filter { mime in it.supportedTypes }
-            fun supports(encoder: Boolean, width: Int, height: Int, fps: Double): Boolean =
-                matching.filter { it.isEncoder == encoder }.any { info ->
-                    runCatching {
-                        info.getCapabilitiesForType(mime).videoCapabilities
-                            ?.areSizeAndRateSupported(width, height, fps) == true
-                    }.getOrDefault(false)
-                }
+            val encoders = matching.filter(MediaCodecInfo::isEncoder)
+            fun aligned(value: Int, alignment: Int): Int =
+                ((value + alignment - 1) / alignment) * alignment
+            fun supports(info: MediaCodecInfo, width: Int, height: Int, fps: Double): Pair<Boolean, Boolean> =
+                runCatching {
+                    val capabilities = info.getCapabilitiesForType(mime).videoCapabilities
+                        ?: return@runCatching false to false
+                    val exact = capabilities.areSizeAndRateSupported(width, height, fps)
+                    val alignedWidth = aligned(width, capabilities.widthAlignment)
+                    val alignedHeight = aligned(height, capabilities.heightAlignment)
+                    val alignedSupport = !exact &&
+                        capabilities.areSizeAndRateSupported(alignedWidth, alignedHeight, fps)
+                    (exact || alignedSupport) to alignedSupport
+                }.getOrDefault(false to false)
+            fun supportsAny(encoder: Boolean, width: Int, height: Int, fps: Double): Boolean =
+                matching.filter { it.isEncoder == encoder }.any { supports(it, width, height, fps).first }
+            val aligned1080 = encoders.any { supports(it, 1920, 1080, 30.0).second }
+            val hardwareEncoders = encoders.filter(::isHardwareAccelerated)
+            val alignments = encoders.mapNotNull { info ->
+                runCatching {
+                    info.getCapabilitiesForType(mime).videoCapabilities
+                }.getOrNull()
+            }
+            val hardware4k = hardwareEncoders.any {
+                supports(it, 3840, 2160, 30.0).first
+            }
             CodecWorkload(
                 mime = mime,
-                canDecode720p30 = supports(false, 1280, 720, 30.0),
-                canDecode1080p30 = supports(false, 1920, 1080, 30.0),
-                canEncode1080p30 = supports(true, 1920, 1080, 30.0),
-                canEncode4k30 = supports(true, 3840, 2160, 30.0),
-                hardwareAccelerated = matching.any { it.isEncoder && isHardwareAccelerated(it) }
+                canDecode720p30 = supportsAny(false, 1280, 720, 30.0),
+                canDecode1080p30 = supportsAny(false, 1920, 1080, 30.0),
+                canEncode1080p30 = encoders.any { supports(it, 1920, 1080, 30.0).first } || hardware4k,
+                canEncode4k30 = hardware4k,
+                hardwareAccelerated = hardwareEncoders.isNotEmpty(),
+                encoderNames = encoders.map { it.name },
+                widthAlignment = alignments.maxOfOrNull { it.widthAlignment } ?: 1,
+                heightAlignment = alignments.maxOfOrNull { it.heightAlignment } ?: 1,
+                usedAligned1080Probe = aligned1080
             )
         }
         val thermal = when (context.getSystemService(PowerManager::class.java).currentThermalStatus) {

@@ -65,16 +65,20 @@ android {
             val allowBootstrap = providers.gradleProperty("CTRLB_ALLOW_BOOTSTRAP_AUTH")
                 .orElse(providers.environmentVariable("CTRLB_ALLOW_BOOTSTRAP_AUTH"))
                 .orElse(rootLocalEnv["CTRLB_ALLOW_BOOTSTRAP_AUTH"] ?: "false").get().equals("true", ignoreCase = true)
+            val force4kExport = providers.gradleProperty("CTRLB_FORCE_4K_EXPORT")
+                .orElse("false").get().equals("true", ignoreCase = true)
             val bootstrapToken = if (allowBootstrap) {
                 providers.gradleProperty("CTRLB_PLANNER_TOKEN")
                     .orElse(providers.environmentVariable("CTRLB_PLANNER_CLIENT_TOKEN"))
                     .orElse(rootLocalEnv["CTRLB_PLANNER_CLIENT_TOKEN"] ?: "").get()
             } else ""
             buildConfigField("String", "PLANNER_TOKEN", "\"${bootstrapToken.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+            buildConfigField("boolean", "FORCE_4K_EXPORT", force4kExport.toString())
         }
         release {
             signingConfig = signingConfigs.getByName("release")
             buildConfigField("String", "PLANNER_TOKEN", "\"\"")
+            buildConfigField("boolean", "FORCE_4K_EXPORT", "false")
         }
     }
     buildFeatures { compose = true; buildConfig = true }

@@ -261,17 +261,21 @@ class ExportWorker(context: Context, params: WorkerParameters) : ProgressWorker(
             project.export.height,
             inputData.getLong("estimatedBytes", 0)
         )
+        val force4k = BuildConfig.FORCE_4K_EXPORT
         val renderSize = project.orderedSources.renderSizeWithin(
-            maxOf(capability.recommendedWidth, capability.recommendedHeight),
-            minOf(capability.recommendedWidth, capability.recommendedHeight)
+            if (force4k) 3840 else maxOf(capability.recommendedWidth, capability.recommendedHeight),
+            if (force4k) 2160 else minOf(capability.recommendedWidth, capability.recommendedHeight)
         )
         val renderProject = project.copy(export = project.export.copy(
             width = renderSize.width,
             height = renderSize.height,
-            codec = if (capability.allow4k) project.export.codec else "video/avc",
-            bitrate = if (capability.allow4k) project.export.bitrate else 16_000_000
+            codec = if (force4k) "video/avc" else if (capability.allow4k) project.export.codec else "video/avc",
+            bitrate = if (force4k) 45_000_000 else if (capability.allow4k) project.export.bitrate else 16_000_000
         ))
-        progress(if (capability.allow4k) "export-4k" else "export-${renderSize.shortSide}p", 1)
+        if (force4k) {
+            Log.w("ExportWorker", "Debug override forcing ${renderSize.width}x${renderSize.height} AVC export despite capability policy: ${capability.reasons}")
+        }
+        progress(if (force4k) "export-4k-forced" else if (capability.allow4k) "export-4k" else "export-${renderSize.shortSide}p", 1)
         val output = java.io.File(applicationContext.filesDir, "exports/${project.id}.mp4")
         ExportCoordinator.export(applicationContext, renderProject, output)
         val values = ContentValues().apply {
@@ -286,7 +290,7 @@ class ExportWorker(context: Context, params: WorkerParameters) : ProgressWorker(
             applicationContext.contentResolver.update(published, ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }, null, null)
         } catch (error: Throwable) { applicationContext.contentResolver.delete(published, null, null); throw error }
         progress("complete", 100)
-        Result.success(Data.Builder().putString("outputUri", published.toString()).putBoolean("used4k", capability.allow4k).putStringArray("fallbackReasons", capability.reasons.toTypedArray()).build())
+        Result.success(Data.Builder().putString("outputUri", published.toString()).putBoolean("used4k", force4k || capability.allow4k).putStringArray("fallbackReasons", capability.reasons.toTypedArray()).build())
     }.getOrElse { error ->
         Log.e("ExportWorker", "Video export failed", error)
         Result.failure(Data.Builder().putString("error", error.detailedMessage("Video export failed")).build())

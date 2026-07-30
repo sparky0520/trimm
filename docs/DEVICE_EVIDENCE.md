@@ -52,6 +52,37 @@ the repository and the original device media is never modified.
 | Orientation/timing parity | Pass: -90-degree display rotation and 60 fps were preserved. Export duration was 23.583 s, approximately +19.3 ms from source. |
 | Pixel parity | Partial/pass at provisional tolerance: whole-clip SSIM was 0.8776 after proportional 4K-to-720p downscale and device H.264 encoding. |
 
+### Follow-up: genuine 4K hardware encode
+
+The original downgrade was a capability-policy false negative. Android reported
+both AVC and HEVC hardware encoders as 4K30-capable while rejecting the exact
+1920x1080 probe. A debug-only experiment first confirmed a no-op 4K remux, then
+applied an imperceptible color transform to require a genuine decode/encode pass.
+
+| Check | Result |
+| --- | --- |
+| Hardware path | Pass: Media3 used `c2.mtk.avc.encoder` and produced 1,414 encoded video frames. |
+| Export | Pass: genuine H.264 3840x2160 at 60 fps completed in approximately 25 s (28.8 s including MediaStore publication), producing 177,578,431 bytes at approximately 60 Mbps. |
+| Memory and thermal | Pass for this fixture: sampled app PSS peaked at approximately 297 MB. Battery temperature moved from 44.8 C to 45.6 C without reported throttling or shutdown. |
+| Orientation/timing parity | Pass: -90-degree display rotation and 60 fps were preserved. Output duration was 23.583 s, approximately +19.3 ms from source. |
+| Pixel parity | Partial/pass at provisional native-4K tolerance: whole-clip SSIM was 0.8835. |
+
+The capability probe now aligns requested dimensions to each encoder's published
+block alignment, associates 4K claims with a hardware encoder, treats proven 4K
+support as monotonic evidence for lower resolutions, and recognizes Android's
+reported usable memory on nominal 8 GB-class devices.
+
+### Follow-up: authenticated 4K analysis
+
+After interactive Clerk sign-in, the same 4K fixture completed analysis in
+62.2 s without the prior HTTP 401. It persisted seven timed words, three
+reviewable speech hints, a story graph and safe agent activity. The provider
+returned a malformed edit program and its bounded repair remained invalid, so
+the app preserved project revision 1, applied no unsafe edit and displayed the
+retry/clarify recovery state. The cloud provider now receives the canonical
+decision JSON Schema for both primary generation and bounded repair; semantic
+validation remains deterministic.
+
 ## 2026-07-30 - OnePlus CPH2487 with 4K input
 
 - App revision: `1fcf7b3`
@@ -95,6 +126,5 @@ the repository and the original device media is never modified.
 ## Remaining matrix
 
 - Record an advanced local-perception device with measured Layer 1 latency.
-- Record a high-resolution-capable device with a 4K camera fixture.
 - Establish pixel/timing tolerances from results across those tiers before
   making the provisional capability thresholds final.

@@ -1,5 +1,6 @@
 package ai.ctrlb.mobile.media
 
+import ai.ctrlb.mobile.BuildConfig
 import ai.ctrlb.mobile.domain.*
 import android.content.Context
 import android.net.Uri
@@ -76,6 +77,15 @@ object ExportCoordinator {
                 project.export.height,
                 Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP
             )
+        if (BuildConfig.FORCE_4K_EXPORT && maxOf(project.export.width, project.export.height) >= 3840) {
+            // Prevent Media3 from remuxing a no-op presentation during the physical-device
+            // experiment. This imperceptible adjustment requires a genuine decode/encode pass.
+            videoEffects += RgbAdjustment.Builder()
+                .setRedScale(.999f)
+                .setGreenScale(.999f)
+                .setBlueScale(.999f)
+                .build()
+        }
         project.operations.filterIsInstance<SetColorGrade>().lastOrNull { it.enabled }?.grade?.let { grade ->
             videoEffects += HslAdjustment.Builder().adjustSaturation((grade.saturation - 1f) * 100f).adjustLightness(grade.exposure * 22f).build()
             videoEffects += RgbAdjustment.Builder()

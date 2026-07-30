@@ -54,6 +54,17 @@ class DeviceCapabilityTest {
         assertTrue(report.features.getValue("localPerception").explanation.contains("not been measured"))
     }
 
+    @Test fun `hardware 4k support implies lower resolution encoding when vendor 1080 report is non-monotonic`() {
+        val nonMonotonic = avc.copy(canEncode1080p30 = false, canEncode4k30 = true)
+        val report = DeviceCapability.assess(
+            profile(memoryMb = 7_485, storageGiB = 12, codecs = listOf(nonMonotonic), latencyMs = null)
+        )
+
+        assertEquals(CapabilityTier.HIGH_RESOLUTION_EXPORT, report.tier)
+        assertEquals(CapabilityMode.LOCAL, report.features.getValue("standardEditing").mode)
+        assertEquals(CapabilityMode.LOCAL, report.features.getValue("highResolutionExport").mode)
+    }
+
     @Test fun `advanced tier is selected from measured Layer 1 latency`() {
         val report = DeviceCapability.assess(profile(memoryMb = 6 * 1024, storageGiB = 6, codecs = listOf(avc.copy(canEncode4k30 = false)), latencyMs = 1_500))
         assertEquals(CapabilityTier.ADVANCED_LOCAL_PERCEPTION, report.tier)
@@ -70,5 +81,9 @@ class DeviceCapabilityTest {
         assertFalse(warm.tier == CapabilityTier.HIGH_RESOLUTION_EXPORT)
         assertTrue(warm.features.getValue("highResolutionExport").explanation.contains("Thermal"))
         assertTrue(warm.provisional)
+
+        val sixGb = DeviceCapability.assess(profile(memoryMb = 6 * 1024))
+        assertFalse(sixGb.tier == CapabilityTier.HIGH_RESOLUTION_EXPORT)
+        assertTrue(sixGb.features.getValue("highResolutionExport").explanation.contains("8 GB-class"))
     }
 }
