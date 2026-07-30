@@ -269,7 +269,7 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
         // Gemini video decisions can exceed one minute even after the bounded local
         // index is ready. Keep this below WorkManager's execution window while the
         // cloud run-start endpoint remains synchronous.
-        const val AGENT_RUN_READ_TIMEOUT_MS = 180_000
+        const val AGENT_RUN_READ_TIMEOUT_MS = 360_000
     }
 
     private val runsEndpoint = URI(endpoint).also { require(it.scheme == "https") }
