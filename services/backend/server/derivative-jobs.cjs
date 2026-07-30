@@ -43,6 +43,11 @@ function positiveInteger(value, name, ceiling = Number.MAX_SAFE_INTEGER) {
   return value;
 }
 
+function nonNegativeInteger(value, name, ceiling = Number.MAX_SAFE_INTEGER) {
+  if (!Number.isSafeInteger(value) || value < 0 || value > ceiling) throw jobError(`Invalid ${name}.`);
+  return value;
+}
+
 function timestamp(value, name) {
   if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) throw jobError(`Invalid ${name}.`);
   return new Date(value).toISOString();
@@ -169,7 +174,9 @@ class DerivativeJobs {
     const maximumBytes = positiveInteger(request.maximumBytes, 'maximum bytes', 100 * 1024 * 1024);
     const maximumDurationMs = request.maximumDurationMs == null ? null : positiveInteger(request.maximumDurationMs, 'maximum duration', 3 * 60 * 60 * 1000);
     const maximumCount = request.maximumCount == null ? 1 : positiveInteger(request.maximumCount, 'maximum count', 100);
-    const estimatedCostMicros = request.estimatedCostMicros == null ? 0 : positiveInteger(request.estimatedCostMicros, 'estimated cost', 100_000_000);
+    const estimatedCostMicros = request.estimatedCostMicros == null
+      ? 0
+      : nonNegativeInteger(request.estimatedCostMicros, 'estimated cost', 100_000_000);
     const retentionMs = positiveInteger(request.retentionMs ?? this.retentionMs, 'retention', 24 * 60 * 60 * 1000);
     const mapping = timelineReferences(request.timelineReferences);
     const disclosures = providerDisclosures(request.providerDisclosures, type);

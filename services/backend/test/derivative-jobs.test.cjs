@@ -131,6 +131,13 @@ test('expiry, cancellation, and retention cleanup remove temporary derivatives',
   assert.equal(jobs.jobs.size, 0);
 });
 
+test('zero estimated cost is accepted for provider-requested evidence', async (t) => {
+  const { directory, jobs } = fixture();
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const result = await jobs.authorize(principal, authorization({ estimatedCostMicros: 0 }));
+  assert.equal(result.job.estimatedCostMicros, 0);
+});
+
 test('authorization records consent, selection, disclosure, mapping, and retention', async (t) => {
   const { directory, jobs } = fixture(); t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const job = (await jobs.authorize(principal, authorization({
