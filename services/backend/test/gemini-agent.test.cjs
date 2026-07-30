@@ -16,6 +16,11 @@ test('new agent path is pinned to Gemini 3.6 Flash and requests JSON', async () 
   const decision = await decide({ systemPolicy: 'policy', inventory: { projectId: 'p' }, evidence: [] });
   assert.equal(request.model, 'gemini-3.6-flash');
   assert.equal(request.config.responseMimeType, 'application/json');
+  assert.ok(Array.isArray(request.config.responseJsonSchema.anyOf));
+  assert.deepEqual(
+    request.config.responseJsonSchema.anyOf.map((variant) => variant.properties.type.enum[0]),
+    ['evidence_request', 'edit_program', 'clarification', 'fallback'],
+  );
   assert.deepEqual(JSON.parse(decision.rawText), { type: 'fallback', reason: 'More evidence is needed.' });
   assert.equal(typeof decide.repair, 'function');
   assert.equal(typeof decide.escalate, 'function');
@@ -36,4 +41,13 @@ test('new agent path is pinned to Gemini 3.6 Flash and requests JSON', async () 
   assert.equal(request.model, 'gemini-3.1-pro-preview');
   assert.equal(request.config.cachedContent, 'cachedContents/project-1');
   assert.equal(request.config.tools.length, 1);
+
+  await decide.repair({
+    expectedSchema: 'ctrlB agent decision contract v1',
+    malformedResponse: '{"type":"edit_program"}',
+    validationErrors: [{ code: 'invalid_edit_program' }],
+  });
+  assert.equal(request.config.responseMimeType, 'application/json');
+  assert.ok(Array.isArray(request.config.responseJsonSchema.anyOf));
+  assert.equal(request.config.temperature, 0);
 });

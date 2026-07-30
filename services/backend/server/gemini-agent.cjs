@@ -1,6 +1,7 @@
 'use strict';
 
 const { GoogleGenAI } = require('@google/genai');
+const { AGENT_DECISION_SCHEMA } = require('./agent-decision-schema.cjs');
 
 function createGeminiDecisionProvider({
   apiKey = process.env.GEMINI_API_KEY,
@@ -11,7 +12,10 @@ function createGeminiDecisionProvider({
   if (model !== 'gemini-3.6-flash') throw new Error('The video agent is pinned to gemini-3.6-flash.');
   if (escalationModel !== 'gemini-3.1-pro-preview') throw new Error('The ambiguity escalation model is pinned to gemini-3.1-pro-preview.');
   const ai = client || (apiKey ? new GoogleGenAI({ apiKey }) : null);
-  async function generate({ systemPolicy, contents, temperature, selectedModel = model, cachedContent, tools }) {
+  async function generate({
+    systemPolicy, contents, temperature, selectedModel = model, cachedContent, tools,
+    responseJsonSchema = AGENT_DECISION_SCHEMA,
+  }) {
     if (!ai) throw Object.assign(new Error('GEMINI_API_KEY is not configured'), { status: 503, code: 'gemini_unconfigured' });
     const response = await ai.models.generateContent({
       model: selectedModel,
@@ -19,6 +23,7 @@ function createGeminiDecisionProvider({
       config: {
         systemInstruction: systemPolicy,
         responseMimeType: 'application/json',
+        responseJsonSchema,
         temperature,
         ...(cachedContent ? { cachedContent } : {}),
         ...(tools?.length ? { tools } : {}),
@@ -58,6 +63,7 @@ Correct structure only. Never change editorial intent, operations, ranges, evide
 Return only the corrected JSON object.`,
     contents: JSON.stringify(request),
     temperature: 0,
+    responseJsonSchema: AGENT_DECISION_SCHEMA,
   });
   return decide;
 }
