@@ -17,7 +17,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -33,9 +32,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -125,10 +127,15 @@ class MainActivity : ComponentActivity() {
         Modifier.fillMaxWidth().background(Workspace).statusBarsPadding().height(58.dp).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Image(
-            painter = painterResource(R.drawable.ctrlb_wordmark),
-            contentDescription = "ctrlB",
-            modifier = Modifier.width(90.dp).height(24.dp)
+        Text(
+            buildAnnotatedString {
+                withStyle(SpanStyle(color = Cream, fontWeight = FontWeight.Bold)) { append("ctrl") }
+                withStyle(SpanStyle(color = Coral, fontWeight = FontWeight.ExtraBold)) { append("B") }
+            },
+            fontFamily = FontFamily.SansSerif,
+            fontSize = 26.sp,
+            letterSpacing = (-1.2).sp,
+            maxLines = 1,
         )
         Spacer(Modifier.weight(1f))
         AccountControl()
