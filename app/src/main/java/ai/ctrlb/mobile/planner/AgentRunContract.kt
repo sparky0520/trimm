@@ -265,6 +265,13 @@ class AgentRunCoordinator(
 }
 
 class AgentRunClient(endpoint: String, private val accessToken: suspend () -> String) : AgentRunGateway {
+    private companion object {
+        // Gemini video decisions can exceed one minute even after the bounded local
+        // index is ready. Keep this below WorkManager's execution window while the
+        // cloud run-start endpoint remains synchronous.
+        const val AGENT_RUN_READ_TIMEOUT_MS = 180_000
+    }
+
     private val runsEndpoint = URI(endpoint).also { require(it.scheme == "https") }
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = false }
 
@@ -299,7 +306,7 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
         return try {
             connection.requestMethod = "POST"
             connection.connectTimeout = 15_000
-            connection.readTimeout = 60_000
+            connection.readTimeout = AGENT_RUN_READ_TIMEOUT_MS
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("Authorization", "Bearer ${accessToken()}")
