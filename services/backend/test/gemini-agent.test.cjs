@@ -29,7 +29,7 @@ test('new agent path is pinned to Gemini 3.6 Flash and requests JSON', async () 
   );
   assert.deepEqual(
     evidenceVariants[0].properties.acceptedFormat.enum,
-    ['audio/mpeg', 'audio/mp4', 'audio/ogg'],
+    ['audio/mp4'],
   );
   assert.deepEqual(JSON.parse(decision.rawText), { type: 'fallback', reason: 'More evidence is needed.' });
   assert.equal(typeof decide.repair, 'function');

@@ -61,7 +61,7 @@ const AGENT_DECISION_SCHEMA = Object.freeze({
               evidenceRequestVariant(
                 'audio',
                 ['transcription', 'speech-analysis', 'audio-analysis'],
-                ['audio/mpeg', 'audio/mp4', 'audio/ogg'],
+                ['audio/mp4'],
               ),
               evidenceRequestVariant(
                 'frame',
