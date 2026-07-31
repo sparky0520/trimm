@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ctrlb.ai/contracts/agent-run.v2.json",
+  "type": "object",
+  "required": ["contractVersion", "runId", "projectId", "projectRevision", "status", "events", "decision", "usage"],
+  "properties": {
+    "contractVersion": { "const": 2 }, "runId": { "type": "string" }, "projectId": { "type": "string" },
+    "projectRevision": { "type": "integer", "minimum": 0 },
+    "status": { "enum": ["waiting_for_evidence", "waiting_for_user", "proposal_ready", "partial", "failed", "cancelled"] },
+    "events": { "type": "array", "items": { "$ref": "activity-event.v2.json" } },
+    "decision": { "oneOf": [ { "$ref": "video-tool-request.v2.json" }, { "$ref": "edit-program.v2.json" }, { "type": "object", "properties": { "type": { "enum": ["clarification", "fallback"] } }, "required": ["type"] } ] },
+    "usage": { "type": "object" }
+  }, "additionalProperties": false
+}

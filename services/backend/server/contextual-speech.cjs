@@ -5,7 +5,7 @@ const REQUIRED_CONTEXT = new Set([
   'user_intent', 'alternate_takes', 'waveform_scene_noise', 'surrounding_video',
   'proposal_simulation',
 ]);
-const UNCERTAINTY_ACTIONS = new Set(['none', 're_listened', 'alternate_transcription', 'escalated']);
+const UNCERTAINTY_ACTIONS = new Set(['none', 're_listened', 'alternate_transcription']);
 const LOCATOR_SIGNALS = new Set([
   'possible_filler', 'pause_candidate', 'repeated_phrase', 'transcript_uncertainty',
   'delivery_discontinuity',
@@ -48,7 +48,7 @@ function validateContextualSpeechDecision(operation, evidenceIds) {
     throw contextualError('Speech uncertainty handling is invalid.');
   }
   if (decision.transcriptUncertain === true && decision.uncertaintyAction === 'none') {
-    throw contextualError('Uncertain transcripts must be re-listened, retranscribed, or escalated.');
+    throw contextualError('Uncertain transcripts must be re-listened or retranscribed.');
   }
   if (!Array.isArray(decision.contextEvidenceIds) || !decision.contextEvidenceIds.length ||
       decision.contextEvidenceIds.some((id) => !evidenceIds.has(id))) {
@@ -76,7 +76,7 @@ function evaluateSpeechFixture(fixture) {
     context.has('proposal_simulation') &&
     (context.has('word_phoneme_timing') || context.has('waveform_scene_noise')) &&
     (context.has('alternate_takes') || context.has('surrounding_video')) &&
-    (!fixture.transcriptUncertain || ['re_listened', 'alternate_transcription', 'escalated'].includes(fixture.uncertaintyAction))
+    (!fixture.transcriptUncertain || ['re_listened', 'alternate_transcription'].includes(fixture.uncertaintyAction))
   );
   return { passed: !forbiddenSoleBasis && contextualCut, forbiddenSoleBasis, contextualCut };
 }

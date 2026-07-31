@@ -3,6 +3,18 @@
 const MAX_PROPOSAL_BYTES = 64 * 1024;
 const FINISH_REASONS_COMPLETE = new Set(['STOP', 'MAX_TOKENS_UNSPECIFIED', undefined, null]);
 const PRIVATE_FIELD = /("(?:apiKey|api_key|token|secret|password|reasoning|thought|chainOfThought|chain_of_thought)"\s*:\s*)"(?:[^"\\]|\\.)*"/gi;
+const NON_REPAIRABLE_CODES = new Set([
+  'cloud_boundary_violation',
+  'evidence_budget_exceeded',
+  'invalid_evidence_reference',
+  'invalid_evidence_range',
+  'proposal_too_large',
+  'provider_truncated_proposal',
+  'repair_changed_editorial_intent',
+  'stale_revision',
+  'unknown_operation',
+  'unsupported_evidence_request',
+]);
 
 function redactPrivateFields(value) {
   return value.replace(PRIVATE_FIELD, '$1"[redacted]"');
@@ -15,7 +27,7 @@ function safeError(error) {
   };
 }
 
-function boundedAttempt(rawText, finishReason, maximumBytes = MAX_PROPOSAL_BYTES) {
+function boundedAttempt(rawText, finishReason, maximumBytes = MAX_PROPOSAL_BYTES, usage) {
   const text = redactPrivateFields(typeof rawText === 'string' ? rawText : JSON.stringify(rawText));
   const bytes = Buffer.byteLength(text || '');
   let stored = text || '';
@@ -30,12 +42,13 @@ function boundedAttempt(rawText, finishReason, maximumBytes = MAX_PROPOSAL_BYTES
     truncated,
     providerTruncated: !FINISH_REASONS_COMPLETE.has(finishReason),
     finishReason: typeof finishReason === 'string' ? finishReason.slice(0, 100) : null,
+    ...(usage ? { usage } : {}),
   };
 }
 
 function candidate(value, maximumBytes) {
   if (value && typeof value === 'object' && typeof value.rawText === 'string') {
-    return boundedAttempt(value.rawText, value.finishReason, maximumBytes);
+    return boundedAttempt(value.rawText, value.finishReason, maximumBytes, value.usage);
   }
   return boundedAttempt(typeof value === 'string' ? value : JSON.stringify(value), null, maximumBytes);
 }
@@ -138,13 +151,16 @@ async function recoverProposal({
   try {
     original = parseAttempt(first);
     const decision = validate(original);
-    return { decision, recovery: null };
+    return { decision, recovery: null, usage: [first.usage].filter(Boolean) };
   } catch (error) {
     primaryError = error;
     first.validationErrors = [safeError(error)];
   }
 
   if (typeof repair !== 'function') {
+    throw primaryError;
+  }
+  if (NON_REPAIRABLE_CODES.has(primaryError?.code)) {
     throw primaryError;
   }
 
@@ -177,6 +193,7 @@ async function recoverProposal({
     return {
       decision,
       recovery: { status: 'repaired', attempts: [first, second], canRetry: false, canClarify: false },
+      usage: [first.usage, second.usage].filter(Boolean),
     };
   } catch (error) {
     second.validationErrors = [safeError(error)];

@@ -3,16 +3,17 @@
 const crypto = require('node:crypto');
 const { VolatileAgentRunStore } = require('./agent-run-store.cjs');
 const { ProposalRecoveryError } = require('./proposal-recovery.cjs');
+const { usageSummary } = require('./model-usage.cjs');
 
 const STATUS_FOR = Object.freeze({
-  evidence_request: 'waiting_for_evidence',
+  tool_request: 'waiting_for_evidence',
   edit_program: 'proposal_ready',
   clarification: 'waiting_for_user',
   fallback: 'partial',
 });
 
 const EVENT_FOR = Object.freeze({
-  evidence_request: ['evidence_requested', 'I need a few precise ranges before proposing edits.'],
+  tool_request: ['evidence_requested', 'I need to inspect a video range before proposing edits.'],
   edit_program: ['proposal_ready', 'The proposed edit is ready to preview.'],
   clarification: ['clarification', 'I need one choice from you before continuing.'],
   fallback: ['partial', 'I could only complete part of the analysis.'],
@@ -37,20 +38,24 @@ class AgentRuns {
 
   view(run) {
     return {
-      contractVersion: 1,
+      contractVersion: 2,
       runId: run.id,
       projectId: run.projectId,
       projectRevision: run.projectRevision,
       status: run.status,
       events: run.events.map((event) => ({ ...event })),
       decision: run.decision,
+      usage: usageSummary(run.usage),
     };
   }
 
   applyDecision(run, outcome) {
     run.attempts ||= [];
     const recovery = outcome?._recovery;
-    const decision = recovery ? Object.fromEntries(Object.entries(outcome).filter(([key]) => key !== '_recovery')) : outcome;
+    run.usage = usageSummary([...(run.usage?.calls || run.usage || []), ...(outcome?._usage || [])]);
+    const decision = Object.fromEntries(
+      Object.entries(outcome).filter(([key]) => key !== '_recovery' && key !== '_usage')
+    );
     if (recovery) {
       this.event(run, 'proposal_repairing', 'The proposal needed a bounded structural repair.');
       run.attempts.push(...recovery.attempts);
@@ -60,6 +65,9 @@ class AgentRuns {
       run.recovery = { ...run.recovery, status: 'resolved', canRetry: false, canClarify: false };
     }
     run.decision = decision;
+    if (Array.isArray(decision.observations) && decision.observations.length) {
+      run.inventory = { ...run.inventory, observations: [...(run.inventory.observations || []), ...decision.observations] };
+    }
     run.status = STATUS_FOR[decision.type];
     this.event(run, ...EVENT_FOR[decision.type]);
   }
@@ -67,6 +75,10 @@ class AgentRuns {
   recoverFailure(run, error) {
     if (!(error instanceof ProposalRecoveryError)) return false;
     run.attempts ||= [];
+    run.usage = usageSummary([
+      ...(run.usage?.calls || run.usage || []),
+      ...error.recovery.attempts.map((attempt) => attempt.usage).filter(Boolean),
+    ]);
     this.event(run, 'proposal_repairing', 'The proposal was malformed, so a bounded structural repair was attempted.');
     run.attempts.push(...error.recovery.attempts);
     run.recovery = {
@@ -97,13 +109,15 @@ class AgentRuns {
       decision: { type: 'fallback', reason: 'The run has not started.' },
       attempts: [],
       recovery: null,
+      usage: usageSummary(),
     };
     this.event(run, 'started', 'Starting a request-shaped video edit.');
-    this.event(run, 'index_received', 'The local media index is ready; original source media stays local.');
-    this.event(run, 'analyzing', 'Reviewing the selected ranges for a publishable first cut.');
+    this.event(run, 'transcript_received', 'The complete timestamped transcript is ready.');
+    this.event(run, 'analyzing', 'Reviewing the transcript and authorized video for a publishable first cut.');
     run = await this.store.create(run);
     try {
-      this.applyDecision(run, await this.orchestrator.orchestrate(principal, inventory));
+      const bootstrap = await this.orchestrator.bootstrap(principal, inventory);
+      this.applyDecision(run, bootstrap || await this.orchestrator.orchestrate(principal, inventory));
       run = await this.store.save(run, run.stateVersion);
     } catch (error) {
       if (this.recoverFailure(run, error)) {
@@ -146,6 +160,19 @@ class AgentRuns {
       if (!evidenceJobIds.length) {
         throw Object.assign(new Error('Completed evidence is required.'), { status: 400, code: 'evidence_required' });
       }
+      const outstandingJobIds = Array.isArray(run.decision?.jobs)
+        ? run.decision.jobs.map((job) => job.id)
+        : [];
+      const submitted = [...new Set(evidenceJobIds)].sort();
+      const outstanding = [...new Set(outstandingJobIds)].sort();
+      if (!outstanding.length ||
+          submitted.length !== outstanding.length ||
+          submitted.some((id, index) => id !== outstanding[index])) {
+        throw Object.assign(new Error('Evidence does not match the jobs requested by this run.'), {
+          status: 409,
+          code: 'unexpected_evidence',
+        });
+      }
       run.inventory = { ...run.inventory, evidenceJobIds: [...new Set([...(run.inventory.evidenceJobIds || []), ...evidenceJobIds])] };
       this.event(run, 'evidence_received', 'The requested evidence is ready and attached to this run.');
       this.event(run, 'analyzing', 'Continuing the same edit with the new evidence.');
@@ -178,6 +205,16 @@ class AgentRuns {
 
   async read(principal, runId) {
     return this.view(await this.owned(principal, runId));
+  }
+
+  async cancel(principal, runId) {
+    let run = await this.owned(principal, runId);
+    if (['proposal_ready', 'partial', 'failed', 'cancelled'].includes(run.status)) return this.view(run);
+    run.status = 'cancelled';
+    run.decision = { type: 'fallback', reason: 'The conversation was cancelled.' };
+    this.event(run, 'cancelled', 'The video edit was cancelled. Nothing was applied.');
+    run = await this.store.save(run, run.stateVersion);
+    return this.view(run);
   }
 }
 

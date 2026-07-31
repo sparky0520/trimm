@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ctrlb.ai/contracts/edit-program.v2.json",
+  "type": "object",
+  "required": ["type", "expectedRevision", "summary", "operations", "observations"],
+  "properties": {
+    "type": { "const": "edit_program" }, "expectedRevision": { "type": "integer", "minimum": 0 },
+    "summary": { "type": "string" }, "operations": { "type": "array" }, "observations": { "type": "array" }
+  }, "additionalProperties": false
+}

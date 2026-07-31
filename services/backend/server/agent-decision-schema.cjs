@@ -1,17 +1,28 @@
 'use strict';
 
+const observationSchema = {
+  type: 'object', additionalProperties: false,
+  required: ['id', 'sourceId', 'startMs', 'endMs', 'description', 'confidence', 'resolution'],
+  properties: {
+    id: { type: 'string', pattern: '^[A-Za-z0-9._:-]{1,200}$' },
+    sourceId: { type: 'string' },
+    startMs: { type: 'integer', minimum: 0 },
+    endMs: { type: 'integer', minimum: 1 },
+    description: { type: 'string', maxLength: 500 },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+    resolution: { type: 'string', enum: ['LOW', 'HIGH'] },
+  },
+};
+
 const operationSchema = {
   type: 'object',
   required: ['id', 'type', 'enabled', 'confidence', 'evidenceIds'],
   properties: {
     id: { type: 'string' },
-    type: {
-      type: 'string',
-      enum: [
-        'remove_fumbles', 'set_audio_cleanup', 'set_audio_levels',
-        'add_sound_effect', 'set_background_music', 'add_captions', 'semantic_visual',
-      ],
-    },
+    type: { type: 'string', enum: [
+      'remove_fumbles', 'set_audio_cleanup', 'set_audio_levels',
+      'add_sound_effect', 'set_background_music', 'add_captions', 'semantic_visual',
+    ] },
     enabled: { type: 'boolean' },
     confidence: { type: 'number', minimum: 0, maximum: 1 },
     evidenceIds: { type: 'array', minItems: 1, items: { type: 'string' } },
@@ -19,107 +30,48 @@ const operationSchema = {
   additionalProperties: true,
 };
 
-const evidenceRequestBase = {
-  sourceId: { type: 'string' },
-  startMs: { type: 'integer', minimum: 0 },
-  endMs: { type: 'integer', minimum: 1 },
-  maximumBytes: { type: 'integer', minimum: 1 },
-  maximumDurationMs: { type: 'integer', minimum: 1 },
-  maximumCount: { type: 'integer', minimum: 1 },
-  estimatedCostMicros: { type: 'integer', minimum: 0 },
-};
+const observations = { type: 'array', maxItems: 100, items: observationSchema };
 
-function evidenceRequestVariant(type, purposes, formats) {
-  return {
-    type: 'object',
-    required: ['sourceId', 'type', 'purpose', 'acceptedFormat', 'maximumBytes'],
-    properties: {
-      ...evidenceRequestBase,
-      type: { type: 'string', enum: [type] },
-      purpose: { type: 'string', enum: purposes },
-      acceptedFormat: { type: 'string', enum: formats },
-    },
-    additionalProperties: false,
-  };
-}
-
-// Keep provider-side structure intentionally smaller than the executable contract.
-// Gemini constrains the envelope here; the deterministic validators remain the
-// authority for evidence, ranges, operation semantics, privacy and project revision.
 const AGENT_DECISION_SCHEMA = Object.freeze({
   anyOf: [
     {
-      type: 'object',
-      required: ['type', 'requests'],
-      properties: {
-        type: { type: 'string', enum: ['evidence_request'] },
-        requests: {
-          type: 'array',
-          minItems: 1,
-          items: {
-            anyOf: [
-              evidenceRequestVariant(
-                'audio',
-                ['transcription', 'speech-analysis', 'audio-analysis'],
-                ['audio/mp4'],
-              ),
-              evidenceRequestVariant(
-                'frame',
-                ['visual-analysis', 'shot-analysis', 'planner-evidence'],
-                ['image/jpeg', 'image/webp'],
-              ),
-              evidenceRequestVariant(
-                'crop',
-                ['ocr', 'ui-analysis', 'planner-evidence'],
-                ['image/jpeg', 'image/webp'],
-              ),
-              evidenceRequestVariant(
-                'text',
-                ['planning', 'transcript-analysis'],
-                ['text/plain', 'application/json'],
-              ),
-              evidenceRequestVariant(
-                'evidence',
-                ['planning', 'candidate-evaluation'],
-                ['application/json'],
-              ),
-            ],
-          },
-        },
-      },
-      additionalProperties: false,
-    },
-    {
-      type: 'object',
-      required: ['type', 'expectedRevision', 'summary', 'operations'],
+      type: 'object', additionalProperties: false,
+      required: ['type', 'expectedRevision', 'summary', 'operations', 'observations'],
       properties: {
         type: { type: 'string', enum: ['edit_program'] },
         expectedRevision: { type: 'integer', minimum: 0 },
         summary: { type: 'string' },
-        operations: { type: 'array', items: operationSchema },
+        operations: { type: 'array', items: operationSchema }, observations,
       },
-      additionalProperties: false,
     },
     {
-      type: 'object',
-      required: ['type', 'question', 'options'],
+      type: 'object', additionalProperties: false,
+      required: ['type', 'question', 'options', 'observations'],
       properties: {
-        type: { type: 'string', enum: ['clarification'] },
-        question: { type: 'string' },
-        options: { type: 'array', items: { type: 'string' } },
+        type: { type: 'string', enum: ['clarification'] }, question: { type: 'string' },
+        options: { type: 'array', items: { type: 'string' } }, observations,
       },
-      additionalProperties: false,
     },
     {
-      type: 'object',
-      required: ['type', 'reason'],
-      properties: {
-        type: { type: 'string', enum: ['fallback'] },
-        reason: { type: 'string' },
-      },
-      additionalProperties: false,
+      type: 'object', additionalProperties: false,
+      required: ['type', 'reason', 'observations'],
+      properties: { type: { type: 'string', enum: ['fallback'] }, reason: { type: 'string' }, observations },
     },
   ],
 });
 
-module.exports = { AGENT_DECISION_SCHEMA };
+const INSPECT_VIDEO_RANGE_TOOL = Object.freeze({
+  name: 'inspect_video_range',
+  description: 'Upload and inspect a source video range. Use LOW normally; use HIGH only when an overlapping LOW inspection left a specific uncertainty.',
+  parametersJsonSchema: {
+    type: 'object', additionalProperties: false,
+    required: ['sourceId', 'startMs', 'endMs', 'resolution', 'uncertainty'],
+    properties: {
+      sourceId: { type: 'string' }, startMs: { type: 'integer', minimum: 0 },
+      endMs: { type: 'integer', minimum: 1 }, resolution: { type: 'string', enum: ['LOW', 'HIGH'] },
+      uncertainty: { type: 'string', maxLength: 500 },
+    },
+  },
+});
+
+module.exports = { AGENT_DECISION_SCHEMA, INSPECT_VIDEO_RANGE_TOOL };

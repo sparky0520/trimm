@@ -106,6 +106,9 @@ class PostgresDerivativeJobs {
   readCompletedBytes(id, principal, context) {
     return this.withOwner(principal.id, (engine) => engine.readCompletedBytes(id, principal, context));
   }
+  setProviderFile(id, principal, value, context) {
+    return this.withOwner(principal.id, (engine) => engine.setProviderFile(id, principal, value, context));
+  }
   cancel(id, principal, context) { return this.withOwner(principal.id, (engine) => engine.cancel(id, principal, context)); }
   delete(id, principal, context) { return this.withOwner(principal.id, (engine) => engine.delete(id, principal, context)); }
   listActivity(principal, projectId) {

@@ -10,7 +10,16 @@ test('new agent path is pinned to Gemini 3.6 Flash and requests JSON', async () 
     model: 'gemini-3.6-flash',
     client: { models: { generateContent: async (value) => {
       request = value;
-      return { text: '{"type":"fallback","reason":"More evidence is needed."}' };
+      return {
+        text: '{"type":"fallback","reason":"More evidence is needed."}',
+        responseId: 'response-1',
+        usageMetadata: {
+          promptTokenCount: 1000,
+          candidatesTokenCount: 100,
+          thoughtsTokenCount: 200,
+          totalTokenCount: 1300,
+        },
+      };
     } } },
   });
   const decision = await decide({ systemPolicy: 'policy', inventory: { projectId: 'p' }, evidence: [] });
@@ -19,38 +28,23 @@ test('new agent path is pinned to Gemini 3.6 Flash and requests JSON', async () 
   assert.ok(Array.isArray(request.config.responseJsonSchema.anyOf));
   assert.deepEqual(
     request.config.responseJsonSchema.anyOf.map((variant) => variant.properties.type.enum[0]),
-    ['evidence_request', 'edit_program', 'clarification', 'fallback'],
+    ['edit_program', 'clarification', 'fallback'],
   );
-  const evidenceVariants = request.config.responseJsonSchema.anyOf[0]
-    .properties.requests.items.anyOf;
-  assert.deepEqual(
-    evidenceVariants.map((variant) => variant.properties.type.enum[0]),
-    ['audio', 'frame', 'crop', 'text', 'evidence'],
-  );
-  assert.deepEqual(
-    evidenceVariants[0].properties.acceptedFormat.enum,
-    ['audio/mp4'],
-  );
+  assert.deepEqual(request.config.tools[0].functionDeclarations.map((tool) => tool.name), ['inspect_video_range']);
   assert.deepEqual(JSON.parse(decision.rawText), { type: 'fallback', reason: 'More evidence is needed.' });
+  assert.equal(decision.usage.totalTokens, 1300);
+  assert.equal(decision.usage.estimatedCostMicros, 3750);
   assert.equal(typeof decide.repair, 'function');
-  assert.equal(typeof decide.escalate, 'function');
   assert.deepEqual(decide.capabilities, {
     nativeVideoAudio: true,
     timestampGrounding: true,
     toolUse: true,
     structuredOutput: true,
-    reusableCachedContext: true,
+    reusableCachedContext: false,
     primaryModel: 'gemini-3.6-flash',
-    escalationModel: 'gemini-3.1-pro-preview',
   });
-
-  await decide.escalate({
-    systemPolicy: 'policy', inventory: { projectId: 'p' }, evidence: [],
-    cachedContent: 'cachedContents/project-1', tools: [{ functionDeclarations: [] }],
-  });
-  assert.equal(request.model, 'gemini-3.1-pro-preview');
-  assert.equal(request.config.cachedContent, 'cachedContents/project-1');
-  assert.equal(request.config.tools.length, 1);
+  assert.equal(request.config.maxOutputTokens, 4096);
+  assert.equal(request.config.thinkingConfig.thinkingLevel, 'LOW');
 
   await decide.repair({
     expectedSchema: 'ctrlB agent decision contract v1',

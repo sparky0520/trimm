@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ctrlb.ai/contracts/video-tool-request.v2.json",
+  "type": "object",
+  "required": ["type", "tool", "jobs"],
+  "properties": {
+    "type": { "const": "tool_request" },
+    "tool": { "const": "inspect_video_range" },
+    "jobs": { "type": "array", "minItems": 1, "maxItems": 1, "items": {
+      "type": "object",
+      "required": ["id", "sourceId", "type", "acceptedFormat", "range", "maximumBytes", "maximumDurationMs", "resolution", "expiresAt", "reused"],
+      "properties": {
+        "id": { "type": "string" }, "sourceId": { "type": "string" }, "type": { "const": "video" },
+        "acceptedFormat": { "const": "video/mp4" },
+        "range": { "type": "object", "required": ["startMs", "endMs"], "properties": { "startMs": { "type": "integer", "minimum": 0 }, "endMs": { "type": "integer", "minimum": 1 } }, "additionalProperties": false },
+        "maximumBytes": { "type": "integer", "minimum": 1 }, "maximumDurationMs": { "type": "integer", "minimum": 1, "maximum": 30000 },
+        "resolution": { "enum": ["LOW", "HIGH"] }, "uncertainty": { "type": "string", "maxLength": 500 },
+        "expiresAt": { "type": "string", "format": "date-time" }, "reused": { "type": "boolean" }
+      }, "additionalProperties": true
+    } }
+  }, "additionalProperties": false
+}

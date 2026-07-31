@@ -23,7 +23,6 @@ const { Layer2Orchestrator } = require('./layer2-orchestrator.cjs');
 const { AgentRuns } = require('./agent-runs.cjs');
 const { PostgresAgentRunStore, VolatileAgentRunStore } = require('./agent-run-store.cjs');
 const { createGeminiDecisionProvider } = require('./gemini-agent.cjs');
-const { createGeminiEvidenceAnalyzer } = require('./gemini-evidence.cjs');
 const plannerCore = require('./planner-core.cjs');
 
 const port = Number(process.env.PORT || 8787);
@@ -61,7 +60,6 @@ const layer2Orchestrator = new Layer2Orchestrator({
   derivativeJobs,
   decide: createGeminiDecisionProvider(),
 });
-const analyzeEvidence = createGeminiEvidenceAnalyzer();
 const agentRuns = new AgentRuns({
   orchestrator: layer2Orchestrator,
   store: process.env.SUPABASE_DB_URL
@@ -135,7 +133,7 @@ function derivativeView(job) {
     expiresAt: new Date(job.expiresAt).toISOString(), contentKey: job.contentKey,
     mediaMode: job.mediaMode, selectionReason: job.selectionReason,
     timelineReferences: job.timelineReferences, consent: job.consent,
-    providerDisclosures: job.providerDisclosures,
+    providerDisclosures: job.providerDisclosures, resolution: job.resolution,
     retentionUntil: new Date(job.deleteAt).toISOString(),
     deletedAt: job.deletedAt ? new Date(job.deletedAt).toISOString() : null,
   };
@@ -329,17 +327,9 @@ const server = http.createServer(async (request, response) => {
   if (derivativeMatch && request.method === 'POST' && derivativeMatch[2]) {
     try {
       const completed = await derivativeJobs.complete(derivativeMatch[1], principal, await collect(request, 4096), derivativeContext(request));
-      let result = completed.result;
-      if (!completed.reused) {
-        const derivative = await derivativeJobs.readCompletedBytes(
-          derivativeMatch[1], principal, derivativeContext(request),
-        );
-        result = await analyzeEvidence(derivative);
-        result = await derivativeJobs.preserveResult(derivativeMatch[1], principal, result);
-      }
       return json(response, 200, {
         ...derivativeView(completed.job), reused: completed.reused,
-        ...(result ? { result } : {}), requestId,
+        requestId,
       });
     } catch (error) {
       return json(response, Number.isInteger(error?.status) ? error.status : 400, { error: error?.message, code: error?.code, requestId });
@@ -427,6 +417,10 @@ const server = http.createServer(async (request, response) => {
     }
   }
   const agentRunMatch = requestUrl.pathname.match(/^\/v1\/agent\/runs\/([0-9a-f-]{36})$/i);
+  if (request.method === 'DELETE' && agentRunMatch) {
+    try { return json(response, 200, await agentRuns.cancel(principal, agentRunMatch[1])); }
+    catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message, code: error?.code, requestId }); }
+  }
   if (request.method === 'GET' && agentRunMatch) {
     try { return json(response, 200, await agentRuns.read(principal, agentRunMatch[1])); }
     catch (error) {

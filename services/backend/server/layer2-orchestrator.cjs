@@ -1,19 +1,12 @@
 'use strict';
 
-const { validateMediaIndex } = require('./media-index-contract.cjs');
 const { recoverProposal } = require('./proposal-recovery.cjs');
 const { validateContextualSpeechDecision } = require('./contextual-speech.cjs');
 const ALLOWED_OPERATIONS = new Set([
   'remove_fumbles', 'set_audio_cleanup', 'set_audio_levels',
   'add_sound_effect', 'set_background_music', 'add_captions', 'semantic_visual',
 ]);
-const ALLOWED_DERIVATIVES = Object.freeze({
-  audio: Object.freeze({ formats: new Set(['audio/mpeg', 'audio/mp4', 'audio/ogg']), purposes: new Set(['transcription', 'speech-analysis', 'audio-analysis']) }),
-  frame: Object.freeze({ formats: new Set(['image/jpeg', 'image/webp']), purposes: new Set(['visual-analysis', 'shot-analysis', 'planner-evidence']) }),
-  crop: Object.freeze({ formats: new Set(['image/jpeg', 'image/webp']), purposes: new Set(['ocr', 'ui-analysis', 'planner-evidence']) }),
-  text: Object.freeze({ formats: new Set(['text/plain', 'application/json']), purposes: new Set(['planning', 'transcript-analysis']) }),
-  evidence: Object.freeze({ formats: new Set(['application/json']), purposes: new Set(['planning', 'candidate-evaluation']) }),
-});
+const MAX_VIDEO_RANGE_MS = 30_000;
 const FORBIDDEN_KEYS = new Set([
   'prompt', 'systemPrompt', 'tools', 'toolSchema', 'provider', 'providerKey',
   'apiKey', 'command', 'shell', 'executable', 'sourceUri', 'renderedOutput',
@@ -21,20 +14,18 @@ const FORBIDDEN_KEYS = new Set([
 const DEFAULT_BUDGETS = Object.freeze({
   maximumBytes: 8 * 1024 * 1024,
   maximumDurationMs: 10 * 60 * 1000,
-  maximumCostMicros: 50_000,
-  maximumRequests: 8,
   retentionMs: 6 * 60 * 60 * 1000,
 });
 const SYSTEM_POLICY = `You are ctrlB's private Layer 2 editorial orchestrator for desktop and mobile.
-Return one JSON object with type evidence_request, edit_program, clarification, or fallback.
+Return one JSON object with type edit_program, clarification, or fallback, or call inspect_video_range.
 Begin with the request-shaped media index in the compact inventory. Treat its ranges as locally measured candidates and coverage, not as editorial meaning.
 For speech edits, preserve meaning and truthful intent first, select the strongest complete delivery second, and use recording quality or continuity only as tie-breakers unless a defect makes a take unusable.
 Possible fillers, pauses, repeated phrases, transcript confidence, and technical scores only locate candidates; none can authorize a cut.
 Before remove_fumbles, compare the local speaking-rate distribution for that speaker and scene, surrounding words/video, word or phoneme timing, waveform and scene-aware noise, alternate takes when present, user intent, and a simulated post-cut transition.
-Low transcript confidence requires re-listening, an alternate transcription view, or escalation; it never means automatic keep or remove.
+Low transcript confidence requires re-listening or an alternate transcription view; it never means automatic keep or remove.
 Every remove_fumbles operation must include speechDecision with meaningPreserved:true, completeDeliverySelected:true, a contextual rationale, supplied contextEvidenceIds, locatorSignals, contextSignals, transcriptUncertain, uncertaintyAction, and technicalTieBreakerOnly.
-Ask only for the minimum derivative evidence needed. You may request additional bounded ranges when the current index is insufficient.
-Never request source video, rendered output, executable instructions, provider credentials, or tools.
+For sources longer than 30 seconds, use inspect_video_range for the audiovisual ranges needed to verify the transcript and edit. Each range is at most 30 seconds. Use LOW normally. Use HIGH only after an overlapping LOW range left a specific uncertainty.
+Never request rendered output, executable instructions, or provider credentials.
 Every edit operation must cite supplied evidence IDs and include confidence from 0 to 1.
 Do not invent evidence. When evidence is missing or uncertain, request bounded evidence, clarify, or fall back.
 Supported operations: remove_fumbles, set_audio_cleanup, set_audio_levels, add_sound_effect, set_background_music, add_captions, semantic_visual.
@@ -66,9 +57,9 @@ function rejectPrivateOrExecutable(value) {
 
 function validateInventory(value) {
   if (!value || typeof value !== 'object') throw orchestrationError('Invalid project inventory.');
-  for (const name of ['agentRuns', 'activityEvents', 'evidenceRequests', 'editPrograms']) {
+  for (const name of ['agentRuns', 'activityEvents', 'videoToolRequests', 'editPrograms']) {
     if (!Array.isArray(value.supportedContractVersions?.[name]) ||
-        !value.supportedContractVersions[name].includes(1)) {
+        !value.supportedContractVersions[name].includes(2)) {
       throw orchestrationError('No mutually supported agent contract version.', 406, 'contract_version_not_supported');
     }
   }
@@ -90,6 +81,15 @@ function validateInventory(value) {
       ? value.evidenceJobIds.slice(0, 100).map((id) => boundedString(id, 'evidence job ID', /^[0-9a-f-]{36}$/i))
       : [],
     existingOperations: Array.isArray(value.existingOperations) ? value.existingOperations.slice(0, 200) : [],
+    transcript: Array.isArray(value.transcript) ? value.transcript.slice(0, 20_000).map((word) => ({
+      sourceId: boundedString(word?.sourceId, 'transcript source ID'),
+      text: typeof word?.text === 'string' ? word.text.slice(0, 200) : '',
+      startMs: boundedInteger(word?.startMs, 'transcript start', 24 * 60 * 60 * 1000, true),
+      endMs: boundedInteger(word?.endMs, 'transcript end', 24 * 60 * 60 * 1000),
+      confidence: typeof word?.confidence === 'number' ? Math.max(0, Math.min(1, word.confidence)) : 0,
+      ...(typeof word?.speakerId === 'string' ? { speakerId: word.speakerId.slice(0, 100) } : {}),
+    })) : [],
+    observations: Array.isArray(value.observations) ? value.observations.slice(0, 10_000) : [],
     clarifications: Array.isArray(value.clarifications)
       ? value.clarifications.slice(-10).map((item) => {
           if (typeof item !== 'string' || !item.trim() || item.length > 500) {
@@ -99,16 +99,16 @@ function validateInventory(value) {
         })
       : [],
     supportedContractVersions: {
-      agentRuns: [1], activityEvents: [1], evidenceRequests: [1], editPrograms: [1],
+      agentRuns: [2], activityEvents: [2], videoToolRequests: [2], editPrograms: [2],
     },
   };
-  if (value.mediaConsent?.mode !== 'selective_analysis' ||
+  if (value.mediaConsent?.mode !== 'video_analysis' ||
       typeof value.mediaConsent.grantedAt !== 'string' || !Number.isFinite(Date.parse(value.mediaConsent.grantedAt)) ||
       typeof value.mediaConsent.disclosureVersion !== 'string') {
     throw orchestrationError('Selective media consent is required.', 400, 'consent_required');
   }
   inventory.mediaConsent = {
-    mode: 'selective_analysis',
+    mode: 'video_analysis',
     grantedAt: new Date(value.mediaConsent.grantedAt).toISOString(),
     disclosureVersion: boundedString(value.mediaConsent.disclosureVersion, 'disclosure version'),
   };
@@ -116,13 +116,14 @@ function validateInventory(value) {
   if (new Set(inventory.sources.map((source) => source.id)).size !== inventory.sources.length) {
     throw orchestrationError('Source IDs must be unique.');
   }
-  inventory.mediaIndex = validateMediaIndex(value.mediaIndex, inventory.sources);
+  const transcriptSources = new Map(inventory.sources.map((source) => [source.id, source.durationMs]));
+  if (inventory.transcript.some((word) => !transcriptSources.has(word.sourceId) || word.endMs > transcriptSources.get(word.sourceId) || word.endMs <= word.startMs)) {
+    throw orchestrationError('Transcript timestamps must belong to their source.', 400, 'invalid_transcript');
+  }
   const requested = value.budgets || {};
   inventory.budgets = {
     maximumBytes: boundedInteger(requested.maximumBytes ?? DEFAULT_BUDGETS.maximumBytes, 'byte budget', 100 * 1024 * 1024),
     maximumDurationMs: boundedInteger(requested.maximumDurationMs ?? DEFAULT_BUDGETS.maximumDurationMs, 'duration budget', 3 * 60 * 60 * 1000),
-    maximumCostMicros: boundedInteger(requested.maximumCostMicros ?? DEFAULT_BUDGETS.maximumCostMicros, 'cost budget', 100_000_000, true),
-    maximumRequests: boundedInteger(requested.maximumRequests ?? DEFAULT_BUDGETS.maximumRequests, 'request budget', 20),
     retentionMs: boundedInteger(requested.retentionMs ?? DEFAULT_BUDGETS.retentionMs, 'retention budget', 24 * 60 * 60 * 1000),
   };
   return inventory;
@@ -134,59 +135,78 @@ async function evidenceFor(inventory, principal, derivativeJobs) {
       projectId: inventory.projectId,
       deviceSessionId: inventory.deviceSessionId,
     });
-    if (job.status !== 'completed' || !job.result) {
+    if (job.status !== 'completed') {
       throw orchestrationError('Evidence is not ready.', 409, 'evidence_not_ready');
     }
+    const derivative = derivativeJobs.readCompletedBytes(jobId, principal, {
+      projectId: inventory.projectId, deviceSessionId: inventory.deviceSessionId,
+    });
     return {
       id: job.id,
-      type: job.type,
-      purpose: job.purpose,
+      sourceId: job.timelineReferences[0].sourceId,
+      startMs: job.timelineReferences[0].startMs,
+      endMs: job.timelineReferences[0].endMs,
+      resolution: job.resolution || 'LOW',
       contentKey: job.contentKey,
-      value: job.result.value,
-      provenance: job.result.provenance,
+      bytes: derivative.bytes,
+      providerFile: job.providerFile?.expiresAt > Date.now() ? job.providerFile : null,
+      persistProviderFile: (value) => derivativeJobs.setProviderFile(jobId, principal, value, {
+        projectId: inventory.projectId, deviceSessionId: inventory.deviceSessionId,
+      }),
     };
   }));
 }
 
-function validateEvidenceRequest(decision, inventory) {
-  if (!Array.isArray(decision.requests) || !decision.requests.length || decision.requests.length > inventory.budgets.maximumRequests) {
-    throw orchestrationError('Planner evidence request exceeds the request budget.', 422, 'evidence_budget_exceeded');
+function validateVideoToolCall(call, inventory, evidence) {
+  if (call?.name !== 'inspect_video_range' || !call.args || typeof call.args !== 'object') {
+    throw orchestrationError('Planner requested an unsupported tool.', 422, 'unsupported_tool_call');
   }
+  const request = call.args;
   const sourceById = new Map(inventory.sources.map((source) => [source.id, source]));
-  let bytes = 0; let duration = 0; let cost = 0;
-  const requests = decision.requests.map((request, index) => {
-    const source = sourceById.get(request.sourceId);
-    const policy = ALLOWED_DERIVATIVES[request.type];
-    if (!source || !policy || !policy.formats.has(request.acceptedFormat) || !policy.purposes.has(request.purpose)) {
-      throw orchestrationError('Planner requested unsupported evidence.', 422, 'unsupported_evidence_request');
-    }
-    const startMs = boundedInteger(request.startMs ?? 0, 'evidence start', source.durationMs, true);
-    const endMs = boundedInteger(request.endMs ?? source.durationMs, 'evidence end', source.durationMs);
-    if (endMs <= startMs) throw orchestrationError('Planner requested an invalid evidence range.', 422, 'invalid_evidence_range');
-    const maximumBytes = boundedInteger(request.maximumBytes, 'evidence bytes', inventory.budgets.maximumBytes);
-    const maximumDurationMs = request.type === 'audio'
-      ? boundedInteger(request.maximumDurationMs ?? endMs - startMs, 'evidence duration', endMs - startMs)
-      : null;
-    const estimatedCostMicros = boundedInteger(request.estimatedCostMicros ?? 0, 'evidence cost', inventory.budgets.maximumCostMicros, true);
-    bytes += maximumBytes; duration += maximumDurationMs || 0; cost += estimatedCostMicros;
-    return {
-      source, sourceId: source.id, type: request.type, purpose: request.purpose,
-      acceptedFormat: request.acceptedFormat, startMs, endMs, maximumBytes,
-      maximumDurationMs, maximumCount: request.maximumCount ?? 1,
-      estimatedCostMicros, requestIndex: index,
-    };
-  });
-  if (bytes > inventory.budgets.maximumBytes || duration > inventory.budgets.maximumDurationMs || cost > inventory.budgets.maximumCostMicros) {
-    throw orchestrationError('Planner evidence request exceeds project budgets.', 422, 'evidence_budget_exceeded');
+  const source = sourceById.get(request.sourceId);
+  if (!source) throw orchestrationError('Planner requested an unknown source.', 422, 'unsupported_video_request');
+  const startMs = boundedInteger(request.startMs, 'video start', source.durationMs, true);
+  const endMs = boundedInteger(request.endMs, 'video end', source.durationMs);
+  if (endMs <= startMs || endMs - startMs > MAX_VIDEO_RANGE_MS) {
+    throw orchestrationError('Video inspection ranges must be between 1 ms and 30 seconds.', 422, 'invalid_video_range');
   }
-  return requests;
+  const resolution = request.resolution;
+  if (!['LOW', 'HIGH'].includes(resolution)) throw orchestrationError('Invalid video resolution.', 422, 'invalid_video_resolution');
+  const uncertainty = typeof request.uncertainty === 'string' ? request.uncertainty.trim().slice(0, 500) : '';
+  if (resolution === 'HIGH') {
+    const overlapsLow = evidence.some((item) => item.sourceId === source.id && item.resolution === 'LOW' &&
+      item.startMs < endMs && item.endMs > startMs);
+    if (!overlapsLow || !uncertainty) {
+      throw orchestrationError('High-resolution inspection requires an overlapping low-resolution inspection and an uncertainty explanation.', 422, 'high_resolution_not_grounded');
+    }
+  }
+  return { source, sourceId: source.id, startMs, endMs, resolution, uncertainty };
 }
 
-function validateEditProgram(decision, inventory, evidence) {
+function validateObservations(items, inventory, evidence) {
+  if (!Array.isArray(items)) throw orchestrationError('Gemini observations are required.', 422, 'invalid_observations');
+  const sources = new Map(inventory.sources.map((source) => [source.id, source]));
+  const seen = new Set(inventory.observations.map((item) => item.id));
+  return items.map((item) => {
+    const source = sources.get(item?.sourceId);
+    if (!source || typeof item.id !== 'string' || !/^[A-Za-z0-9._:-]{1,200}$/.test(item.id) || seen.has(item.id) ||
+        !Number.isSafeInteger(item.startMs) || !Number.isSafeInteger(item.endMs) || item.startMs < 0 ||
+        item.endMs <= item.startMs || item.endMs > source.durationMs || typeof item.description !== 'string' ||
+        typeof item.confidence !== 'number' || item.confidence < 0 || item.confidence > 1 || !['LOW', 'HIGH'].includes(item.resolution)) {
+      throw orchestrationError('Gemini returned invalid or duplicate observations.', 422, 'invalid_observations');
+    }
+    seen.add(item.id);
+    const origin = evidence.find((clip) => clip.sourceId === item.sourceId && clip.startMs <= item.startMs && clip.endMs >= item.endMs);
+    if (!origin) throw orchestrationError('Gemini observation is outside supplied video.', 422, 'ungrounded_observation');
+    return { ...item, description: item.description.slice(0, 500), originatingJobId: origin.id };
+  });
+}
+
+function validateEditProgram(decision, inventory, observations) {
   if (decision.expectedRevision !== inventory.projectRevision || !Array.isArray(decision.operations)) {
     throw orchestrationError('Invalid edit program envelope.', 422, 'invalid_edit_program');
   }
-  const evidenceIds = new Set(evidence.map((item) => item.id));
+  const evidenceIds = new Set(observations.map((item) => item.id));
   const operationIds = new Set();
   for (const operation of decision.operations) {
     if (!operation || !ALLOWED_OPERATIONS.has(operation.type) || typeof operation.id !== 'string' ||
@@ -231,16 +251,17 @@ function validateEditProgram(decision, inventory, evidence) {
 function validateDecision(decision, inventory, evidence) {
   if (!decision || typeof decision !== 'object') throw orchestrationError('Planner returned no decision.', 502, 'invalid_planner_response');
   rejectPrivateOrExecutable(decision);
-  if (decision.type === 'evidence_request') return { type: decision.type, requests: validateEvidenceRequest(decision, inventory) };
-  if (decision.type === 'edit_program') return validateEditProgram(decision, inventory, evidence);
+  const added = validateObservations(decision.observations, inventory, evidence);
+  const observations = [...inventory.observations, ...added];
+  if (decision.type === 'edit_program') return { ...validateEditProgram(decision, inventory, observations), observations: added };
   if (decision.type === 'clarification') {
     if (typeof decision.question !== 'string' || !decision.question.trim() || decision.question.length > 500) {
       throw orchestrationError('Invalid clarification.', 502, 'invalid_planner_response');
     }
-    return { type: 'clarification', question: decision.question, options: Array.isArray(decision.options) ? decision.options.slice(0, 5) : [] };
+    return { type: 'clarification', question: decision.question, options: Array.isArray(decision.options) ? decision.options.slice(0, 5) : [], observations: added };
   }
   if (decision.type === 'fallback') {
-    return { type: 'fallback', reason: typeof decision.reason === 'string' ? decision.reason.slice(0, 1000) : 'Insufficient evidence.' };
+    return { type: 'fallback', reason: typeof decision.reason === 'string' ? decision.reason.slice(0, 1000) : 'Insufficient evidence.', observations: added };
   }
   throw orchestrationError('Planner returned an unsupported decision.', 502, 'invalid_planner_response');
 }
@@ -253,6 +274,39 @@ class Layer2Orchestrator {
     this.repair = repair;
   }
 
+  async authorizeVideo(principal, inventory, request, selectionReason = 'agent_requested') {
+    const key = `${request.source.id}:${request.startMs}:${request.endMs}:${request.resolution}`;
+    const authorized = await this.derivativeJobs.authorize(principal, {
+      projectId: inventory.projectId, deviceSessionId: inventory.deviceSessionId,
+      purpose: 'video-inspection', type: 'video', acceptedFormat: 'video/mp4',
+      maximumBytes: inventory.budgets.maximumBytes,
+      maximumDurationMs: request.endMs - request.startMs, maximumCount: 1,
+      mediaMode: 'video_analysis', consent: inventory.mediaConsent, selectionReason,
+      retentionMs: inventory.budgets.retentionMs, resolution: request.resolution,
+      providerDisclosures: [{ provider: 'google-gemini', purpose: 'multimodal-planning', dataClasses: ['video'] }],
+      idempotencyKey: `video:${inventory.projectRevision}:${Buffer.from(key).toString('base64url').slice(0, 120)}`,
+      sourceFingerprint: request.source.fingerprint,
+      timelineReferences: [{ sourceId: request.source.id, startMs: request.startMs, endMs: request.endMs }],
+    });
+    return {
+      id: authorized.job.id, sourceId: request.source.id, type: 'video', purpose: 'video-inspection',
+      acceptedFormat: 'video/mp4', range: { startMs: request.startMs, endMs: request.endMs },
+      maximumBytes: inventory.budgets.maximumBytes, maximumDurationMs: request.endMs - request.startMs,
+      resolution: request.resolution, uncertainty: request.uncertainty || '',
+      expiresAt: new Date(authorized.job.expiresAt).toISOString(), reused: authorized.reused,
+    };
+  }
+
+  async bootstrap(principal, payload) {
+    const inventory = validateInventory(payload);
+    if (inventory.evidenceJobIds.length || inventory.sources.length !== 1 || inventory.sources[0].durationMs > MAX_VIDEO_RANGE_MS) return null;
+    const source = inventory.sources[0];
+    const job = await this.authorizeVideo(principal, inventory, {
+      source, startMs: 0, endMs: source.durationMs, resolution: 'LOW', uncertainty: '',
+    }, 'request_selected');
+    return { type: 'tool_request', tool: 'inspect_video_range', jobs: [job], bootstrap: true };
+  }
+
   async orchestrate(principal, payload) {
     const inventory = validateInventory(payload);
     const evidence = await evidenceFor(inventory, principal, this.derivativeJobs);
@@ -261,6 +315,14 @@ class Layer2Orchestrator {
       inventory,
       evidence,
     });
+    if (raw.toolCall) {
+      const request = validateVideoToolCall(raw.toolCall, inventory, evidence);
+      const job = await this.authorizeVideo(principal, inventory, request);
+      if (job.reused && inventory.evidenceJobIds.includes(job.id)) {
+        return { type: 'fallback', reason: 'The requested video range is already attached.', observations: [], _usage: [raw.usage] };
+      }
+      return { type: 'tool_request', tool: 'inspect_video_range', jobs: [job], _usage: [raw.usage] };
+    }
     const recovered = await recoverProposal({
       primary: raw,
       repair: this.repair,
@@ -269,67 +331,15 @@ class Layer2Orchestrator {
       editorialIntent: inventory.intent,
     });
     const decision = recovered.decision;
-    if (decision.type !== 'evidence_request') {
-      return recovered.recovery ? { ...decision, _recovery: recovered.recovery } : decision;
-    }
-    const jobs = [];
-    try {
-      for (const request of decision.requests) {
-        const authorized = await this.derivativeJobs.authorize(principal, {
-          projectId: inventory.projectId,
-          deviceSessionId: inventory.deviceSessionId,
-          purpose: request.purpose,
-          type: request.type,
-          acceptedFormat: request.acceptedFormat,
-          maximumBytes: request.maximumBytes,
-          maximumDurationMs: request.maximumDurationMs,
-          maximumCount: request.maximumCount,
-          estimatedCostMicros: request.estimatedCostMicros,
-          mediaMode: 'selective_derivative',
-          consent: inventory.mediaConsent,
-          selectionReason: 'agent_requested',
-          retentionMs: inventory.budgets.retentionMs,
-          providerDisclosures: [{
-            provider: 'google-gemini',
-            purpose: 'multimodal-planning',
-            dataClasses: [request.type],
-          }],
-          idempotencyKey: `planner:${inventory.projectRevision}:${request.requestIndex}:${request.source.fingerprint.slice(0, 16)}`,
-          sourceFingerprint: request.source.fingerprint,
-          timelineReferences: [{ sourceId: request.sourceId, startMs: request.startMs, endMs: request.endMs }],
-        });
-        jobs.push({
-          id: authorized.job.id,
-          sourceId: request.sourceId,
-          type: request.type,
-          purpose: request.purpose,
-          acceptedFormat: request.acceptedFormat,
-          range: { startMs: request.startMs, endMs: request.endMs },
-          maximumBytes: request.maximumBytes,
-          maximumDurationMs: request.maximumDurationMs,
-          expiresAt: new Date(authorized.job.expiresAt).toISOString(),
-          reused: authorized.reused,
-        });
-      }
-    } catch (error) {
-      for (const job of jobs.filter((item) => !item.reused)) {
-        try {
-          await this.derivativeJobs.cancel(job.id, principal, {
-            projectId: inventory.projectId,
-            deviceSessionId: inventory.deviceSessionId,
-          });
-        } catch {}
-      }
-      throw error;
-    }
+    const usage = recovered.usage || [];
     return {
-      type: 'evidence_request',
-      jobs,
+      ...decision,
       ...(recovered.recovery ? { _recovery: recovered.recovery } : {}),
+      ...(usage.length ? { _usage: usage } : {}),
     };
   }
 }
 
 module.exports = {
-  Layer2Orchestrator, SYSTEM_POLICY, validateDecision, validateInventory,
+  Layer2Orchestrator, SYSTEM_POLICY, validateDecision, validateInventory, validateVideoToolCall,
 };

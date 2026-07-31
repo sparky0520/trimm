@@ -65,39 +65,38 @@ test('missing fields and wrong types can be corrected without changing known edi
   assert.equal(result.decision.operations[0].enabled, true);
 });
 
-test('unknown operations, stale revisions and invalid evidence remain non-executable review attempts', async () => {
-  for (const malformed of [
-    { ...valid, operations: [{ ...valid.operations[0], type: 'invented_operation' }] },
-    { ...valid, expectedRevision: 3 },
-    { ...valid, operations: [{ ...valid.operations[0], evidenceIds: ['invented-evidence'] }] },
+test('terminal semantic failures do not spend a repair call', async () => {
+  for (const [malformed, code] of [
+    [{ ...valid, operations: [{ ...valid.operations[0], type: 'invented_operation' }] }, 'unknown_operation'],
+    [{ ...valid, expectedRevision: 3 }, 'stale_revision'],
+    [{ ...valid, operations: [{ ...valid.operations[0], evidenceIds: ['invented-evidence'] }] }, 'invalid_evidence_reference'],
   ]) {
+    let repairCalled = false;
     await assert.rejects(recoverProposal({
       primary: malformed,
-      repair: async () => malformed,
+      repair: async () => { repairCalled = true; return malformed; },
       validate,
       originalRequest: {},
       editorialIntent: 'same',
-    }), (error) => error instanceof ProposalRecoveryError &&
-      error.recovery.attempts.length === 2 &&
-      error.recovery.canRetry === true);
+    }), (error) => error.code === code);
+    assert.equal(repairCalled, false);
   }
 });
 
-test('provider truncation and oversized output are disclosed to the repair call and bounded in storage', async () => {
-  for (const primary of [
-    { rawText: JSON.stringify(valid), finishReason: 'MAX_TOKENS' },
-    { rawText: `{"padding":"${'x'.repeat(MAX_PROPOSAL_BYTES)}"}`, finishReason: 'STOP' },
+test('provider truncation and oversized output stop without spending a repair call', async () => {
+  for (const [primary, code] of [
+    [{ rawText: JSON.stringify(valid), finishReason: 'MAX_TOKENS' }, 'provider_truncated_proposal'],
+    [{ rawText: `{"padding":"${'x'.repeat(MAX_PROPOSAL_BYTES)}"}`, finishReason: 'STOP' }, 'proposal_too_large'],
   ]) {
-    let request;
-    const result = await recoverProposal({
+    let repairCalled = false;
+    await assert.rejects(recoverProposal({
       primary,
-      repair: async (value) => { request = value; return valid; },
+      repair: async () => { repairCalled = true; return valid; },
       validate,
       originalRequest: {},
       editorialIntent: 'same',
-    });
-    assert.equal(result.recovery.attempts[0].rawText.length <= MAX_PROPOSAL_BYTES, true);
-    assert.equal(request.responseTruncated || result.recovery.attempts[0].providerTruncated, true);
+    }), (error) => error.code === code);
+    assert.equal(repairCalled, false);
   }
 });
 

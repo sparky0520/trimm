@@ -17,7 +17,7 @@ Private media is not committed to this repository.
 Model qualification remains pending until the governed evaluation runner has:
 
 1. supplied one checksum-addressed real-video fixture for every manifest case;
-2. run both the primary and ambiguity-escalation models with native audio/video,
+2. run the primary model against the complete transcript and authorized video windows,
    timestamp grounding, structured output, cached context, and bounded tools;
 3. stored signed per-case results containing model version, prompt-policy
    revision, fixture checksum, decision, cited timestamps, and reviewer verdict;

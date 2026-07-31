@@ -16,7 +16,7 @@ test('versioned speech evaluation manifest covers every required delivery contex
     new Set(['slow', 'fast', 'non_native', 'emotional', 'comedic', 'instructional', 'multi_speaker', 'noisy_uncertain']),
   );
   assert.equal(evaluation.candidateModels[0].model, 'gemini-3.6-flash');
-  assert.equal(evaluation.candidateModels[1].role, 'ambiguity_escalation');
+  assert.equal(evaluation.candidateModels.length, 1);
   assert.ok(evaluation.candidateModels.every((model) => model.status === 'pending_real_media_evaluation'));
   for (const item of evaluation.cases) {
     assert.deepEqual(evaluateSpeechFixture(item), {

@@ -8,18 +8,10 @@ const { Transform } = require('node:stream');
 const { requireAuthentication, requireOwner } = require('./authorization.cjs');
 
 const TYPES = Object.freeze({
-  audio: Object.freeze(new Set(['audio/mpeg', 'audio/mp4', 'audio/ogg', 'audio/webm', 'audio/wav'])),
-  frame: Object.freeze(new Set(['image/jpeg', 'image/png', 'image/webp'])),
-  crop: Object.freeze(new Set(['image/jpeg', 'image/png', 'image/webp'])),
-  text: Object.freeze(new Set(['text/plain', 'application/json'])),
-  evidence: Object.freeze(new Set(['application/json'])),
+  video: Object.freeze(new Set(['video/mp4'])),
 });
 const PURPOSES = Object.freeze({
-  audio: Object.freeze(new Set(['transcription', 'speech-analysis', 'audio-analysis'])),
-  frame: Object.freeze(new Set(['visual-analysis', 'shot-analysis', 'planner-evidence'])),
-  crop: Object.freeze(new Set(['ocr', 'ui-analysis', 'planner-evidence'])),
-  text: Object.freeze(new Set(['planning', 'transcript-analysis'])),
-  evidence: Object.freeze(new Set(['planning', 'candidate-evaluation'])),
+  video: Object.freeze(new Set(['video-inspection'])),
 });
 const TERMINAL = new Set(['completed', 'cancelled', 'expired', 'deleted']);
 const SELECTION_REASONS = new Set([
@@ -51,6 +43,16 @@ function nonNegativeInteger(value, name, ceiling = Number.MAX_SAFE_INTEGER) {
 function timestamp(value, name) {
   if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) throw jobError(`Invalid ${name}.`);
   return new Date(value).toISOString();
+}
+
+function providerFile(value, now) {
+  if (!value || value.provider !== 'google-gemini' || typeof value.uri !== 'string' ||
+      !/^https:\/\/generativelanguage\.googleapis\.com\//.test(value.uri) ||
+      typeof value.name !== 'string' || !/^files\/[A-Za-z0-9_-]+$/.test(value.name) ||
+      !Number.isFinite(value.expiresAt) || value.expiresAt <= now || value.expiresAt > now + 7 * 24 * 60 * 60 * 1000) {
+    throw jobError('Invalid provider file reference.', 400, 'invalid_provider_file');
+  }
+  return Object.freeze({ provider: value.provider, uri: value.uri, name: value.name, expiresAt: value.expiresAt });
 }
 
 function timelineReferences(value) {
@@ -139,14 +141,6 @@ function validateActualContent(file, job) {
     actual = detectedMp4TrackType(file) || actual;
   }
   if (actual === 'webm') actual = job.acceptedFormat === 'audio/webm' ? 'audio/webm' : 'video/webm';
-  if (job.type === 'text' || job.type === 'evidence') {
-    const body = fs.readFileSync(file, 'utf8');
-    if (job.acceptedFormat === 'application/json') {
-      try { JSON.parse(body); } catch { throw jobError('Derivative is not valid JSON.', 415, 'media_type_mismatch'); }
-    }
-    actual = job.acceptedFormat;
-  }
-  if (actual?.startsWith('video/')) throw jobError('Source-video containers are forbidden.', 415, 'source_video_forbidden');
   if (actual !== job.acceptedFormat) throw jobError('Derivative media type does not match its authorization.', 415, 'media_type_mismatch');
   return actual;
 }
@@ -157,7 +151,7 @@ class DerivativeJobs {
     this.now = options.now || Date.now;
     this.ttlMs = options.ttlMs || DEFAULT_TTL_MS;
     this.retentionMs = options.retentionMs || DEFAULT_RETENTION_MS;
-    this.accessFor = options.accessFor || (async () => ({ entitlements: ['cloud_transcription'], quotas: { concurrentJobs: 1, transcriptionMinutesPerMonth: 30 } }));
+    this.accessFor = options.accessFor || (async () => ({ entitlements: ['cloud_planning'], quotas: { concurrentJobs: 4, transcriptionMinutesPerMonth: 30 } }));
     this.jobs = new Map();
     this.idempotency = new Map();
     this.results = new Map();
@@ -190,11 +184,9 @@ class DerivativeJobs {
     const type = boundedString(request.type, 'derivative type');
     const acceptedFormat = boundedString(request.acceptedFormat, 'accepted format', /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/);
     const idempotencyKey = boundedString(request.idempotencyKey, 'idempotency key');
-    if (request.mediaMode !== 'selective_derivative') {
-      throw jobError('Proxy and original uploads require a separate explicit upload mode.', 400, 'separate_upload_mode_required');
-    }
+    if (request.mediaMode !== 'video_analysis' || type !== 'video') throw jobError('Only authorized video analysis uploads are accepted.', 400, 'video_analysis_required');
     const consentMode = request.consent?.mode;
-    if (consentMode !== 'selective_analysis') throw jobError('Selective analysis consent is required.', 400, 'consent_required');
+    if (consentMode !== 'video_analysis') throw jobError('Video analysis consent is required.', 400, 'consent_required');
     const consent = Object.freeze({
       mode: consentMode,
       grantedAt: timestamp(request.consent.grantedAt, 'consent timestamp'),
@@ -211,6 +203,8 @@ class DerivativeJobs {
       ? 0
       : nonNegativeInteger(request.estimatedCostMicros, 'estimated cost', 100_000_000);
     const retentionMs = positiveInteger(request.retentionMs ?? this.retentionMs, 'retention', 24 * 60 * 60 * 1000);
+    const resolution = request.resolution;
+    if (!['LOW', 'HIGH'].includes(resolution)) throw jobError('Video resolution is required.', 400, 'invalid_video_resolution');
     const mapping = timelineReferences(request.timelineReferences);
     const disclosures = providerDisclosures(request.providerDisclosures, type);
     const sourceFingerprint = boundedString(request.sourceFingerprint, 'source fingerprint', /^[a-f0-9]{32,128}$/);
@@ -218,15 +212,14 @@ class DerivativeJobs {
       projectId, deviceSessionId, purpose, type, acceptedFormat, maximumBytes,
       maximumDurationMs, maximumCount, estimatedCostMicros, mediaMode: request.mediaMode,
       consent, selectionReason, providerDisclosures: disclosures, sourceFingerprint,
-      timelineReferences: mapping, retentionMs,
+      timelineReferences: mapping, retentionMs, resolution,
     })).digest('hex');
-    if (type === 'audio' && maximumDurationMs == null) throw jobError('Audio jobs require a maximum duration.');
-    if ((type === 'frame' || type === 'crop') && maximumCount < 1) throw jobError('Image jobs require a maximum count.');
+    if (maximumDurationMs == null || maximumDurationMs > 30_000) throw jobError('Video jobs require a duration no greater than 30 seconds.');
     const access = await this.accessFor(principal.id);
-    const entitlement = type === 'audio' ? 'cloud_transcription' : 'cloud_planning';
+    const entitlement = 'cloud_planning';
     if (!access.entitlements?.includes(entitlement)) throw jobError('Entitlement required.', 403, 'entitlement_required');
     if (this.activeCount(principal.id) >= access.quotas.concurrentJobs) throw jobError('Concurrent job limit reached.', 429, 'concurrency_limit');
-    const durationMinutes = maximumDurationMs ? Math.ceil(maximumDurationMs / 60_000) : 0;
+    const durationMinutes = 0;
     const usageKey = this.monthKey(principal.id);
     const usage = this.monthlyUsage.get(usageKey) || { transcriptionMinutes: 0, estimatedCostMicros: 0 };
     if (durationMinutes && usage.transcriptionMinutes + durationMinutes > access.quotas.transcriptionMinutesPerMonth) {
@@ -250,10 +243,11 @@ class DerivativeJobs {
     const job = {
       id, userId: principal.id, projectId, deviceSessionId, purpose, type, acceptedFormat,
       maximumBytes, maximumDurationMs, maximumCount, estimatedCostMicros, idempotencyKey,
-      mediaMode: request.mediaMode, consent, selectionReason, providerDisclosures: disclosures,
+      mediaMode: request.mediaMode, consent, selectionReason, providerDisclosures: disclosures, resolution,
       sourceFingerprint, timelineReferences: mapping, retentionMs, authorizationFingerprint,
       offset: 0, status: 'authorized', createdAt: this.now(), expiresAt: this.now() + this.ttlMs,
       deleteAt: this.now() + retentionMs, contentKey: null, result: null,
+      providerFile: null,
     };
     this.jobs.set(id, job);
     this.idempotency.set(idemKey, id);
@@ -331,10 +325,12 @@ class DerivativeJobs {
     job.completedAt = this.now();
     if (cached) {
       job.result = cached.result;
+      job.resultReused = true;
       this.removeBytes(job);
       this.log(job, 'reused', { contentKey: job.contentKey });
       return { job, reused: true, result: cached.result };
     }
+    job.resultReused = false;
     this.log(job, 'transferred', { bytes: job.offset, format: job.acceptedFormat });
     return { job, reused: false, openStream: () => fs.createReadStream(this.mediaPath(id)) };
   }
@@ -361,6 +357,14 @@ class DerivativeJobs {
       throw jobError('Derivative job is not complete.', 409, 'job_incomplete');
     }
     return { job, bytes: fs.readFileSync(this.mediaPath(id)) };
+  }
+
+  setProviderFile(id, principal, value, context) {
+    const job = this.read(id, principal, context);
+    if (job.status !== 'completed') throw jobError('Derivative job is not complete.', 409, 'job_incomplete');
+    job.providerFile = providerFile(value, this.now());
+    this.log(job, 'provider_file_attached', { provider: job.providerFile.provider, expiresAt: new Date(job.providerFile.expiresAt).toISOString() });
+    return job.providerFile;
   }
 
   removeBytes(job) { try { fs.unlinkSync(this.mediaPath(job.id)); } catch {} }

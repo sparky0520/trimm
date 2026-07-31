@@ -5,13 +5,7 @@
     {
       "model": "gemini-3.6-flash",
       "status": "pending_real_media_evaluation",
-      "capabilities": ["native_video_audio", "timestamp_grounding", "tool_use", "structured_output", "cached_context"]
-    },
-    {
-      "model": "gemini-3.1-pro-preview",
-      "role": "ambiguity_escalation",
-      "status": "pending_real_media_evaluation",
-      "capabilities": ["native_video_audio", "timestamp_grounding", "tool_use", "structured_output", "cached_context"]
+      "capabilities": ["audio_derivatives", "frame_derivatives", "timestamp_grounding", "structured_output"]
     }
   ],
   "cases": [

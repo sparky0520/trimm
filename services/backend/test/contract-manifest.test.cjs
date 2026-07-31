@@ -9,7 +9,8 @@ test('cloud publishes one versioned public contract manifest', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'contracts', 'contract-manifest.json'), 'utf8'));
   assert.equal(manifest.manifestVersion, 1);
   assert.equal(manifest.owner, 'sparky0520/ctrlb-cloud');
-  for (const name of ['planner', 'evidencePacket', 'editOperations', 'derivativeJobs', 'mediaIndex', 'agentRuns', 'activityEvents', 'evidenceRequests', 'editPrograms', 'billingCatalog', 'accountLifecycle']) {
+  for (const name of ['planner', 'evidencePacket', 'editOperations', 'derivativeJobs', 'mediaIndex', 'billingCatalog', 'accountLifecycle']) {
     assert.equal(manifest.contracts[name], 1);
   }
+  for (const name of ['agentRuns', 'activityEvents', 'videoToolRequests', 'editPrograms']) assert.equal(manifest.contracts[name], 2);
 });

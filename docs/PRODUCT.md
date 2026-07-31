@@ -1,40 +1,13 @@
-# ctrlB product definition
+# ctrlB video agent
 
-ctrlB is a video-first conversational editor.
+ctrlB is a conversational video editor. Android transcribes every source in full before planning. Gemini receives the timestamped transcript, project metadata, and existing accepted edits.
 
-The user gives ctrlB footage and describes the result they want. A multimodal editing agent watches and listens to the footage, investigates uncertain moments with specialist tools, discusses consequential choices with the user, and proposes an edit. The device applies the approved edit deterministically, previews it, and exports it.
+For a single source of 30 seconds or less, the run first authorizes and uploads the complete video, then Gemini processes it at low media resolution. For longer sources, Gemini starts from the complete transcript and calls `inspect_video_range` for the audiovisual context it needs. Each requested window is at most 30 seconds. Low resolution is normal; high resolution is allowed only for an overlapping range already inspected at low resolution and with a concrete remaining uncertainty.
 
-The core experience is:
+The Gemini agent has one external tool: `inspect_video_range`. An edit program, clarification, or fallback is a terminal structured response rather than a tool. The cloud validates source ownership, consent, exact range, duration, bytes, checksum, expiry, continuation job IDs, observation provenance, and project revision before accepting results or proposals.
 
-1. Import footage.
-2. Ask for an outcome in chat.
-3. Watch the agent inspect the actual footage and report safe operational progress.
-4. Answer questions only when a meaningful editorial choice is genuinely ambiguous.
-5. Review the proposed cut in the video preview.
-6. Approve, revise, reject, or undo through chat.
-7. Export locally at the source orientation and at source quality or lower.
+Gemini returns timestamped observations with stable conversation-scoped evidence IDs. Edit operations may cite only observations grounded in video supplied during that conversation. Complete videos and requested windows are sent directly to the planning call; there is no separate frame, crop, audio, or evidence-summary model call.
 
-ctrlB is not a filter wizard and not a rules engine pretending to understand video. Deterministic detectors build a local, timestamped media index. The multimodal agent receives only the request-relevant authorized ranges and can iteratively request more.
+There is currently no model-dollar or requested-window count cutoff. Duplicate derivative requests stop safely. Every Gemini call records provider token metadata and an estimated USD price, and Android shows cumulative conversation usage with a per-call breakdown.
 
-## Product principles
-
-- Local analysis creates the first searchable index and filters what must leave the device.
-- The agent sees the actual authorized ranges it needs, not merely prose summaries and not the whole source by default.
-- Analysis is iterative. There is no fixed two-pass evidence limit.
-- Work ends when the proposal is grounded, the agent needs the user, a policy budget is reached, the user cancels, or a tool fails terminally.
-- Operational activity is visible; hidden model chain-of-thought is not.
-- Approved edits remain typed, versioned, deterministic, previewable, exportable, and exactly undoable.
-- The server owns the canonical wire contract and publishes generated client models.
-- The client validates commands because local media mutation must never trust arbitrary model output.
-- Source orientation is detected from media metadata and preserved. Chat cannot silently change framing.
-- Output resolution never exceeds source resolution. Lower-quality preview/export is allowed.
-- Selective derivative analysis is the default. Full-source or broad proxy upload requires an explicit user choice or a request whose declared scope genuinely requires it.
-- The initial direct-video agent uses Gemini 3.6 Flash only. Additional planning models remain out of scope until evaluation demonstrates a concrete need.
-
-## Future enhancements
-
-Person or object segmentation, transparent backgrounds, background replacement,
-and temporally consistent removal or inpainting are promising future editing
-capabilities. They are not active implementation commitments. Promote them only
-after the core video agent, grounding, preview parity, and representative-device
-evaluation work end to end.
+AssemblyAI remains the transcription provider. The separate Kimi planner route remains available and is not part of this Gemini agent loop.

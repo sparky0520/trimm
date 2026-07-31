@@ -51,6 +51,7 @@ function record(row) {
     decision: row.decision,
     attempts: row.attempts || [],
     recovery: row.recovery,
+    usage: row.usage || { calls: [], inputTokens: 0, outputTokens: 0, thinkingTokens: 0, cachedTokens: 0, totalTokens: 0, estimatedCostMicros: 0 },
     stateVersion: Number(row.state_version),
   };
 }
@@ -70,14 +71,15 @@ class PostgresAgentRunStore {
   async create(run) {
     const [row] = await this.sql`
       insert into ctrlb_private.agent_runs
-        (id, owner_id, project_id, project_revision, status, events, inventory, decision, attempts, recovery)
+        (id, owner_id, project_id, project_revision, status, events, inventory, decision, attempts, recovery, usage)
       values (
         ${run.id}, ${run.ownerId}, ${run.projectId}, ${run.projectRevision},
         ${run.status}, ${this.sql.json(run.events)}, ${this.sql.json(run.inventory)},
-        ${this.sql.json(run.decision)}, ${this.sql.json(run.attempts || [])}, ${this.sql.json(run.recovery)}
+        ${this.sql.json(run.decision)}, ${this.sql.json(run.attempts || [])}, ${this.sql.json(run.recovery)},
+        ${this.sql.json(run.usage || { calls: [] })}
       )
       returning id, owner_id, project_id, project_revision, status,
-                events, inventory, decision, attempts, recovery, state_version
+                events, inventory, decision, attempts, recovery, usage, state_version
     `;
     return record(row);
   }
@@ -85,7 +87,7 @@ class PostgresAgentRunStore {
   async read(ownerId, runId) {
     const [row] = await this.sql`
       select id, owner_id, project_id, project_revision, status,
-             events, inventory, decision, attempts, recovery, state_version
+             events, inventory, decision, attempts, recovery, usage, state_version
       from ctrlb_private.agent_runs
       where id = ${runId} and owner_id = ${ownerId}
     `;
@@ -102,13 +104,14 @@ class PostgresAgentRunStore {
         decision = ${this.sql.json(run.decision)},
         attempts = ${this.sql.json(run.attempts || [])},
         recovery = ${this.sql.json(run.recovery)},
+        usage = ${this.sql.json(run.usage || { calls: [] })},
         state_version = state_version + 1,
         updated_at = now()
       where id = ${run.id}
         and owner_id = ${run.ownerId}
         and state_version = ${expectedVersion}
       returning id, owner_id, project_id, project_revision, status,
-                events, inventory, decision, attempts, recovery, state_version
+                events, inventory, decision, attempts, recovery, usage, state_version
     `;
     if (!row) throw storeError('Agent run changed while it was being updated.', 409, 'agent_run_conflict');
     return record(row);

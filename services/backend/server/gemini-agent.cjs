@@ -1,62 +1,96 @@
 'use strict';
 
 const { GoogleGenAI } = require('@google/genai');
-const { AGENT_DECISION_SCHEMA } = require('./agent-decision-schema.cjs');
+const { AGENT_DECISION_SCHEMA, INSPECT_VIDEO_RANGE_TOOL } = require('./agent-decision-schema.cjs');
+const { geminiUsage } = require('./model-usage.cjs');
 
 function createGeminiDecisionProvider({
   apiKey = process.env.GEMINI_API_KEY,
   model = process.env.GEMINI_MODEL || 'gemini-3.6-flash',
-  escalationModel = process.env.GEMINI_ESCALATION_MODEL || 'gemini-3.1-pro-preview',
   client,
 } = {}) {
   if (model !== 'gemini-3.6-flash') throw new Error('The video agent is pinned to gemini-3.6-flash.');
-  if (escalationModel !== 'gemini-3.1-pro-preview') throw new Error('The ambiguity escalation model is pinned to gemini-3.1-pro-preview.');
   const ai = client || (apiKey ? new GoogleGenAI({ apiKey }) : null);
+  const fileCache = new Map();
+  async function videoPart(item) {
+    if (item.providerFile?.expiresAt > Date.now()) {
+      fileCache.set(item.contentKey, { uri: item.providerFile.uri, expiresAt: item.providerFile.expiresAt });
+    }
+    const cached = fileCache.get(item.contentKey);
+    if (cached && (!cached.expiresAt || cached.expiresAt > Date.now())) {
+      return { fileData: { fileUri: cached.uri, mimeType: 'video/mp4' },
+        mediaResolution: { level: item.resolution === 'HIGH' ? 'MEDIA_RESOLUTION_HIGH' : 'MEDIA_RESOLUTION_LOW' } };
+    }
+    if (ai?.files?.upload) {
+      try {
+        let file = await ai.files.upload({ file: new Blob([item.bytes], { type: 'video/mp4' }), config: { mimeType: 'video/mp4' } });
+        for (let attempt = 0; file?.state && String(file.state) !== 'ACTIVE' && attempt < 60; attempt++) {
+          if (String(file.state) === 'FAILED') throw new Error('Gemini file processing failed.');
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          file = await ai.files.get({ name: file.name });
+        }
+        if (file?.uri) {
+          const expiresAt = Number.isFinite(Date.parse(file.expirationTime))
+            ? Date.parse(file.expirationTime) : Date.now() + 47 * 60 * 60 * 1000;
+          fileCache.set(item.contentKey, { uri: file.uri, expiresAt });
+          if (typeof item.persistProviderFile === 'function') {
+            await item.persistProviderFile({ provider: 'google-gemini', uri: file.uri, name: file.name, expiresAt });
+          }
+          return { fileData: { fileUri: file.uri, mimeType: file.mimeType || 'video/mp4' },
+            mediaResolution: { level: item.resolution === 'HIGH' ? 'MEDIA_RESOLUTION_HIGH' : 'MEDIA_RESOLUTION_LOW' } };
+        }
+      } catch {}
+    }
+    return { inlineData: { mimeType: 'video/mp4', data: item.bytes.toString('base64') },
+      mediaResolution: { level: item.resolution === 'HIGH' ? 'MEDIA_RESOLUTION_HIGH' : 'MEDIA_RESOLUTION_LOW' } };
+  }
   async function generate({
-    systemPolicy, contents, temperature, selectedModel = model, cachedContent, tools,
-    responseJsonSchema = AGENT_DECISION_SCHEMA,
+    systemPolicy, contents, temperature, purpose = 'planning',
+    responseJsonSchema = AGENT_DECISION_SCHEMA, tools = true, usageMedia,
   }) {
     if (!ai) throw Object.assign(new Error('GEMINI_API_KEY is not configured'), { status: 503, code: 'gemini_unconfigured' });
     const response = await ai.models.generateContent({
-      model: selectedModel,
+      model,
       contents,
       config: {
         systemInstruction: systemPolicy,
         responseMimeType: 'application/json',
         responseJsonSchema,
+        ...(tools ? { tools: [{ functionDeclarations: [INSPECT_VIDEO_RANGE_TOOL] }] } : {}),
         temperature,
-        maxOutputTokens: 8192,
-        ...(cachedContent ? { cachedContent } : {}),
-        ...(tools?.length ? { tools } : {}),
+        maxOutputTokens: 4096,
+        thinkingConfig: { thinkingLevel: 'LOW' },
       },
     });
-    if (!response.text) throw Object.assign(new Error('Gemini returned no decision.'), { status: 502, code: 'empty_gemini_response' });
+    const functionCall = response.functionCalls?.[0];
+    if (!response.text && !functionCall) throw Object.assign(new Error('Gemini returned no decision.'), { status: 502, code: 'empty_gemini_response' });
     return {
-      rawText: response.text,
+      rawText: response.text || null,
+      toolCall: functionCall ? { name: functionCall.name, args: functionCall.args || {} } : null,
       finishReason: response.candidates?.[0]?.finishReason || null,
+      usage: geminiUsage(response, { purpose, model, media: usageMedia }),
     };
   }
-  const decide = ({ systemPolicy, inventory, evidence }) => generate({
+  const decide = async ({ systemPolicy, inventory, evidence }) => generate({
     systemPolicy,
-    contents: JSON.stringify({ inventory, evidence }),
+    contents: [{ role: 'user', parts: [
+      ...(await Promise.all(evidence.map(videoPart))),
+      { text: JSON.stringify({ inventory, evidence: evidence.map(({ bytes, providerFile, persistProviderFile, ...item }) => item) }) },
+    ] }],
     temperature: 0.2,
-  });
-  decide.escalate = ({ systemPolicy, inventory, evidence, cachedContent, tools }) => generate({
-    systemPolicy,
-    contents: JSON.stringify({ inventory, evidence, escalationReason: 'genuinely_ambiguous_editorial_decision' }),
-    temperature: 0.1,
-    selectedModel: escalationModel,
-    cachedContent,
-    tools,
+    purpose: 'planning',
+    usageMedia: evidence.length ? {
+      sourceId: evidence.at(-1).sourceId, startMs: evidence.at(-1).startMs,
+      endMs: evidence.at(-1).endMs, resolution: evidence.at(-1).resolution,
+    } : {},
   });
   decide.capabilities = Object.freeze({
     nativeVideoAudio: true,
     timestampGrounding: true,
     toolUse: true,
     structuredOutput: true,
-    reusableCachedContext: true,
+    reusableCachedContext: false,
     primaryModel: model,
-    escalationModel,
   });
   decide.repair = (request) => generate({
     systemPolicy: `You repair JSON for ${request.expectedSchema}.
@@ -64,7 +98,9 @@ Correct structure only. Never change editorial intent, operations, ranges, evide
 Return only the corrected JSON object.`,
     contents: JSON.stringify(request),
     temperature: 0,
+    purpose: 'proposal_repair',
     responseJsonSchema: AGENT_DECISION_SCHEMA,
+    tools: false,
   });
   return decide;
 }

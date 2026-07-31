@@ -7,10 +7,10 @@
     "editOperations": 1,
     "derivativeJobs": 1,
     "mediaIndex": 1,
-    "agentRuns": 1,
-    "activityEvents": 1,
-    "evidenceRequests": 1,
-    "editPrograms": 1,
+    "agentRuns": 2,
+    "activityEvents": 2,
+    "videoToolRequests": 2,
+    "editPrograms": 2,
     "billingCatalog": 1,
     "accountLifecycle": 1
   }

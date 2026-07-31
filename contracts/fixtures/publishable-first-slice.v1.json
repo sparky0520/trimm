@@ -1,9 +1,0 @@
-{
-  "contractVersion": 1,
-  "request": "Make this video publishable",
-  "requestScope": "broad_editorial",
-  "requiredSelectionReasons": ["representative_coverage", "measured_candidate", "uncertainty"],
-  "expectedActivityTypes": ["started", "index_received", "analyzing"],
-  "terminalDecisionTypes": ["edit_program", "clarification", "fallback"],
-  "rendererRule": "An edit program is previewed before it is applied."
-}
