@@ -80,12 +80,20 @@ data class DeviceCapabilityReport(
     }
 
     fun userFacingSummary(): String {
-        val tierName = tier.name.lowercase().replace('_', ' ')
-        val downgrades = features.entries.filter { it.value.mode != CapabilityMode.LOCAL }
-            .joinToString(" ") { (feature, capability) ->
-                "${feature.replace(Regex("([a-z])([A-Z])"), "$1 $2")}: ${capability.explanation}"
-            }
-        return "Measured device tier: $tierName (provisional). $downgrades".trim()
+        val headline = when (tier) {
+            CapabilityTier.UNSUPPORTED -> "This device does not meet the minimum editing requirements."
+            CapabilityTier.MINIMUM_SUPPORTED -> "This device is ready for lighter local edits."
+            CapabilityTier.STANDARD_EDITING -> "This device is ready for standard local editing."
+            CapabilityTier.ADVANCED_LOCAL_PERCEPTION -> "This device supports advanced on-device analysis."
+            CapabilityTier.HIGH_RESOLUTION_EXPORT -> "This device supports high-resolution local editing and export."
+        }
+        val adjustments = features.values
+            .filter { it.mode != CapabilityMode.LOCAL }
+            .map { it.explanation.trim() }
+            .filter(String::isNotEmpty)
+            .distinct()
+        return if (adjustments.isEmpty()) headline
+        else "$headline ctrlB will adapt automatically: ${adjustments.joinToString(" ")}"
     }
 }
 

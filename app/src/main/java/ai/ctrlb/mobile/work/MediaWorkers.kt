@@ -43,6 +43,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
         val evidenceGraphs = mutableListOf<EvidenceGraph>()
         val evidenceReferences = mutableListOf<EvidenceGraphReference>()
         val analysisWarnings = mutableListOf<String>()
+        var transcriptionFailed = false
         val evidenceCache = EvidenceCache(java.io.File(applicationContext.filesDir, "evidence"))
         var offset = 0L
         project.orderedSources.forEachIndexed { index, source ->
@@ -72,6 +73,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                     }
                 } } ?: runCatching { throw IllegalStateException("Transcription service is not configured.") }
                 val localWords = transcription.getOrElse { error ->
+                    transcriptionFailed = true
                     analysisWarnings += "Speech analyzer (${source.fingerprint.take(8)}): ${error.message ?: "failed"}"
                     emptyList()
                 }
@@ -144,7 +146,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
             revision = project.revision + 1
         )
         store.save(analyzed)
-        if (BuildConfig.AGENT_RUNS_URL.isNotBlank()) {
+        if (BuildConfig.AGENT_RUNS_URL.isNotBlank() && !transcriptionFailed) {
             progress("agent-run", 94)
             val deviceSessionId = "android-${project.id}"
             val uploadClient = DerivativeUploadClient(
@@ -162,7 +164,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                 }
             )
             runCatching {
-                coordinator.run(
+                val completedRun = coordinator.run(
                     AgentRunRequest(
                         projectId = project.id,
                         deviceSessionId = deviceSessionId,
@@ -174,10 +176,23 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                                 source.width, source.height, source.hasAudio
                             )
                         },
-                        mediaIndex = requireNotNull(analyzed.analysis.mediaIndex)
+                        transcript = sourceTranscript(analyzed.analysis.words, project.orderedSources)
                     )
                 ) { snapshot ->
                     analyzed = analyzed.copy(analysis = analyzed.analysis.copy(agentRun = snapshot))
+                    store.save(analyzed)
+                }
+                AgentDecisionMapper.pendingProposal(completedRun)?.let { proposal ->
+                    OperationValidator.validate(analyzed, proposal.operations, proposal.expectedRevision)
+                    analyzed = analyzed.copy(analysis = analyzed.analysis.copy(
+                        agentRun = completedRun,
+                        pendingProposal = proposal,
+                        revisionConversation = listOf(EditorialConversationTurn(
+                            request = initialPrompt,
+                            response = proposal.summary,
+                            evidenceIds = proposal.evidenceIds
+                        ))
+                    ))
                     store.save(analyzed)
                 }
             }.onFailure {
@@ -187,7 +202,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                 ))
                 store.save(analyzed)
             }
-        } else if (BuildConfig.PLANNER_URL.isNotBlank()) {
+        } else if (BuildConfig.AGENT_RUNS_URL.isBlank() && BuildConfig.PLANNER_URL.isNotBlank()) {
             progress("planner", 94)
             val planning = runCatching {
                 val prompt = initialPrompt

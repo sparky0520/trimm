@@ -138,6 +138,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val editorialPlan: StagedEditorialPlan? = null,
     val pendingProposal: PendingEditorialProposal? = null,
     val revisionConversation: List<EditorialConversationTurn> = emptyList(),
+    val appliedEditCheckpoints: List<AppliedEditCheckpoint> = emptyList(),
     val settledConstraints: List<SettledEditorialConstraint> = emptyList(),
     val warnings: List<String> = emptyList(),
     val completedAtEpochMs: Long? = null
@@ -155,6 +156,14 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val transcriptConfidence: Float? = null,
     val speakerIds: Set<String> = emptySet(),
     val provenance: String = "local-transcript-timing"
+)
+@Serializable data class AppliedEditCheckpoint(
+    val id: String = UUID.randomUUID().toString(),
+    val summary: String,
+    val changes: List<String>,
+    val revisionBefore: Long,
+    val revisionAfter: Long,
+    val createdAtEpochMs: Long = System.currentTimeMillis()
 )
 @Serializable data class ExportSettings(val width: Int = 1920, val height: Int = 1080, val codec: String = "video/avc", val bitrate: Int = 16_000_000)
 @Serializable data class ProjectSnapshot(

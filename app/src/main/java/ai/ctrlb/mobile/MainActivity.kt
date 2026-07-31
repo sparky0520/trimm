@@ -6,6 +6,7 @@ import ai.ctrlb.mobile.media.DeviceCapability
 import ai.ctrlb.mobile.work.ExportWorker
 import ai.ctrlb.mobile.planner.AgentRecoveryAction
 import ai.ctrlb.mobile.planner.AgentRecoveryStatus
+import ai.ctrlb.mobile.planner.AgentUsageSummary
 import android.net.Uri
 import android.os.Bundle
 import android.content.Intent
@@ -20,6 +21,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -110,7 +112,8 @@ class MainActivity : ComponentActivity() {
         state.source == null -> ImportScreen(vm::import)
         state.project != null -> EditorScreen(
             state, vm::undo, vm::export, vm::applyProposal, vm::rejectProposal,
-            vm::reviseStory, vm::recoverAgent
+            vm::undoCheckpoint,
+            vm::reviseStory, vm::recoverAgent, vm::cancelAnalysis
         )
         else -> NewEditChatScreen(state, vm::generateDraft, vm::moveClip)
     }
@@ -306,8 +309,10 @@ class MainActivity : ComponentActivity() {
     export: () -> Unit,
     applyProposal: () -> Unit,
     rejectProposal: () -> Unit,
+    undoCheckpoint: (String) -> Unit,
     reviseStory: (String) -> Unit,
     recoverAgent: (AgentRecoveryAction) -> Unit,
+    cancelAnalysis: () -> Unit,
 ) {
     val project = requireNotNull(state.project)
     var fullscreen by rememberSaveable { mutableStateOf(false) }
@@ -340,11 +345,23 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+            state.initialRequest
+                ?.takeIf { initial -> project.analysis.revisionConversation.none { it.request == initial } }
+                ?.let { initial ->
+                    item(key = "initial-request") { UserChatBubble(initial) }
+                }
             items(project.analysis.revisionConversation, key = { it.id }) { turn ->
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     UserChatBubble(turn.request)
                     AssistantChatBubble { Text(turn.response, color = CreamRaised, lineHeight = 20.sp) }
                 }
+            }
+            items(project.analysis.appliedEditCheckpoints, key = { "checkpoint-${it.id}" }) { checkpoint ->
+                EditResultChatBubble(
+                    checkpoint = checkpoint,
+                    canUndo = project.analysis.appliedEditCheckpoints.lastOrNull()?.id == checkpoint.id,
+                    undo = { undoCheckpoint(checkpoint.id) }
+                )
             }
             project.analysis.agentRun?.let { run ->
                 items(run.events, key = { "agent-${run.runId}-${it.sequence}" }) { event ->
@@ -382,6 +399,11 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+                if (run.usage.calls.isNotEmpty()) {
+                    item(key = "agent-usage-${run.runId}-${run.usage.totalTokens}") {
+                        AgentUsageChatBubble(run.usage)
+                    }
+                }
             }
             if (project.analysis.completedAtEpochMs != null) {
                 item { FindingsChatBubble(read) }
@@ -389,10 +411,27 @@ class MainActivity : ComponentActivity() {
             if (review != null) {
                 item { ProposalChatBubble(review, applyProposal, rejectProposal) }
             }
-            state.jobMessage?.let { message -> item { AssistantChatBubble(accent = Lavender) { Text(message, color = CreamRaised) } } }
-            state.capabilityMessage?.let { message -> item { AssistantChatBubble(accent = Coral) { Text("Device capability: $message", color = CreamRaised) } } }
-            if (project.analysis.revisionConversation.isEmpty() && project.analysis.completedAtEpochMs == null) {
-                item { AssistantChatBubble(accent = Lavender) { Text("I’m reading your clips, transcribing the speech, and looking for the strongest cut.", color = CreamRaised) } }
+            state.jobMessage?.let { message ->
+                item(key = "job-status") {
+                    AssistantChatBubble(accent = Lavender) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (state.isProcessing) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Lavender)
+                            }
+                            Text(message, color = CreamRaised)
+                            if (state.isProcessing) TextButton(onClick = cancelAnalysis) { Text("Cancel") }
+                        }
+                    }
+                }
+            }
+            state.capabilityMessage?.let { message ->
+                item(key = "device-capability") {
+                    AssistantChatBubble(accent = Coral) {
+                        Text("Your device", color = CreamRaised, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(5.dp))
+                        Text(message, color = Muted, lineHeight = 19.sp)
+                    }
+                }
             }
         }
         Surface(color = Workspace, tonalElevation = 4.dp) {
@@ -425,6 +464,41 @@ class MainActivity : ComponentActivity() {
     }
     if (fullscreen) FullscreenProjectPreview(project) { fullscreen = false }
 }
+
+@Composable private fun AgentUsageChatBubble(usage: AgentUsageSummary) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    AssistantChatBubble(accent = Lavender) {
+        Text("Usage", color = Lavender, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+        Spacer(Modifier.height(5.dp))
+        Text(
+            "${usage.totalTokens} tokens  •  ${formatUsdMicros(usage.estimatedCostMicros)}",
+            color = CreamRaised,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            "${usage.inputTokens} input  •  ${usage.outputTokens} output  •  ${usage.thinkingTokens} thinking",
+            color = Muted,
+            fontSize = 10.sp,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+        Text(
+            "${usage.calls.size} model call${if (usage.calls.size == 1) "" else "s"}  •  ${if (expanded) "Hide details" else "Show details"}",
+            color = Muted,
+            fontSize = 9.sp,
+            modifier = Modifier.padding(top = 3.dp).clickable { expanded = !expanded }
+        )
+        if (expanded) usage.calls.forEach { call ->
+            val range = if (call.startMs != null && call.endMs != null) "  ${call.startMs / 1000.0}-${call.endMs / 1000.0}s ${call.resolution.orEmpty()}" else ""
+            Text(
+                "${call.purpose}$range\n${call.totalTokens} tokens  •  ${formatUsdMicros(call.estimatedCostMicros)}${if (call.costEstimated) " estimated" else ""}",
+                color = Muted, fontSize = 9.sp, modifier = Modifier.padding(top = 6.dp)
+            )
+        }
+    }
+}
+
+private fun formatUsdMicros(micros: Long): String =
+    "$" + String.format(java.util.Locale.US, "%.4f", micros / 1_000_000.0)
 
 @Composable private fun UserChatBubble(text: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -683,6 +757,41 @@ private fun reviewPercent(value: Float) = "${(value * 100).toInt()}%"
             VideoPreview(uris, Modifier.fillMaxSize())
             SmallAction("Close", Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(20.dp), close)
         }
+    }
+}
+
+@Composable private fun EditResultChatBubble(
+    checkpoint: AppliedEditCheckpoint,
+    canUndo: Boolean,
+    undo: () -> Unit
+) {
+    AssistantChatBubble(accent = Green) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Applied edit", color = Green, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                Text(checkpoint.summary, color = CreamRaised, fontWeight = FontWeight.Bold, lineHeight = 20.sp)
+            }
+            OutlinedButton(
+                onClick = undo,
+                enabled = canUndo,
+                border = BorderStroke(1.dp, if (canUndo) Green else Border)
+            ) { Text(if (canUndo) "Undo" else "Checkpoint", color = if (canUndo) Green else Muted) }
+        }
+        Spacer(Modifier.height(8.dp))
+        checkpoint.changes.forEach { change ->
+            val color = when {
+                change.startsWith("+") -> Green
+                change.startsWith("−") -> Coral
+                else -> Lavender
+            }
+            Text(change, color = color, fontSize = 11.sp, lineHeight = 17.sp)
+        }
+        Text(
+            "Revision ${checkpoint.revisionBefore} → ${checkpoint.revisionAfter}",
+            color = Muted,
+            fontSize = 9.sp,
+            modifier = Modifier.padding(top = 8.dp)
+        )
     }
 }
 

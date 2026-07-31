@@ -26,7 +26,10 @@ import kotlin.coroutines.coroutineContext
 @Serializable private data class UploadSession(val id: String, val offset: Long, val chunkSize: Int)
 @Serializable private data class UploadOffset(val offset: Long)
 
-class TranscriptionClient(private val endpoint: String, private val accessToken: suspend () -> String) {
+class TranscriptionClient(
+    private val endpoint: String,
+    private val accessToken: suspend (forceRefresh: Boolean) -> String,
+) {
     private val json = Json { ignoreUnknownKeys = true }
     private val uploadsEndpoint = endpoint.trimEnd('/') + "/uploads"
     init { require(URI(endpoint).scheme == "https") { "Transcription endpoint must use HTTPS" } }
@@ -90,7 +93,7 @@ class TranscriptionClient(private val endpoint: String, private val accessToken:
     }
 
     private suspend fun createSession(contentType: String, size: Long): UploadSession {
-        val connection = connection(uploadsEndpoint, "POST", accessToken()).apply {
+        val connection = connection(uploadsEndpoint, "POST", accessToken(true)).apply {
             doOutput = true
             setRequestProperty("Content-Type", "application/json")
         }
@@ -102,7 +105,7 @@ class TranscriptionClient(private val endpoint: String, private val accessToken:
         repeat(4) { attempt ->
             coroutineContext.ensureActive()
             try {
-                val connection = connection("$uploadsEndpoint/$id", "PUT", accessToken()).apply {
+                val connection = connection("$uploadsEndpoint/$id", "PUT", accessToken(attempt > 0)).apply {
                     doOutput = true
                     setFixedLengthStreamingMode(chunk.size)
                     setRequestProperty("Content-Type", "application/octet-stream")
@@ -122,17 +125,17 @@ class TranscriptionClient(private val endpoint: String, private val accessToken:
     }
 
     private suspend fun remoteOffset(id: String): Long {
-        val connection = connection("$uploadsEndpoint/$id", "HEAD", accessToken())
+        val connection = connection("$uploadsEndpoint/$id", "HEAD", accessToken(true))
         return connection.useResponse { requireSuccess(this); getHeaderField("Upload-Offset")?.toLongOrNull() ?: error("Missing upload offset.") }
     }
 
     private suspend fun completeSession(id: String): RemoteTranscript {
-        val connection = connection("$uploadsEndpoint/$id/complete", "POST", accessToken()).apply { doOutput = true; setFixedLengthStreamingMode(0) }
+        val connection = connection("$uploadsEndpoint/$id/complete", "POST", accessToken(true)).apply { doOutput = true; setFixedLengthStreamingMode(0) }
         return connection.useResponse { outputStream.close(); decodeSuccess(this) }
     }
 
     private suspend fun deleteSession(id: String) {
-        val connection = connection("$uploadsEndpoint/$id", "DELETE", accessToken())
+        val connection = connection("$uploadsEndpoint/$id", "DELETE", accessToken(true))
         connection.useResponse { if (responseCode !in 200..299 && responseCode != 404) requireSuccess(this) }
     }
 

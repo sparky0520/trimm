@@ -87,9 +87,11 @@ class PlannerClient(private val endpoint: String, private val accessToken: suspe
 @Serializable data class Layer2Budgets(
     val maximumBytes: Long = 8L * 1024 * 1024,
     val maximumDurationMs: Long = 10L * 60 * 1000,
-    val maximumCostMicros: Long = 50_000,
-    val maximumRequests: Int = 8,
     val retentionMs: Long = 6L * 60 * 60 * 1000
+)
+@Serializable data class Layer2TranscriptWord(
+    val sourceId: String, val text: String, val startMs: Long, val endMs: Long,
+    val confidence: Float, val speakerId: String? = null
 )
 @Serializable data class Layer2Inventory(
     val projectId: String,
@@ -112,11 +114,13 @@ class PlannerClient(private val endpoint: String, private val accessToken: suspe
     val range: EvidenceRange,
     val maximumBytes: Long,
     val maximumDurationMs: Long? = null,
+    val resolution: String,
+    val uncertainty: String = "",
     val expiresAt: String,
     val reused: Boolean
 )
 @Serializable sealed interface Layer2Response
-@Serializable @SerialName("evidence_request") data class Layer2EvidenceRequest(val jobs: List<AuthorizedEvidenceJob>) : Layer2Response
+@Serializable @SerialName("tool_request") data class Layer2EvidenceRequest(val tool: String, val jobs: List<AuthorizedEvidenceJob>) : Layer2Response
 @Serializable @SerialName("edit_program") data class Layer2EditProgram(
     val expectedRevision: Long,
     val summary: String,

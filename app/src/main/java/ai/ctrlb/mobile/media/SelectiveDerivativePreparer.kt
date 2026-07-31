@@ -12,11 +12,7 @@ import java.time.Instant
 @Serializable
 enum class SelectiveDerivativeType { AUDIO, FRAME, CROP, AUDIOVISUAL }
 
-data class DerivativeAuthorization(
-    val job: AuthorizedEvidenceJob,
-    val crop: NormalizedRect? = null,
-    val wholeSourceProxyOptIn: Boolean = false
-)
+data class DerivativeAuthorization(val job: AuthorizedEvidenceJob)
 
 @Serializable
 data class PreparedDerivative(
@@ -65,24 +61,17 @@ class SelectiveDerivativePreparer(
             .getOrElse { throw DerivativePreparationException("Evidence expiry is invalid.") }
         requireSafeId(job.id)
         if (!expiry.isAfter(current)) throw DerivativePreparationException("Evidence request has expired.")
-        if (job.purpose.isBlank()) throw DerivativePreparationException("Evidence purpose is required.")
+        if (job.type != "video" || job.purpose != "video-inspection") throw DerivativePreparationException("Only video inspection jobs are supported.")
         if (job.maximumBytes <= 0) throw DerivativePreparationException("Evidence byte budget must be positive.")
         val source = sources.singleOrNull { it.fingerprint == job.sourceId }
             ?: throw DerivativePreparationException("Evidence source is not selected.")
         val range = TimeRange(job.range.startMs, job.range.endMs)
         if (range.endMs > source.durationMs) throw DerivativePreparationException("Evidence range exceeds the source.")
-        if (job.maximumDurationMs != null && range.durationMs > job.maximumDurationMs) {
+        if (range.durationMs > 30_000 || job.maximumDurationMs == null || range.durationMs > job.maximumDurationMs) {
             throw DerivativePreparationException("Evidence range exceeds its duration budget.")
         }
         val type = type(job.type)
         validateFormat(type, job.acceptedFormat)
-        if (type == SelectiveDerivativeType.CROP && authorization.crop == null) {
-            throw DerivativePreparationException("Crop evidence requires an authorized normalized crop.")
-        }
-        val wholeSource = range.startMs == 0L && range.endMs == source.durationMs
-        if (wholeSource && type == SelectiveDerivativeType.AUDIOVISUAL && !authorization.wholeSourceProxyOptIn) {
-            throw DerivativePreparationException("Whole-source proxy evidence requires explicit opt-in.")
-        }
         if (isCancelled()) throw DerivativePreparationException("Evidence preparation was cancelled.")
 
         val jobRoot = File(root, job.id)
@@ -92,7 +81,7 @@ class SelectiveDerivativePreparer(
         jobRoot.mkdirs()
         return try {
             partial.delete()
-            writer.write(type, source, range, authorization.crop, job.acceptedFormat, partial)
+            writer.write(type, source, range, null, job.acceptedFormat, partial)
             if (isCancelled()) throw DerivativePreparationException("Evidence preparation was cancelled.")
             if (!partial.isFile || partial.length() <= 0) {
                 throw DerivativePreparationException("Derivative writer produced no media.")
@@ -137,14 +126,8 @@ class SelectiveDerivativePreparer(
         }
     }
 
-    private fun type(value: String) = when (value.lowercase()) {
-        "audio" -> SelectiveDerivativeType.AUDIO
-        "frame" -> SelectiveDerivativeType.FRAME
-        "crop" -> SelectiveDerivativeType.CROP
-        "video", "audiovisual" -> SelectiveDerivativeType.AUDIOVISUAL
-        "original", "proxy" -> SelectiveDerivativeType.AUDIOVISUAL
-        else -> throw DerivativePreparationException("Unsupported evidence type.")
-    }
+    private fun type(value: String) = if (value == "video") SelectiveDerivativeType.AUDIOVISUAL
+        else throw DerivativePreparationException("Unsupported evidence type.")
 
     private fun validateFormat(type: SelectiveDerivativeType, value: String) {
         val allowed = when (type) {

@@ -48,6 +48,14 @@ if ($missingSettings) {
     throw "Missing production settings in .env.local: $($missingSettings -join ', ')"
 }
 
+$backendUri = $null
+if (
+    -not [Uri]::TryCreate($localEnvironment["CTRLB_BACKEND_URL"], [UriKind]::Absolute, [ref]$backendUri) -or
+    $backendUri.Scheme -ne "https"
+) {
+    throw "CTRLB_BACKEND_URL must be an absolute HTTPS production origin."
+}
+
 $keyStorePath = Join-Path $repositoryRoot $localEnvironment["CTRLB_ANDROID_UPLOAD_STORE_FILE"]
 if (-not (Test-Path -LiteralPath $keyStorePath)) {
     throw "The configured upload keystore does not exist: $keyStorePath"

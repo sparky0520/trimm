@@ -30,7 +30,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.security.MessageDigest
 
-data class EditorState(val sources: List<SourceMedia> = emptyList(), val preferences: WizardPreferences = WizardPreferences(), val creatorPreferences: CreatorPreferenceProfile = CreatorPreferenceProfile(), val project: MobileProject? = null, val capabilityMessage: String? = null, val previewUri: String? = null, val jobMessage: String? = null) {
+data class EditorState(
+    val sources: List<SourceMedia> = emptyList(),
+    val preferences: WizardPreferences = WizardPreferences(),
+    val creatorPreferences: CreatorPreferenceProfile = CreatorPreferenceProfile(),
+    val project: MobileProject? = null,
+    val capabilityMessage: String? = null,
+    val previewUri: String? = null,
+    val jobMessage: String? = null,
+    val initialRequest: String? = null,
+    val isProcessing: Boolean = false,
+) {
     val source: SourceMedia? get() = sources.firstOrNull()
 }
 
@@ -38,6 +48,26 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val mutable = MutableStateFlow(EditorState())
     val state = mutable.asStateFlow()
     private val store = ProjectStore(application)
+
+    fun cancelAnalysis() {
+        val project = mutable.value.project ?: return
+        WorkManager.getInstance(getApplication()).cancelAllWorkByTag("analysis:${project.id}")
+        val run = project.analysis.agentRun
+        mutable.value = mutable.value.copy(isProcessing = false, jobMessage = "Cancelling video analysis…")
+        if (run == null || BuildConfig.AGENT_RUNS_URL.isBlank()) return
+        viewModelScope.launch {
+            runCatching { AgentRunClient(BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken).cancel(run.runId) }
+                .onSuccess { cancelled ->
+                    val latest = store.load(project.id)
+                    val updated = latest.copy(analysis = latest.analysis.copy(agentRun = PersistedAgentRun(
+                        cancelled.contractVersion, cancelled.runId, cancelled.projectId, cancelled.projectRevision,
+                        cancelled.status, cancelled.events, cancelled.decision, run.fulfilledEvidenceJobIds, run.recovery, cancelled.usage
+                    )))
+                    store.save(updated)
+                    mutable.value = mutable.value.copy(project = updated, jobMessage = "Video analysis cancelled")
+                }
+        }
+    }
 
     init {
         viewModelScope.launch {
@@ -106,7 +136,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         )
         val project = MobileProject(title = "Talking head edit", source = source, sources = sources, preferences = preferences, creatorPreferences = current.creatorPreferences, analysis = Analysis(words = words, speechHints = candidates), operations = operations,
             export = ExportSettings(exportSize.width, exportSize.height, if (capability.allow4k) "video/hevc" else "video/avc", if (capability.allow4k) 45_000_000 else 16_000_000))
-        mutable.value = current.copy(project = project, preferences = preferences, capabilityMessage = capabilityReport.userFacingSummary(), jobMessage = "Reading your clips and preparing a proposal…")
+        mutable.value = current.copy(
+            project = project,
+            preferences = preferences,
+            capabilityMessage = capabilityReport.userFacingSummary(),
+            jobMessage = "Reading your clips and preparing a proposal…",
+            initialRequest = brief,
+            isProcessing = true,
+        )
         viewModelScope.launch { store.save(project) }
         val request = OneTimeWorkRequestBuilder<AnalysisWorker>().setInputData(
             Data.Builder().putString("projectId", project.id).putString("prompt", brief).build()
@@ -114,13 +151,28 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val workManager = WorkManager.getInstance(getApplication())
         workManager.enqueue(request)
         viewModelScope.launch {
-            val info = awaitWork(workManager, request.id)
+            val info = awaitWork(workManager, request.id) { running ->
+                val stage = running.progress.getString("stage")
+                val percent = running.progress.getInt("percent", 0)
+                mutable.value = mutable.value.copy(
+                    jobMessage = processingMessage(stage, percent),
+                    isProcessing = true,
+                )
+                runCatching { store.load(project.id) }.getOrNull()?.let { latest ->
+                    if (latest.analysis.agentRun?.events?.size != mutable.value.project?.analysis?.agentRun?.events?.size) {
+                        mutable.value = mutable.value.copy(project = latest)
+                    }
+                }
+            }
             if (info.state == WorkInfo.State.SUCCEEDED) {
                 val analyzed = store.load(project.id)
-                mutable.value = mutable.value.copy(project = analyzed, jobMessage = "Analysis complete")
+                mutable.value = mutable.value.copy(project = analyzed, jobMessage = "Analysis complete", isProcessing = false)
                 renderPreview(analyzed, simulatePendingProposal = analyzed.analysis.pendingProposal != null)
             }
-            else mutable.value = mutable.value.copy(capabilityMessage = info.outputData.getString("error") ?: "Video analysis failed.")
+            else mutable.value = mutable.value.copy(
+                jobMessage = info.outputData.getString("error") ?: "Video analysis failed.",
+                isProcessing = false,
+            )
         }
     }
 
@@ -161,9 +213,19 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 mutable.value = mutable.value.copy(jobMessage = error.message ?: "This proposal is no longer current.")
                 return
             }
+            val checkpoint = AppliedEditCheckpoint(
+                summary = proposal.summary,
+                changes = editResultLines(project.operations, validated),
+                revisionBefore = project.revision,
+                revisionAfter = project.revision + 1
+            )
             val applied = project.replaceOperations(validated).copy(
                 creatorPreferences = CreatorPreferenceLearner.confirmedProposal(project.creatorPreferences, project, proposal),
-                analysis = project.analysis.copy(editorialPlan = proposal.plan, pendingProposal = null)
+                analysis = project.analysis.copy(
+                    editorialPlan = proposal.plan,
+                    pendingProposal = null,
+                    appliedEditCheckpoints = (project.analysis.appliedEditCheckpoints + checkpoint).takeLast(30)
+                )
             )
             viewModelScope.launch { store.saveCreatorPreferences(applied.creatorPreferences) }
             updateProject(applied)
@@ -202,7 +264,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val current = mutable.value
         val project = current.project ?: return
         val previous = project.analysis.agentRun ?: return
-        val mediaIndex = project.analysis.mediaIndex ?: return
         viewModelScope.launch {
             val deviceSessionId = "android-${project.id}"
             val uploadClient = DerivativeUploadClient(
@@ -232,7 +293,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         source.width, source.height, source.hasAudio
                     )
                 },
-                mediaIndex = mediaIndex
+                transcript = sourceTranscript(project.analysis.words, project.orderedSources)
             )
             runCatching {
                 coordinator.recover(previous, request, action) { snapshot ->
@@ -242,6 +303,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     mutable.value = mutable.value.copy(project = updated)
                 }
             }.onSuccess { snapshot ->
+                AgentDecisionMapper.pendingProposal(snapshot)?.let { proposal ->
+                    val latest = store.load(project.id)
+                    val updated = latest.copy(analysis = latest.analysis.copy(
+                        agentRun = snapshot,
+                        pendingProposal = proposal
+                    ))
+                    store.save(updated)
+                    mutable.value = mutable.value.copy(project = updated)
+                }
                 mutable.value = mutable.value.copy(
                     jobMessage = when {
                         action == AgentRecoveryAction.REVIEW_ISSUE -> "The issue is shown below. Nothing was applied."
@@ -283,6 +353,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
     fun undo() { mutable.value.project?.let { updateProject(it.undoOnce()) } }
+    fun undoCheckpoint(checkpointId: String) {
+        val project = mutable.value.project ?: return
+        if (project.analysis.appliedEditCheckpoints.lastOrNull()?.id != checkpointId) {
+            mutable.value = mutable.value.copy(jobMessage = "Only the latest edit checkpoint can be undone.")
+            return
+        }
+        updateProject(project.undoOnce(), preview = true)
+        mutable.value = mutable.value.copy(jobMessage = "Edit checkpoint undone")
+    }
     fun export() { mutable.value.project?.let { project ->
         val estimated = (project.durationMs / 1_000.0 * project.export.bitrate / 8).toLong()
         val manager = WorkManager.getInstance(getApplication()); val request = OneTimeWorkRequestBuilder<ExportWorker>().setInputData(Data.Builder().putString("projectId", project.id).putLong("estimatedBytes", estimated).build()).addTag("export:${project.id}").build()
@@ -308,10 +387,45 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         is RemoveFumbles -> op.copy(enabled = !op.enabled); is SetColorGrade -> op.copy(enabled = !op.enabled); is SetAudioCleanup -> op.copy(enabled = !op.enabled); is SetAudioLevels -> op.copy(enabled = !op.enabled)
         is AddTransition -> op.copy(enabled = !op.enabled); is AddMotionPreset -> op.copy(enabled = !op.enabled); is AddSoundEffect -> op.copy(enabled = !op.enabled); is SetBackgroundMusic -> op.copy(enabled = !op.enabled); is AddCaptions -> op.copy(enabled = !op.enabled); is ApplySemanticVisual -> op.copy(enabled = !op.enabled)
     }
-    private suspend fun awaitWork(manager: WorkManager, id: UUID): WorkInfo {
+    private fun processingMessage(stage: String?, percent: Int): String = when {
+        stage?.startsWith("transcript-") == true -> "Preparing speech analysis…"
+        stage?.startsWith("upload-") == true -> "Transcribing speech… $percent%"
+        stage == "speech-hints" -> "Reviewing speech and take structure…"
+        stage == "agent-run" || stage == "planner" -> "Preparing your edit proposal…"
+        else -> "Reading your clips and preparing a proposal…"
+    }
+    private fun editResultLines(before: List<EditOperation>, after: List<EditOperation>): List<String> {
+        val beforeById = before.associateBy(EditOperation::id)
+        val afterById = after.associateBy(EditOperation::id)
+        val added = after.filter { it.id !in beforeById }.map { "+ ${it.editResultLabel()}" }
+        val removed = before.filter { it.id !in afterById }.map { "− ${it.editResultLabel()}" }
+        val changed = after.filter { operation ->
+            beforeById[operation.id]?.let { it != operation } == true
+        }.map { "~ ${it.editResultLabel()}" }
+        return (added + removed + changed).ifEmpty { listOf("~ Updated the current edit") }.take(12)
+    }
+    private fun EditOperation.editResultLabel(): String = when (this) {
+        is RemoveFumbles -> "Tightened ${ranges.size} speech range${if (ranges.size == 1) "" else "s"}"
+        is SetColorGrade -> "Updated color grade"
+        is SetAudioCleanup -> "Updated dialogue cleanup"
+        is SetAudioLevels -> "Updated audio levels"
+        is AddTransition -> "Updated transition"
+        is AddMotionPreset -> "Updated motion"
+        is AddSoundEffect -> "Updated sound effect"
+        is SetBackgroundMusic -> "Updated background music"
+        is AddCaptions -> "Updated ${cues.size} caption cue${if (cues.size == 1) "" else "s"}"
+        is ApplySemanticVisual -> "Updated ${treatment.name.lowercase().replace('_', ' ')}"
+    }
+
+    private suspend fun awaitWork(
+        manager: WorkManager,
+        id: UUID,
+        onUpdate: suspend (WorkInfo) -> Unit = {},
+    ): WorkInfo {
         while (true) {
             val info = withContext(Dispatchers.IO) { manager.getWorkInfoById(id).get() }
             if (info != null && info.state.isFinished) return info
+            if (info != null) onUpdate(info)
             delay(250)
         }
     }

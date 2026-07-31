@@ -14,11 +14,39 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AgentRunContractTest {
+    @Test fun `maps a completed agent edit program into a reviewable proposal`() {
+        val decision = buildJsonObject {
+            put("type", "edit_program")
+            put("expectedRevision", 4)
+            put("summary", "Clean up the dialogue")
+            putJsonArray("operations") {
+                add(buildJsonObject {
+                    put("type", "set_audio_cleanup")
+                    put("id", "cleanup-1")
+                    put("enabled", true)
+                    put("strength", .55)
+                    put("confidence", .9)
+                    putJsonArray("evidenceIds") { add("evidence-1") }
+                })
+            }
+        }
+        val run = PersistedAgentRun(
+            runId = "run-1", projectId = "project-1", projectRevision = 4,
+            status = AgentRunStatus.PROPOSAL_READY, events = emptyList(), decision = decision
+        )
+
+        val proposal = requireNotNull(AgentDecisionMapper.pendingProposal(run))
+
+        assertEquals("Clean up the dialogue", proposal.summary)
+        assertEquals(4, proposal.expectedRevision)
+        assertEquals(listOf("evidence-1"), proposal.evidenceIds)
+        assertEquals(1, proposal.operations.size)
+    }
     @Test
     fun `publishable run contract decodes safe activity and proposal state`() {
         val run = Json.decodeFromString<AgentRun>("""
             {
-              "contractVersion":1,
+              "contractVersion":2,
               "runId":"run-1",
               "projectId":"project-1",
               "projectRevision":0,
@@ -34,11 +62,11 @@ class AgentRunContractTest {
 
     @Test fun `agent inventory declares selective consent and canonical contract versions`() {
         val request = request()
-        assertEquals("selective_analysis", request.mediaConsent.mode)
-        assertEquals("media-v1", request.mediaConsent.disclosureVersion)
+        assertEquals("video_analysis", request.mediaConsent.mode)
+        assertEquals("video-analysis-v2", request.mediaConsent.disclosureVersion)
         assertTrue(runCatching { java.time.Instant.parse(request.mediaConsent.grantedAt) }.isSuccess)
-        assertEquals(listOf(1), request.supportedContractVersions.agentRuns)
-        assertEquals(listOf(1), request.supportedContractVersions.editPrograms)
+        assertEquals(listOf(2), request.supportedContractVersions.agentRuns)
+        assertEquals(listOf(2), request.supportedContractVersions.editPrograms)
     }
 
     @Test fun `one run persists safe activity through iterative evidence passes`() = runTest {
@@ -177,31 +205,24 @@ class AgentRunContractTest {
         projectId = "project-1", deviceSessionId = "device-1", projectRevision = 4,
         intent = "Make this publishable",
         sources = listOf(Layer2SourceInventory("source-1", "a".repeat(64), 60_000, 1920, 1080, true)),
-        mediaIndex = RequestShapedMediaIndex(
-            indexId = "index-1", requestScope = MediaIndexScope.BROAD_EDITORIAL,
-            generatedAtEpochMs = 1, segments = emptyList(),
-            selections = listOf(MediaIndexSelection(
-                "selection-1", "source-1", 0, 1_000,
-                listOf(SelectionReason.REPRESENTATIVE_COVERAGE),
-                derivativeKinds = listOf(DerivativeKind.FRAME)
-            ))
-        )
+        transcript = emptyList()
     )
 
     private fun evidenceRun(sequence: Int, jobId: String, reused: Boolean) = AgentRun(
-        1, "run-1", "project-1", 4, AgentRunStatus.WAITING_FOR_EVIDENCE,
+        2, "run-1", "project-1", 4, AgentRunStatus.WAITING_FOR_EVIDENCE,
         listOf(
             event(sequence, "evidence_requested", "I need one precise range."),
             event(sequence + 1, "analyzing", "Preparing the requested evidence.")
         ),
         buildJsonObject {
-            put("type", "evidence_request")
+            put("type", "tool_request"); put("tool", "inspect_video_range")
             putJsonArray("jobs") {
                 add(buildJsonObject {
-                    put("id", jobId); put("sourceId", "source-1"); put("type", "audio")
-                    put("purpose", "Measure speech"); put("acceptedFormat", "audio/mp4")
+                    put("id", jobId); put("sourceId", "source-1"); put("type", "video")
+                    put("purpose", "video-inspection"); put("acceptedFormat", "video/mp4")
                     put("range", buildJsonObject { put("startMs", 1_000); put("endMs", 2_000) })
                     put("maximumBytes", 100_000); put("maximumDurationMs", 1_000)
+                    put("resolution", "LOW"); put("uncertainty", "")
                     put("expiresAt", "2026-07-29T16:00:00Z"); put("reused", reused)
                 })
             }
@@ -209,7 +230,7 @@ class AgentRunContractTest {
     )
 
     private fun terminalRun() = AgentRun(
-        1, "run-1", "project-1", 4, AgentRunStatus.PROPOSAL_READY,
+        2, "run-1", "project-1", 4, AgentRunStatus.PROPOSAL_READY,
         listOf(event(5, "proposal_ready", "The proposal is ready to preview.")),
         buildJsonObject {
             put("type", "edit_program"); put("expectedRevision", 4)
@@ -218,7 +239,7 @@ class AgentRunContractTest {
     )
 
     private fun repairFailedRun() = AgentRun(
-        1, "run-1", "project-1", 4, AgentRunStatus.WAITING_FOR_USER,
+        2, "run-1", "project-1", 4, AgentRunStatus.WAITING_FOR_USER,
         listOf(event(1, "proposal_repair_failed", "Provider output: malformed secret payload")),
         buildJsonObject {
             put("type", "clarification")
@@ -228,7 +249,7 @@ class AgentRunContractTest {
     )
 
     private fun repairedRun() = AgentRun(
-        1, "run-1", "project-1", 4, AgentRunStatus.PROPOSAL_READY,
+        2, "run-1", "project-1", 4, AgentRunStatus.PROPOSAL_READY,
         listOf(
             event(2, "proposal_repairing", "Repairing."),
             event(3, "proposal_repaired", "Repaired.")

@@ -1,6 +1,10 @@
 package ai.ctrlb.mobile.planner
 
-import ai.ctrlb.mobile.layer1.RequestShapedMediaIndex
+import ai.ctrlb.mobile.domain.EditOperation
+import ai.ctrlb.mobile.domain.PendingEditorialProposal
+import ai.ctrlb.mobile.domain.StagedEditorialPlan
+import ai.ctrlb.mobile.domain.SourceMedia
+import ai.ctrlb.mobile.domain.TranscriptWord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
@@ -8,6 +12,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import java.net.HttpURLConnection
 import java.net.URI
 
@@ -37,7 +43,41 @@ data class AgentRun(
     val projectRevision: Long,
     val status: AgentRunStatus,
     val events: List<AgentActivityEvent>,
-    val decision: JsonObject
+    val decision: JsonObject,
+    val usage: AgentUsageSummary = AgentUsageSummary()
+)
+
+@Serializable
+data class AgentUsageCall(
+    val callId: String,
+    val provider: String,
+    val model: String,
+    val purpose: String,
+    val inputTokens: Long = 0,
+    val outputTokens: Long = 0,
+    val thinkingTokens: Long = 0,
+    val cachedTokens: Long = 0,
+    val textTokens: Long = 0,
+    val videoTokens: Long = 0,
+    val totalTokens: Long = 0,
+    val estimatedCostMicros: Long = 0,
+    val occurredAt: String? = null,
+    val sourceId: String? = null,
+    val startMs: Long? = null,
+    val endMs: Long? = null,
+    val resolution: String? = null,
+    val costEstimated: Boolean = true
+)
+
+@Serializable
+data class AgentUsageSummary(
+    val calls: List<AgentUsageCall> = emptyList(),
+    val inputTokens: Long = 0,
+    val outputTokens: Long = 0,
+    val thinkingTokens: Long = 0,
+    val cachedTokens: Long = 0,
+    val totalTokens: Long = 0,
+    val estimatedCostMicros: Long = 0
 )
 
 @Serializable
@@ -47,7 +87,7 @@ data class AgentRunRequest(
     val projectRevision: Long,
     val intent: String,
     val sources: List<Layer2SourceInventory>,
-    val mediaIndex: RequestShapedMediaIndex,
+    val transcript: List<Layer2TranscriptWord> = emptyList(),
     val evidenceJobIds: List<String> = emptyList(),
     val existingOperations: List<JsonObject> = emptyList(),
     val budgets: Layer2Budgets = Layer2Budgets(),
@@ -55,19 +95,35 @@ data class AgentRunRequest(
     val supportedContractVersions: Layer2ContractVersions = Layer2ContractVersions()
 )
 
+fun sourceTranscript(words: List<TranscriptWord>, sources: List<SourceMedia>): List<Layer2TranscriptWord> {
+    var offset = 0L
+    val result = mutableListOf<Layer2TranscriptWord>()
+    sources.forEach { source ->
+        val sourceEnd = offset + source.durationMs
+        words.filter { it.range.startMs in offset until sourceEnd }.forEach { word ->
+            result += Layer2TranscriptWord(
+                source.fingerprint, word.text, word.range.startMs - offset, word.range.endMs.coerceAtMost(sourceEnd) - offset,
+                word.confidence, word.speakerId
+            )
+        }
+        offset = sourceEnd
+    }
+    return result
+}
+
 @Serializable
 data class Layer2MediaConsent(
-    val mode: String = "selective_analysis",
+    val mode: String = "video_analysis",
     val grantedAt: String = java.time.Instant.now().toString(),
-    val disclosureVersion: String = "media-v1"
+    val disclosureVersion: String = "video-analysis-v2"
 )
 
 @Serializable
 data class Layer2ContractVersions(
-    val agentRuns: List<Int> = listOf(1),
-    val activityEvents: List<Int> = listOf(1),
-    val evidenceRequests: List<Int> = listOf(1),
-    val editPrograms: List<Int> = listOf(1)
+    val agentRuns: List<Int> = listOf(2),
+    val activityEvents: List<Int> = listOf(2),
+    val videoToolRequests: List<Int> = listOf(2),
+    val editPrograms: List<Int> = listOf(2)
 )
 
 @Serializable
@@ -80,6 +136,7 @@ interface AgentRunGateway {
     suspend fun start(request: AgentRunRequest): AgentRun
     suspend fun continueWith(runId: String, evidenceJobIds: List<String>): AgentRun
     suspend fun recover(runId: String, action: String, clarification: String? = null): AgentRun
+    suspend fun cancel(runId: String): AgentRun = error("Cancellation is not implemented by this gateway.")
 }
 
 fun interface AgentEvidenceFulfiller {
@@ -117,7 +174,7 @@ data class AgentRecoveryState(
 
 @Serializable
 data class PersistedAgentRun(
-    val contractVersion: Int = 1,
+    val contractVersion: Int = 2,
     val runId: String,
     val projectId: String,
     val projectRevision: Long,
@@ -125,20 +182,48 @@ data class PersistedAgentRun(
     val events: List<AgentActivityEvent>,
     val decision: JsonObject,
     val fulfilledEvidenceJobIds: List<String> = emptyList(),
-    val recovery: AgentRecoveryState? = null
+    val recovery: AgentRecoveryState? = null,
+    val usage: AgentUsageSummary = AgentUsageSummary()
 )
 
+object AgentDecisionMapper {
+    private val json = Json {
+        ignoreUnknownKeys = true
+        classDiscriminator = "type"
+    }
+
+    fun pendingProposal(run: PersistedAgentRun): PendingEditorialProposal? {
+        if (run.status != AgentRunStatus.PROPOSAL_READY ||
+            run.decision["type"]?.jsonPrimitive?.content != "edit_program") return null
+        val operations = run.decision["operations"]?.jsonArray?.map { element ->
+            json.decodeFromJsonElement(EditOperation.serializer(), element)
+        } ?: return null
+        val evidenceIds = run.decision["operations"]?.jsonArray.orEmpty()
+            .flatMap { operation ->
+                operation.jsonObject["evidenceIds"]?.jsonArray.orEmpty()
+                    .map { it.jsonPrimitive.content }
+            }.distinct()
+        return PendingEditorialProposal(
+            expectedRevision = run.decision["expectedRevision"]?.jsonPrimitive?.content?.toLongOrNull()
+                ?: run.projectRevision,
+            summary = run.decision["summary"]?.jsonPrimitive?.content ?: "Proposed edit",
+            plan = StagedEditorialPlan(emptyList(), emptyList(), emptyList()),
+            operations = operations,
+            evidenceIds = evidenceIds
+        )
+    }
+}
+
 @Serializable
-private data class EvidenceRequestDecision(val type: String, val jobs: List<AuthorizedEvidenceJob>)
+private data class EvidenceRequestDecision(val type: String, val tool: String, val jobs: List<AuthorizedEvidenceJob>)
 
 class AgentRunCoordinator(
     private val gateway: AgentRunGateway,
-    private val fulfiller: AgentEvidenceFulfiller,
-    private val maximumEvidencePasses: Int = 8
+    private val fulfiller: AgentEvidenceFulfiller
 ) {
     private val json = Json { ignoreUnknownKeys = false }
     private val allowedActivityTypes = setOf(
-        "started", "index_received", "analyzing", "evidence_requested", "evidence_received",
+        "started", "transcript_received", "analyzing", "evidence_requested", "evidence_received",
         "proposal_repairing", "proposal_repaired", "proposal_repair_failed",
         "clarification", "proposal_ready", "partial", "failed", "cancelled"
     )
@@ -201,11 +286,9 @@ class AgentRunCoordinator(
         onPersist: suspend (PersistedAgentRun) -> Unit
     ): PersistedAgentRun {
         var snapshot = initial
-        var passes = 0
         while (snapshot.status == AgentRunStatus.WAITING_FOR_EVIDENCE) {
-            if (++passes > maximumEvidencePasses) throw IllegalStateException("Agent requested too many evidence passes.")
             val evidence = json.decodeFromJsonElement(EvidenceRequestDecision.serializer(), snapshot.decision)
-            require(evidence.type == "evidence_request" && evidence.jobs.isNotEmpty()) { "Agent evidence request is invalid." }
+            require(evidence.type == "tool_request" && evidence.tool == "inspect_video_range" && evidence.jobs.isNotEmpty()) { "Agent video tool request is invalid." }
             val completed = evidence.jobs.map { job -> if (job.reused) job.id else fulfiller.fulfill(job) }
             require(completed.toSet() == evidence.jobs.map { it.id }.toSet()) { "Evidence fulfillment returned unexpected job ids." }
             snapshot = snapshot.copy(fulfilledEvidenceJobIds = (snapshot.fulfilledEvidenceJobIds + completed).distinct())
@@ -217,7 +300,7 @@ class AgentRunCoordinator(
     }
 
     private fun reduce(previous: PersistedAgentRun?, run: AgentRun, request: AgentRunRequest): PersistedAgentRun {
-        require(run.contractVersion == 1) { "Unsupported agent run contract." }
+        require(run.contractVersion == 2) { "Unsupported agent run contract." }
         require(run.runId.isNotBlank()) { "Agent run id is missing." }
         require(run.projectId == request.projectId && run.projectRevision == request.projectRevision) {
             "Agent run targets stale project state."
@@ -244,7 +327,7 @@ class AgentRunCoordinator(
         require(!conflicts) { "Agent activity sequence was rewritten." }
         val merged = (prior + incoming).distinctBy(AgentActivityEvent::sequence).sortedBy(AgentActivityEvent::sequence)
         require(merged.zipWithNext().all { (left, right) -> right.sequence > left.sequence }) { "Agent activity is out of order." }
-        require(run.decision["type"]?.jsonPrimitive?.content in setOf("evidence_request", "edit_program", "clarification", "fallback")) {
+        require(run.decision["type"]?.jsonPrimitive?.content in setOf("tool_request", "edit_program", "clarification", "fallback")) {
             "Unsupported agent decision."
         }
         val recovery = when {
@@ -259,7 +342,7 @@ class AgentRunCoordinator(
         }
         return PersistedAgentRun(
             run.contractVersion, run.runId, run.projectId, run.projectRevision, run.status,
-            merged, run.decision, previous?.fulfilledEvidenceJobIds.orEmpty(), recovery
+            merged, run.decision, previous?.fulfilledEvidenceJobIds.orEmpty(), recovery, run.usage
         )
     }
 }
@@ -299,6 +382,21 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
                 RecoverAgentRunRequest(action, clarification)
             )
         )
+    }
+
+    override suspend fun cancel(runId: String): AgentRun = withContext(Dispatchers.IO) {
+        require(runId.isNotBlank() && runId.length <= 200)
+        val endpoint = URI("${runsEndpoint.toString().trimEnd('/')}/$runId")
+        val connection = endpoint.toURL().openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "DELETE"
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 30_000
+            connection.setRequestProperty("Authorization", "Bearer ${accessToken()}")
+            val status = connection.responseCode
+            if (status !in 200..299) throw IllegalArgumentException("Agent cancellation failed ($status)")
+            connection.inputStream.bufferedReader().use { json.decodeFromString(AgentRun.serializer(), it.readText()) }
+        } finally { connection.disconnect() }
     }
 
     private suspend fun post(endpoint: URI, body: String): AgentRun {
