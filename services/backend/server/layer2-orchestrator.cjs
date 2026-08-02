@@ -3,7 +3,7 @@
 const { recoverProposal } = require('./proposal-recovery.cjs');
 const { validateContextualSpeechDecision } = require('./contextual-speech.cjs');
 const ALLOWED_OPERATIONS = new Set([
-  'remove_fumbles', 'set_audio_cleanup', 'set_audio_levels',
+  'remove_fumbles', 'remove_awkward_silences', 'set_color_grade', 'set_audio_cleanup', 'set_audio_levels',
   'add_sound_effect', 'set_background_music', 'add_captions', 'semantic_visual',
 ]);
 const MAX_VIDEO_RANGE_MS = 30_000;
@@ -16,20 +16,86 @@ const DEFAULT_BUDGETS = Object.freeze({
   maximumDurationMs: 10 * 60 * 1000,
   retentionMs: 6 * 60 * 60 * 1000,
 });
-const SYSTEM_POLICY = `You are ctrlB's private Layer 2 editorial orchestrator for desktop and mobile.
-Return one JSON object with type edit_program, clarification, or fallback, or call inspect_video_range.
-Begin with the request-shaped media index in the compact inventory. Treat its ranges as locally measured candidates and coverage, not as editorial meaning.
-For speech edits, preserve meaning and truthful intent first, select the strongest complete delivery second, and use recording quality or continuity only as tie-breakers unless a defect makes a take unusable.
-Possible fillers, pauses, repeated phrases, transcript confidence, and technical scores only locate candidates; none can authorize a cut.
-Before remove_fumbles, compare the local speaking-rate distribution for that speaker and scene, surrounding words/video, word or phoneme timing, waveform and scene-aware noise, alternate takes when present, user intent, and a simulated post-cut transition.
-Low transcript confidence requires re-listening or an alternate transcription view; it never means automatic keep or remove.
-Every remove_fumbles operation must include speechDecision with meaningPreserved:true, completeDeliverySelected:true, a contextual rationale, supplied contextEvidenceIds, locatorSignals, contextSignals, transcriptUncertain, uncertaintyAction, and technicalTieBreakerOnly.
-For sources longer than 30 seconds, use inspect_video_range for the audiovisual ranges needed to verify the transcript and edit. Each range is at most 30 seconds. Use LOW normally. Use HIGH only after an overlapping LOW range left a specific uncertainty.
+const SYSTEM_POLICY = `You are ctrlB's private video-editing agent.
+Follow the latest user message while retaining relevant context from earlier messages.
+Return one JSON object with type edit_program, clarification, or fallback, or call one supplied tool.
+Use proposal tools for operations they cover; their descriptions contain the operation-specific editorial policy.
+Proposal tools build a private draft. After every successful tool result, continue until all necessary operations are present, then call finalize_edit_program.
+Call one tool at a time so each deterministic result can inform the next step.
+Call ask_clarification when a consequential user choice is unresolved. Never guess merely to avoid asking.
+Use inspect_video_range when more audiovisual evidence is needed. Each range is at most 30 seconds. Use LOW normally. Use HIGH only after overlapping LOW evidence left a specific uncertainty.
 Never request rendered output, executable instructions, or provider credentials.
 Every edit operation must cite supplied evidence IDs and include confidence from 0 to 1.
 Do not invent evidence. When evidence is missing or uncertain, request bounded evidence, clarify, or fall back.
-Supported operations: remove_fumbles, set_audio_cleanup, set_audio_levels, add_sound_effect, set_background_music, add_captions, semantic_visual.
-Semantic visuals require a cited face, screen, product, OCR, or salience subject with normalized bounds. Unsafe reframing must return clarification or fallback.`;
+Use fine tools: one effect, one exact range, and one bounded parameter set per call. Never ask a tool to scan or choose its own settings.
+Supported rendered operations: remove_fumbles, remove_awkward_silences, set_color_grade, set_audio_cleanup, set_audio_levels, add_sound_effect, set_background_music, add_captions, semantic_visual.
+Semantic visuals require a cited face, screen, product, OCR, or salience subject with normalized bounds. Unsafe reframing must return clarification or fallback.
+
+Examples:
+User asks to remove a pause but no covering video is attached -> call inspect_video_range.
+User asks to make pacing better without a settled pacing preference -> call ask_clarification with Natural and Tight choices.
+User asks for captions and quieter music with sufficient evidence -> call both focused proposal tools, consume their results, then call finalize_edit_program.
+A tool rejects an invented evidence ID -> correct the call using only supplied IDs; never fabricate a replacement.`;
+
+const PROPOSAL_TOOL_TYPES = Object.freeze({
+  propose_remove_fumbles: 'remove_fumbles',
+  propose_remove_awkward_silences: 'remove_awkward_silences',
+  propose_reduce_background_noise: 'set_audio_cleanup',
+  propose_set_dialogue_loudness: 'set_audio_levels',
+  propose_set_music_ducking: 'set_audio_levels',
+  propose_place_sound_effect: 'add_sound_effect',
+  propose_place_background_music: 'set_background_music',
+  propose_add_caption_cue: 'add_captions',
+  propose_adjust_exposure: 'set_color_grade',
+  propose_adjust_temperature: 'set_color_grade',
+  propose_adjust_contrast: 'set_color_grade',
+  propose_adjust_saturation: 'set_color_grade',
+  propose_adjust_highlights: 'set_color_grade',
+  propose_adjust_shadows: 'set_color_grade',
+  propose_adjust_skin_protection: 'set_color_grade',
+  propose_add_visual_callout: 'semantic_visual',
+  propose_add_visual_spotlight: 'semantic_visual',
+  propose_reframe_subject: 'semantic_visual',
+});
+
+function fineOperationFor(call, operationType, inventory) {
+  const args = call.args || {};
+  const raw = args.operation || {};
+  const target = raw.sourceId ? {
+    sourceId: raw.sourceId, startMs: raw.startMs, endMs: raw.endMs,
+  } : undefined;
+  const common = { ...raw, type: operationType, ...(target ? { target } : {}) };
+  const sourceIndex = inventory.sources.findIndex((source) => source.id === raw.sourceId);
+  const sourceOffset = sourceIndex < 0 ? 0 : inventory.sources.slice(0, sourceIndex)
+    .reduce((total, source) => total + source.durationMs, 0);
+  if (call.name === 'propose_reduce_background_noise') return common;
+  if (call.name === 'propose_set_dialogue_loudness') {
+    return { ...common, parameter: 'dialogue_loudness', dialogueLufs: raw.targetLufs };
+  }
+  if (call.name === 'propose_set_music_ducking') {
+    return { ...common, parameter: 'music_ducking', musicDuckDb: raw.duckDb };
+  }
+  if (call.name === 'propose_place_sound_effect') {
+    return { ...common, atSourceMs: sourceOffset + raw.startMs, durationMs: raw.endMs - raw.startMs };
+  }
+  if (call.name === 'propose_place_background_music') return common;
+  if (call.name === 'propose_add_caption_cue') {
+    return { ...common, cues: [{ text: raw.text, range: { startMs: sourceOffset + raw.startMs, endMs: sourceOffset + raw.endMs } }] };
+  }
+  if (call.name.startsWith('propose_adjust_')) {
+    const parameter = call.name.slice('propose_adjust_'.length).replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+    return { ...common, parameter, value: raw.value };
+  }
+  if (['propose_add_visual_callout', 'propose_add_visual_spotlight', 'propose_reframe_subject'].includes(call.name)) {
+    const visualSourceIndex = inventory.sources.findIndex((source) => source.id === raw.range?.sourceId);
+    const offset = inventory.sources.slice(0, visualSourceIndex).reduce((total, source) => total + source.durationMs, 0);
+    const treatment = { propose_add_visual_callout: 'CALLOUT', propose_add_visual_spotlight: 'SPOTLIGHT',
+      propose_reframe_subject: 'REFRAME' }[call.name];
+    return { ...common, treatment, range: { startMs: offset + raw.range.startMs, endMs: offset + raw.range.endMs },
+      target: raw.range };
+  }
+  return common;
+}
 
 function orchestrationError(message, status = 400, code = 'invalid_orchestration') {
   return Object.assign(new Error(message), { status, code });
@@ -90,6 +156,9 @@ function validateInventory(value) {
       ...(typeof word?.speakerId === 'string' ? { speakerId: word.speakerId.slice(0, 100) } : {}),
     })) : [],
     observations: Array.isArray(value.observations) ? value.observations.slice(0, 10_000) : [],
+    agentDraft: value.agentDraft && Array.isArray(value.agentDraft.operations) ? {
+      operations: value.agentDraft.operations.slice(0, 200),
+    } : null,
     clarifications: Array.isArray(value.clarifications)
       ? value.clarifications.slice(-10).map((item) => {
           if (typeof item !== 'string' || !item.trim() || item.length > 500) {
@@ -98,6 +167,13 @@ function validateInventory(value) {
           return item.trim();
         })
       : [],
+    messages: Array.isArray(value.messages) ? value.messages.slice(-30).map((message) => {
+      if (!message || !['user', 'assistant'].includes(message.role) || typeof message.content !== 'string' ||
+          !message.content.trim() || message.content.length > 4000) {
+        throw orchestrationError('Invalid conversation message.', 400, 'invalid_conversation');
+      }
+      return { role: message.role, content: message.content.trim() };
+    }) : [],
     supportedContractVersions: {
       agentRuns: [2], activityEvents: [2], videoToolRequests: [2], editPrograms: [2],
     },
@@ -202,6 +278,21 @@ function validateObservations(items, inventory, evidence) {
   });
 }
 
+function transcriptTextForProjectRange(inventory, startMs, endMs) {
+  let offset = 0;
+  const words = [];
+  for (const source of inventory.sources) {
+    const localStart = Math.max(0, startMs - offset);
+    const localEnd = Math.min(source.durationMs, endMs - offset);
+    if (localEnd > localStart) {
+      words.push(...inventory.transcript.filter((word) => word.sourceId === source.id &&
+        word.startMs < localEnd && word.endMs > localStart).sort((a, b) => a.startMs - b.startMs).map((word) => word.text));
+    }
+    offset += source.durationMs;
+  }
+  return words.join(' ').replace(/\s+/g, ' ').trim().toLocaleLowerCase();
+}
+
 function validateEditProgram(decision, inventory, observations) {
   if (decision.expectedRevision !== inventory.projectRevision || !Array.isArray(decision.operations)) {
     throw orchestrationError('Invalid edit program envelope.', 422, 'invalid_edit_program');
@@ -220,6 +311,98 @@ function validateEditProgram(decision, inventory, observations) {
       throw orchestrationError('Edit operation has missing, stale, or invented evidence.', 422, 'invalid_evidence_reference');
     }
     if (operation.type === 'remove_fumbles') validateContextualSpeechDecision(operation, evidenceIds);
+    if (operation.target && ['set_color_grade', 'set_audio_cleanup', 'set_audio_levels', 'add_sound_effect',
+      'set_background_music', 'add_captions', 'semantic_visual'].includes(operation.type)) {
+      const target = operation.target;
+      const source = inventory.sources.find((item) => item.id === target?.sourceId);
+      if (!source || !Number.isSafeInteger(target.startMs) || !Number.isSafeInteger(target.endMs) ||
+          target.startMs < 0 || target.endMs <= target.startMs || target.endMs > source.durationMs) {
+        throw orchestrationError('Fine edit target is outside its source.', 422, 'invalid_edit_target');
+      }
+      const covered = observations.some((item) => operation.evidenceIds.includes(item.id) &&
+        item.sourceId === target.sourceId && item.startMs <= target.startMs && item.endMs >= target.endMs);
+      if (!covered) throw orchestrationError('Fine edit target is not covered by cited evidence.', 422, 'invalid_evidence_reference');
+      if (typeof operation.reason !== 'string' || !operation.reason.trim()) {
+        throw orchestrationError('Fine edit requires a reason.', 422, 'invalid_edit_program');
+      }
+    }
+    if (['remove_fumbles', 'remove_awkward_silences'].includes(operation.type)) {
+      const sources = new Map(inventory.sources.map((source) => [source.id, source]));
+      if (!Array.isArray(operation.ranges) || !operation.ranges.length) {
+        throw orchestrationError('Speech and silence removals require bounded ranges.', 422, 'invalid_edit_program');
+      }
+      for (const range of operation.ranges) {
+        const source = sources.get(range?.sourceId);
+        if (!source || !Number.isSafeInteger(range.startMs) || !Number.isSafeInteger(range.endMs) ||
+            range.startMs < 0 || range.endMs <= range.startMs || range.endMs > source.durationMs ||
+            !Array.isArray(range.evidenceIds) || !range.evidenceIds.length ||
+            range.evidenceIds.some((id) => !evidenceIds.has(id))) {
+          throw orchestrationError('Removal range is outside its source or lacks evidence.', 422, 'invalid_edit_program');
+        }
+        const coversRange = observations.some((item) => range.evidenceIds.includes(item.id) &&
+          item.sourceId === range.sourceId && item.startMs <= range.startMs && item.endMs >= range.endMs);
+        if (!coversRange) {
+          throw orchestrationError('Removal range is not covered by cited evidence.', 422, 'invalid_evidence_reference');
+        }
+      }
+    }
+    if (operation.type === 'set_color_grade') {
+      const bounds = { exposure: [-1, 1], temperature: [-1, 1], contrast: [.75, 1.35],
+        saturation: [.7, 1.3], highlights: [-1, 1], shadows: [-1, 1], skinProtection: [0, 1] };
+      const limit = bounds[operation.parameter];
+      const grade = operation.grade;
+      const legacyGrade = grade && typeof grade === 'object' &&
+        [['exposure', -1, 1], ['temperature', -1, 1], ['contrast', .75, 1.35], ['saturation', .7, 1.3],
+          ['highlights', -1, 1], ['shadows', -1, 1], ['skinProtection', 0, 1]]
+          .every(([key, minimum, maximum]) => typeof grade[key] === 'number' && grade[key] >= minimum && grade[key] <= maximum);
+      if (!legacyGrade && (!limit || typeof operation.value !== 'number' || operation.value < limit[0] || operation.value > limit[1])) {
+        throw orchestrationError('Color adjustment is outside renderer-safe bounds.', 422, 'invalid_edit_program');
+      }
+    }
+    if (operation.type === 'set_audio_cleanup' &&
+        (typeof operation.strength !== 'number' || operation.strength < 0 || operation.strength > 1)) {
+      throw orchestrationError('Audio cleanup strength is invalid.', 422, 'invalid_edit_program');
+    }
+    if (operation.type === 'set_audio_levels') {
+      const validDialogue = operation.parameter === 'dialogue_loudness' && typeof operation.dialogueLufs === 'number' &&
+        operation.dialogueLufs >= -24 && operation.dialogueLufs <= -12;
+      const validDucking = operation.parameter === 'music_ducking' && typeof operation.musicDuckDb === 'number' &&
+        operation.musicDuckDb >= -18 && operation.musicDuckDb <= -3 && Number.isSafeInteger(operation.attackMs) &&
+        operation.attackMs >= 0 && operation.attackMs <= 2000 && Number.isSafeInteger(operation.releaseMs) &&
+        operation.releaseMs >= 0 && operation.releaseMs <= 5000;
+      const legacy = operation.parameter == null && typeof operation.dialogueLufs === 'number' &&
+        operation.dialogueLufs >= -24 && operation.dialogueLufs <= -12 && typeof operation.musicDuckDb === 'number' &&
+        operation.musicDuckDb >= -18 && operation.musicDuckDb <= -3;
+      if (!validDialogue && !validDucking && !legacy) throw orchestrationError('Audio level operation is invalid.', 422, 'invalid_edit_program');
+    }
+    if (operation.type === 'add_sound_effect' &&
+        (!Number.isSafeInteger(operation.atSourceMs) || operation.atSourceMs < 0 ||
+         (operation.target && (operation.atSourceMs !== inventory.sources.slice(0,
+           inventory.sources.findIndex((source) => source.id === operation.target.sourceId))
+           .reduce((total, source) => total + source.durationMs, operation.target.startMs) ||
+           !Number.isSafeInteger(operation.durationMs) || operation.durationMs < 1)) ||
+         typeof operation.catalogId !== 'string' || !operation.catalogId ||
+         typeof operation.gainDb !== 'number' || operation.gainDb < -36 || operation.gainDb > 0)) {
+      throw orchestrationError('Sound effect parameters are invalid.', 422, 'invalid_edit_program');
+    }
+    if (operation.type === 'set_background_music' &&
+        (typeof operation.catalogId !== 'string' || !operation.catalogId ||
+         typeof operation.gainDb !== 'number' || operation.gainDb < -40 || operation.gainDb > -6 ||
+         typeof operation.loop !== 'boolean' || (operation.target && (!Number.isSafeInteger(operation.fadeInMs) || operation.fadeInMs < 0 ||
+         !Number.isSafeInteger(operation.fadeOutMs) || operation.fadeOutMs < 0 ||
+         operation.fadeInMs + operation.fadeOutMs > operation.target.endMs - operation.target.startMs)))) {
+      throw orchestrationError('Background music parameters are invalid.', 422, 'invalid_edit_program');
+    }
+    if (operation.type === 'add_captions') {
+      if (!Array.isArray(operation.cues) || !operation.cues.length || operation.style !== 'bold-bottom' ||
+          operation.cues.some((cue) => typeof cue?.text !== 'string' || !cue.text.trim() || cue.text.length > 120 ||
+            !Number.isSafeInteger(cue.range?.startMs) || !Number.isSafeInteger(cue.range?.endMs) ||
+            cue.range.startMs < 0 || cue.range.endMs <= cue.range.startMs ||
+            !transcriptTextForProjectRange(inventory, cue.range.startMs, cue.range.endMs)
+              .includes(cue.text.replace(/\s+/g, ' ').trim().toLocaleLowerCase()))) {
+        throw orchestrationError('Captions must be bounded and grounded in the supplied transcript.', 422, 'invalid_edit_program');
+      }
+    }
     if (operation.type === 'semantic_visual') {
       const subject = operation.subject;
       const bounds = subject?.bounds;
@@ -240,6 +423,12 @@ function validateEditProgram(decision, inventory, observations) {
       }
     }
   }
+  for (const operation of decision.operations.filter((item) => item.type === 'set_color_grade' && item.parameter === 'skinProtection')) {
+    const companion = decision.operations.some((item) => item.type === 'set_color_grade' && item.id !== operation.id &&
+      item.parameter !== 'skinProtection' && item.target?.sourceId === operation.target?.sourceId &&
+      item.target?.startMs < operation.target?.endMs && item.target?.endMs > operation.target?.startMs);
+    if (!companion) throw orchestrationError('Skin protection requires an overlapping color adjustment.', 422, 'invalid_edit_program');
+  }
   return {
     type: 'edit_program',
     expectedRevision: decision.expectedRevision,
@@ -255,10 +444,13 @@ function validateDecision(decision, inventory, evidence) {
   const observations = [...inventory.observations, ...added];
   if (decision.type === 'edit_program') return { ...validateEditProgram(decision, inventory, observations), observations: added };
   if (decision.type === 'clarification') {
-    if (typeof decision.question !== 'string' || !decision.question.trim() || decision.question.length > 500) {
+    const questions = Array.isArray(decision.questions) ? decision.questions.slice(0, 3) : [];
+    if (!questions.length || questions.some((question) => typeof question?.id !== 'string' ||
+        typeof question?.prompt !== 'string' || !question.prompt.trim() || question.prompt.length > 500 ||
+        !Array.isArray(question.options) || question.options.length < 2 || question.options.length > 4)) {
       throw orchestrationError('Invalid clarification.', 502, 'invalid_planner_response');
     }
-    return { type: 'clarification', question: decision.question, options: Array.isArray(decision.options) ? decision.options.slice(0, 5) : [], observations: added };
+    return { type: 'clarification', questions, question: questions[0].prompt, options: questions[0].options, observations: added };
   }
   if (decision.type === 'fallback') {
     return { type: 'fallback', reason: typeof decision.reason === 'string' ? decision.reason.slice(0, 1000) : 'Insufficient evidence.', observations: added };
@@ -289,7 +481,7 @@ class Layer2Orchestrator {
       timelineReferences: [{ sourceId: request.source.id, startMs: request.startMs, endMs: request.endMs }],
     });
     return {
-      id: authorized.job.id, sourceId: request.source.id, type: 'video', purpose: 'video-inspection',
+      id: authorized.job.id, toolCallId: authorized.job.id, sourceId: request.source.id, type: 'video', purpose: 'video-inspection',
       acceptedFormat: 'video/mp4', range: { startMs: request.startMs, endMs: request.endMs },
       maximumBytes: inventory.budgets.maximumBytes, maximumDurationMs: request.endMs - request.startMs,
       resolution: request.resolution, uncertainty: request.uncertainty || '',
@@ -299,10 +491,10 @@ class Layer2Orchestrator {
 
   async bootstrap(principal, payload) {
     const inventory = validateInventory(payload);
-    if (inventory.evidenceJobIds.length || inventory.sources.length !== 1 || inventory.sources[0].durationMs > MAX_VIDEO_RANGE_MS) return null;
+    if (inventory.evidenceJobIds.length) return null;
     const source = inventory.sources[0];
     const job = await this.authorizeVideo(principal, inventory, {
-      source, startMs: 0, endMs: source.durationMs, resolution: 'LOW', uncertainty: '',
+      source, startMs: 0, endMs: Math.min(source.durationMs, MAX_VIDEO_RANGE_MS), resolution: 'LOW', uncertainty: '',
     }, 'request_selected');
     return { type: 'tool_request', tool: 'inspect_video_range', jobs: [job], bootstrap: true };
   }
@@ -310,28 +502,97 @@ class Layer2Orchestrator {
   async orchestrate(principal, payload) {
     const inventory = validateInventory(payload);
     const evidence = await evidenceFor(inventory, principal, this.derivativeJobs);
-    const raw = await this.decide({
-      systemPolicy: SYSTEM_POLICY,
-      inventory,
-      evidence,
-    });
-    if (raw.toolCall) {
-      const request = validateVideoToolCall(raw.toolCall, inventory, evidence);
-      const job = await this.authorizeVideo(principal, inventory, request);
-      if (job.reused && inventory.evidenceJobIds.includes(job.id)) {
-        return { type: 'fallback', reason: 'The requested video range is already attached.', observations: [], _usage: [raw.usage] };
+    let workingInventory = inventory;
+    let raw = await this.decide({ systemPolicy: SYSTEM_POLICY, inventory: workingInventory, evidence });
+    const usage = [];
+    const drafts = new Map((workingInventory.agentDraft?.operations || []).map((operation) => [operation.id, operation]));
+    const draftObservations = [];
+    for (let iteration = 0; iteration < 8 && raw.toolCall; iteration++) {
+      usage.push(raw.usage);
+      const call = raw.toolCall;
+      if (call.name === 'inspect_video_range') {
+        const request = validateVideoToolCall(call, workingInventory, evidence);
+        const job = await this.authorizeVideo(principal, workingInventory, request);
+        if (job.reused && workingInventory.evidenceJobIds.includes(job.id)) {
+          return { type: 'fallback', reason: 'The requested video range is already attached.', observations: [], _usage: usage };
+        }
+        return {
+          type: 'tool_request', tool: 'inspect_video_range', jobs: [job], _usage: usage,
+          _agentState: { operations: [...drafts.values()], observations: draftObservations },
+        };
       }
-      return { type: 'tool_request', tool: 'inspect_video_range', jobs: [job], _usage: [raw.usage] };
+      if (call.name === 'ask_clarification') {
+        const questions = Array.isArray(call.args?.questions) ? call.args.questions.slice(0, 3) : [];
+        if (!questions.length) throw orchestrationError('Clarification questions are required.', 422, 'invalid_clarification');
+        return {
+          type: 'clarification', questions, question: questions[0].prompt, options: questions[0].options,
+          observations: [], _usage: usage,
+          _agentState: { operations: [...drafts.values()], observations: draftObservations },
+        };
+      }
+      if (call.name === 'finish_without_proposal') {
+        return { type: 'fallback', reason: String(call.args?.reason || 'The edit could not be grounded.').slice(0, 1000), observations: [], _usage: usage };
+      }
+      if (call.name === 'finalize_edit_program') {
+        const ids = Array.isArray(call.args?.operationIds) ? call.args.operationIds : [];
+        if (ids.some((id) => !drafts.has(id)) || new Set(ids).size !== ids.length) {
+          throw orchestrationError('Finalization referenced an unknown draft operation.', 422, 'invalid_edit_program');
+        }
+        const decision = validateDecision({
+          type: 'edit_program', expectedRevision: call.args.expectedRevision,
+          summary: call.args.summary, operations: ids.map((id) => drafts.get(id)), observations: [],
+        }, workingInventory, evidence);
+        return { ...decision, _usage: usage };
+      }
+      if (call.name === 'remove_draft_operation') {
+        const operationId = call.args?.operationId;
+        const removed = typeof operationId === 'string' && drafts.delete(operationId);
+        raw = await this.decide.toolResult({
+          systemPolicy: SYSTEM_POLICY, inventory: workingInventory, evidence, history: raw.history, toolCall: call,
+          result: removed ? { ok: true, operationId, draftOperationCount: drafts.size }
+            : { ok: false, code: 'unknown_draft_operation', message: 'The requested draft operation does not exist.' },
+        });
+        continue;
+      }
+      const operationType = PROPOSAL_TOOL_TYPES[call.name];
+      if (!operationType) throw orchestrationError('Planner requested an unsupported tool.', 422, 'unsupported_tool_call');
+      let result;
+      try {
+        const args = call.args || {};
+        const operation = fineOperationFor(call, operationType, workingInventory);
+        const validated = validateDecision({
+          type: 'edit_program', expectedRevision: args.expectedRevision,
+          summary: args.summary, operations: [operation], observations: args.observations,
+        }, workingInventory, evidence);
+        const accepted = validated.operations[0];
+        drafts.set(accepted.id, accepted);
+        workingInventory = {
+          ...workingInventory,
+          observations: [...workingInventory.observations, ...(validated.observations || [])],
+        };
+        draftObservations.push(...(validated.observations || []));
+        result = { ok: true, operationId: accepted.id, operationType, draftOperationCount: drafts.size };
+      } catch (error) {
+        result = { ok: false, code: error.code || 'invalid_tool_arguments', message: String(error.message).slice(0, 300) };
+      }
+      if (typeof this.decide.toolResult !== 'function') {
+        throw orchestrationError('The model provider cannot continue after tool execution.', 500, 'agent_loop_unavailable');
+      }
+      raw = await this.decide.toolResult({
+        systemPolicy: SYSTEM_POLICY, inventory: workingInventory, evidence,
+        history: raw.history, toolCall: call, result,
+      });
     }
+    if (raw.toolCall) return { type: 'fallback', reason: 'The bounded editing loop reached its iteration limit.', observations: [], _usage: usage };
     const recovered = await recoverProposal({
       primary: raw,
       repair: this.repair,
-      validate: (value) => validateDecision(value, inventory, evidence),
-      originalRequest: inventory,
-      editorialIntent: inventory.intent,
+      validate: (value) => validateDecision(value, workingInventory, evidence),
+      originalRequest: workingInventory,
+      editorialIntent: workingInventory.intent,
     });
     const decision = recovered.decision;
-    const usage = recovered.usage || [];
+    usage.push(...(recovered.usage || []));
     return {
       ...decision,
       ...(recovered.recovery ? { _recovery: recovered.recovery } : {}),

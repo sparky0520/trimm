@@ -13,4 +13,5 @@ test('cloud publishes one versioned public contract manifest', () => {
     assert.equal(manifest.contracts[name], 1);
   }
   for (const name of ['agentRuns', 'activityEvents', 'videoToolRequests', 'editPrograms']) assert.equal(manifest.contracts[name], 2);
+  for (const name of ['conversations', 'conversationMessages']) assert.equal(manifest.contracts[name], 3);
 });

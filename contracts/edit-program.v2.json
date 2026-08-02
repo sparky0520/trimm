@@ -5,6 +5,21 @@
   "required": ["type", "expectedRevision", "summary", "operations", "observations"],
   "properties": {
     "type": { "const": "edit_program" }, "expectedRevision": { "type": "integer", "minimum": 0 },
-    "summary": { "type": "string" }, "operations": { "type": "array" }, "observations": { "type": "array" }
+    "summary": { "type": "string" },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "enabled", "confidence", "evidenceIds"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "enum": ["remove_fumbles", "remove_awkward_silences", "set_color_grade", "set_audio_cleanup", "set_audio_levels", "add_sound_effect", "set_background_music", "add_captions", "semantic_visual"] },
+          "enabled": { "type": "boolean" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "evidenceIds": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+        }
+      }
+    },
+    "observations": { "type": "array" }
   }, "additionalProperties": false
 }

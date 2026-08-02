@@ -1,7 +1,7 @@
 'use strict';
 
 const { GoogleGenAI } = require('@google/genai');
-const { AGENT_DECISION_SCHEMA, INSPECT_VIDEO_RANGE_TOOL } = require('./agent-decision-schema.cjs');
+const { AGENT_DECISION_SCHEMA, AGENT_TOOLS } = require('./agent-decision-schema.cjs');
 const { geminiUsage } = require('./model-usage.cjs');
 
 function createGeminiDecisionProvider({
@@ -56,7 +56,7 @@ function createGeminiDecisionProvider({
         systemInstruction: systemPolicy,
         responseMimeType: 'application/json',
         responseJsonSchema,
-        ...(tools ? { tools: [{ functionDeclarations: [INSPECT_VIDEO_RANGE_TOOL] }] } : {}),
+        ...(tools ? { tools: [{ functionDeclarations: AGENT_TOOLS }] } : {}),
         temperature,
         maxOutputTokens: 4096,
         thinkingConfig: { thinkingLevel: 'LOW' },
@@ -66,14 +66,21 @@ function createGeminiDecisionProvider({
     if (!response.text && !functionCall) throw Object.assign(new Error('Gemini returned no decision.'), { status: 502, code: 'empty_gemini_response' });
     return {
       rawText: response.text || null,
-      toolCall: functionCall ? { name: functionCall.name, args: functionCall.args || {} } : null,
+      toolCall: functionCall ? { name: functionCall.name, args: functionCall.args || {}, ...(functionCall.id ? { id: functionCall.id } : {}) } : null,
+      modelContent: response.candidates?.[0]?.content || (functionCall ? {
+        role: 'model', parts: [{ functionCall }],
+      } : { role: 'model', parts: [{ text: response.text || '' }] }),
+      history: [...(Array.isArray(contents) ? contents : [{ role: 'user', parts: [{ text: String(contents) }] }]),
+        response.candidates?.[0]?.content || (functionCall
+          ? { role: 'model', parts: [{ functionCall }] }
+          : { role: 'model', parts: [{ text: response.text || '' }] })],
       finishReason: response.candidates?.[0]?.finishReason || null,
       usage: geminiUsage(response, { purpose, model, media: usageMedia }),
     };
   }
-  const decide = async ({ systemPolicy, inventory, evidence }) => generate({
+  const decide = async ({ systemPolicy, inventory, evidence, history }) => generate({
     systemPolicy,
-    contents: [{ role: 'user', parts: [
+    contents: history || [{ role: 'user', parts: [
       ...(await Promise.all(evidence.map(videoPart))),
       { text: JSON.stringify({ inventory, evidence: evidence.map(({ bytes, providerFile, persistProviderFile, ...item }) => item) }) },
     ] }],
@@ -83,6 +90,14 @@ function createGeminiDecisionProvider({
       sourceId: evidence.at(-1).sourceId, startMs: evidence.at(-1).startMs,
       endMs: evidence.at(-1).endMs, resolution: evidence.at(-1).resolution,
     } : {},
+  });
+  decide.toolResult = async ({ systemPolicy, inventory, evidence, history, toolCall, result }) => decide({
+    systemPolicy, inventory, evidence,
+    history: [...history, { role: 'user', parts: [{ functionResponse: {
+      name: toolCall.name,
+      ...(toolCall.id ? { id: toolCall.id } : {}),
+      response: result,
+    } }] }],
   });
   decide.capabilities = Object.freeze({
     nativeVideoAudio: true,

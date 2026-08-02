@@ -2,14 +2,14 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createGeminiDecisionProvider } = require('../server/gemini-agent.cjs');
-const { validateVideoToolCall } = require('../server/layer2-orchestrator.cjs');
+const { Layer2Orchestrator, validateDecision, validateVideoToolCall } = require('../server/layer2-orchestrator.cjs');
 const { AgentRuns } = require('../server/agent-runs.cjs');
 
 const inventory = {
   sources: [{ id: 'source-1', durationMs: 120_000 }], observations: [],
 };
 
-test('Gemini receives video directly at the requested media resolution and exposes one tool', async () => {
+test('Gemini receives video directly and exposes evidence and focused proposal tools', async () => {
   let request;
   const decide = createGeminiDecisionProvider({ client: { models: { generateContent: async (value) => {
     request = value;
@@ -24,7 +24,15 @@ test('Gemini receives video directly at the requested media resolution and expos
   assert.equal(result.toolCall.name, 'inspect_video_range');
   assert.equal(request.contents[0].parts[0].inlineData.mimeType, 'video/mp4');
   assert.equal(request.contents[0].parts[0].mediaResolution.level, 'MEDIA_RESOLUTION_LOW');
-  assert.deepEqual(request.config.tools[0].functionDeclarations.map((item) => item.name), ['inspect_video_range']);
+  assert.deepEqual(request.config.tools[0].functionDeclarations.map((item) => item.name), [
+    'inspect_video_range', 'propose_remove_fumbles', 'propose_remove_awkward_silences',
+    'propose_reduce_background_noise', 'propose_set_dialogue_loudness', 'propose_set_music_ducking',
+    'propose_place_sound_effect', 'propose_place_background_music', 'propose_add_caption_cue',
+    'propose_adjust_exposure', 'propose_adjust_temperature', 'propose_adjust_contrast', 'propose_adjust_saturation',
+    'propose_adjust_highlights', 'propose_adjust_shadows', 'propose_adjust_skin_protection',
+    'propose_add_visual_callout', 'propose_add_visual_spotlight', 'propose_reframe_subject',
+    'ask_clarification', 'finalize_edit_program', 'remove_draft_operation', 'finish_without_proposal',
+  ]);
 });
 
 test('a persisted Gemini file reference is reused after creating a new provider instance', async () => {
@@ -63,6 +71,50 @@ test('video ranges are at most 30 seconds and HIGH requires overlapping LOW evid
   } }, inventory, [{ sourceId: 'source-1', startMs: 0, endMs: 30_000, resolution: 'LOW' }]).resolution, 'HIGH');
 });
 
+test('awkward-silence proposals require source-bounded ranges covered by cited evidence', () => {
+  const decisionInventory = {
+    projectRevision: 3,
+    sources: [{ id: 'source-1', durationMs: 120_000 }],
+    observations: [{
+      id: 'silence-1', sourceId: 'source-1', startMs: 10_000, endMs: 14_000,
+      description: 'An awkward pause between clauses.', confidence: 0.9, resolution: 'LOW',
+    }],
+  };
+  const valid = validateDecision({
+    type: 'edit_program', expectedRevision: 3, summary: 'Tighten one awkward pause.', observations: [],
+    operations: [{
+      id: 'silence-op-1', type: 'remove_awkward_silences', enabled: true, confidence: 0.9,
+      evidenceIds: ['silence-1'], pacing: 'natural',
+      ranges: [{ sourceId: 'source-1', startMs: 10_500, endMs: 13_500, evidenceIds: ['silence-1'] }],
+    }],
+  }, decisionInventory, []);
+  assert.equal(valid.operations[0].type, 'remove_awkward_silences');
+  assert.throws(() => validateDecision({
+    type: 'edit_program', expectedRevision: 3, summary: 'Invalid range.', observations: [],
+    operations: [{
+      id: 'silence-op-2', type: 'remove_awkward_silences', enabled: true, confidence: 0.9,
+      evidenceIds: ['silence-1'], pacing: 'natural',
+      ranges: [{ sourceId: 'source-1', startMs: 9_000, endMs: 15_000, evidenceIds: ['silence-1'] }],
+    }],
+  }, decisionInventory, []), (error) => error.code === 'invalid_evidence_reference');
+});
+
+test('fine operations require an exact source interval covered by their cited evidence', () => {
+  const decisionInventory = {
+    projectRevision: 2, sources: [{ id: 'source-1', durationMs: 20_000 }],
+    transcript: [], observations: [{ id: 'noise-1', sourceId: 'source-1', startMs: 2_000, endMs: 8_000,
+      description: 'Steady fan noise.', confidence: .9, resolution: 'LOW' }],
+  };
+  const operation = { id: 'noise-op', type: 'set_audio_cleanup', enabled: true, confidence: .9,
+    evidenceIds: ['noise-1'], target: { sourceId: 'source-1', startMs: 3_000, endMs: 7_000 },
+    sourceId: 'source-1', startMs: 3_000, endMs: 7_000, strength: .45, reason: 'Fan noise is audible.' };
+  assert.equal(validateDecision({ type: 'edit_program', expectedRevision: 2, summary: 'Clean one interval.',
+    operations: [operation], observations: [] }, decisionInventory, []).operations[0].target.startMs, 3_000);
+  assert.throws(() => validateDecision({ type: 'edit_program', expectedRevision: 2, summary: 'Too broad.',
+    operations: [{ ...operation, target: { ...operation.target, startMs: 1_000 } }], observations: [] }, decisionInventory, []),
+  (error) => error.code === 'invalid_evidence_reference');
+});
+
 test('short runs bootstrap video and continuations require exactly the requested job id', async () => {
   const orchestrator = {
     bootstrap: async () => ({ type: 'tool_request', tool: 'inspect_video_range', jobs: [{ id: 'job-1' }] }),
@@ -76,4 +128,54 @@ test('short runs bootstrap video and continuations require exactly the requested
     (error) => error.code === 'unexpected_evidence');
   const completed = await runs.continue({ id: 'user-1' }, 'run-1', { evidenceJobIds: ['job-1'] });
   assert.equal(completed.status, 'partial');
+});
+
+test('a follow-up message continues the same LangGraph-backed conversation', async () => {
+  const received = [];
+  const orchestrator = {
+    bootstrap: async () => ({ type: 'clarification', question: 'Natural or tight?', options: ['natural', 'tight'], observations: [] }),
+    orchestrate: async (_principal, value) => {
+      received.push(value);
+      return { type: 'fallback', reason: 'Updated', observations: [] };
+    },
+  };
+  const runs = new AgentRuns({ orchestrator, id: () => 'chat-run' });
+  const started = await runs.start({ id: 'user-1' }, {
+    projectId: 'project-1', projectRevision: 1, intent: 'Remove awkward silences',
+  });
+  assert.equal(started.status, 'waiting_for_user');
+  const continued = await runs.continue({ id: 'user-1' }, 'chat-run', { message: 'Keep it natural.' });
+  assert.equal(continued.status, 'partial');
+  assert.equal(received[0].intent, 'Keep it natural.');
+  assert.deepEqual(received[0].messages.map((item) => item.role), ['user', 'assistant', 'user']);
+});
+
+test('the bounded agent loop returns tool results to Gemini before finalizing an atomic proposal', async () => {
+  const calls = [];
+  const decide = async () => ({
+    toolCall: { name: 'propose_reduce_background_noise', args: {
+      expectedRevision: 4, summary: 'Clean the dialogue.', observations: [],
+      operation: { id: 'cleanup-1', enabled: true, confidence: .9, evidenceIds: ['obs-1'],
+        sourceId: 'source-1', startMs: 0, endMs: 20_000, strength: .5, reason: 'Steady background noise.' },
+    } }, history: [], usage: { callId: 'call-1' },
+  });
+  decide.toolResult = async ({ result }) => {
+    calls.push(result);
+    return { toolCall: { name: 'finalize_edit_program', args: {
+      expectedRevision: 4, summary: 'Clean the dialogue.', operationIds: ['cleanup-1'],
+    } }, history: [], usage: { callId: 'call-2' } };
+  };
+  const orchestrator = new Layer2Orchestrator({ derivativeJobs: {}, decide });
+  const result = await orchestrator.orchestrate({ id: 'user-1' }, {
+    projectId: 'project-1', deviceSessionId: 'device-1', projectRevision: 4,
+    intent: 'Clean up the dialogue',
+    sources: [{ id: 'source-1', fingerprint: 'a'.repeat(32), durationMs: 20_000, width: 1920, height: 1080, hasAudio: true }],
+    transcript: [], evidenceJobIds: [], existingOperations: [],
+    observations: [{ id: 'obs-1', sourceId: 'source-1', startMs: 0, endMs: 20_000, description: 'Audible steady background noise.', confidence: .9, resolution: 'LOW' }],
+    budgets: {}, mediaConsent: { mode: 'video_analysis', grantedAt: new Date().toISOString(), disclosureVersion: 'v2' },
+    supportedContractVersions: { agentRuns: [2], activityEvents: [2], videoToolRequests: [2], editPrograms: [2] },
+  });
+  assert.equal(calls[0].ok, true);
+  assert.equal(result.type, 'edit_program');
+  assert.equal(result.operations[0].type, 'set_audio_cleanup');
 });

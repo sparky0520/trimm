@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ctrlb.ai/contracts/conversation.v3.json",
+  "type": "object",
+  "required": ["contractVersion", "conversationId", "projectId", "projectRevision", "status", "events", "outcome", "usage"],
+  "properties": {
+    "contractVersion": { "const": 3 },
+    "conversationId": { "type": "string" },
+    "projectId": { "type": "string" },
+    "projectRevision": { "type": "integer", "minimum": 0 },
+    "status": { "enum": ["waiting_for_tool", "waiting_for_user", "awaiting_approval", "completed", "failed", "cancelled"] },
+    "events": { "type": "array" },
+    "outcome": { "type": "object" },
+    "usage": { "type": "object" }
+  },
+  "additionalProperties": false
+}

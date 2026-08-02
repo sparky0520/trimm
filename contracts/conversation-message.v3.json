@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ctrlb.ai/contracts/conversation-message.v3.json",
+  "type": "object",
+  "properties": {
+    "message": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "projectRevision": { "type": "integer", "minimum": 0 },
+    "existingOperations": { "type": "array" },
+    "toolArtifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["toolCallId", "artifactId"],
+        "properties": { "toolCallId": { "type": "string" }, "artifactId": { "type": "string" } },
+        "additionalProperties": false
+      }
+    }
+  },
+  "oneOf": [
+    { "required": ["message", "projectRevision", "existingOperations"] },
+    { "required": ["toolArtifacts"] }
+  ],
+  "additionalProperties": false
+}

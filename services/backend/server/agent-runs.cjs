@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const { VolatileAgentRunStore } = require('./agent-run-store.cjs');
 const { ProposalRecoveryError } = require('./proposal-recovery.cjs');
 const { usageSummary } = require('./model-usage.cjs');
+const { AgentGraph } = require('./agent-graph.cjs');
 
 const STATUS_FOR = Object.freeze({
   tool_request: 'waiting_for_evidence',
@@ -25,6 +26,7 @@ class AgentRuns {
     this.store = store;
     this.now = now;
     this.id = id;
+    this.graph = new AgentGraph({ orchestrator });
   }
 
   event(run, type, message) {
@@ -52,10 +54,20 @@ class AgentRuns {
   applyDecision(run, outcome) {
     run.attempts ||= [];
     const recovery = outcome?._recovery;
+    const agentState = outcome?._agentState;
     run.usage = usageSummary([...(run.usage?.calls || run.usage || []), ...(outcome?._usage || [])]);
     const decision = Object.fromEntries(
-      Object.entries(outcome).filter(([key]) => key !== '_recovery' && key !== '_usage')
+      Object.entries(outcome).filter(([key]) => !['_recovery', '_usage', '_agentState'].includes(key))
     );
+    if (agentState) {
+      run.inventory = {
+        ...run.inventory,
+        agentDraft: { operations: agentState.operations || [] },
+        observations: [...(run.inventory.observations || []), ...(agentState.observations || [])],
+      };
+    } else if (decision.type !== 'tool_request') {
+      run.inventory = { ...run.inventory, agentDraft: null };
+    }
     if (recovery) {
       this.event(run, 'proposal_repairing', 'The proposal needed a bounded structural repair.');
       run.attempts.push(...recovery.attempts);
@@ -65,6 +77,9 @@ class AgentRuns {
       run.recovery = { ...run.recovery, status: 'resolved', canRetry: false, canClarify: false };
     }
     run.decision = decision;
+    run.inventory.messages = [...(run.inventory.messages || []), {
+      role: 'assistant', content: JSON.stringify(decision),
+    }].slice(-30);
     if (Array.isArray(decision.observations) && decision.observations.length) {
       run.inventory = { ...run.inventory, observations: [...(run.inventory.observations || []), ...decision.observations] };
     }
@@ -98,6 +113,13 @@ class AgentRuns {
   }
 
   async start(principal, inventory) {
+    const initialIntent = typeof inventory?.intent === 'string' ? inventory.intent.trim() : '';
+    inventory = {
+      ...inventory,
+      messages: Array.isArray(inventory?.messages) ? inventory.messages : initialIntent
+        ? [{ role: 'user', content: initialIntent }]
+        : [],
+    };
     let run = {
       id: this.id(),
       ownerId: principal.id,
@@ -116,8 +138,9 @@ class AgentRuns {
     this.event(run, 'analyzing', 'Reviewing the transcript and authorized video for a publishable first cut.');
     run = await this.store.create(run);
     try {
-      const bootstrap = await this.orchestrator.bootstrap(principal, inventory);
-      this.applyDecision(run, bootstrap || await this.orchestrator.orchestrate(principal, inventory));
+      this.applyDecision(run, await this.graph.invoke({
+        mode: 'start', principal, inventory, threadId: run.id,
+      }));
       run = await this.store.save(run, run.stateVersion);
     } catch (error) {
       if (this.recoverFailure(run, error)) {
@@ -136,10 +159,29 @@ class AgentRuns {
   async continue(principal, runId, update) {
     let run = await this.owned(principal, runId);
     const recovering = run.status === 'waiting_for_user' && run.recovery?.status === 'repair_failed';
-    if (!recovering && run.status !== 'waiting_for_evidence') {
-      throw Object.assign(new Error('Agent run is not waiting for evidence.'), { status: 409, code: 'agent_run_not_waiting' });
+    const message = typeof update?.message === 'string' ? update.message.trim() : '';
+    const conversational = ['waiting_for_user', 'proposal_ready', 'partial'].includes(run.status) && message;
+    if (!recovering && run.status !== 'waiting_for_evidence' && !conversational) {
+      throw Object.assign(new Error('Agent run is not waiting for evidence or a user message.'), { status: 409, code: 'agent_run_not_waiting' });
     }
-    if (recovering) {
+    if (message.length > 2000) {
+      throw Object.assign(new Error('The follow-up message is too long.'), { status: 400, code: 'message_too_long' });
+    }
+    if (conversational) {
+      const nextRevision = update?.projectRevision;
+      if (nextRevision !== undefined && (!Number.isSafeInteger(nextRevision) || nextRevision < run.projectRevision)) {
+        throw Object.assign(new Error('The conversation project revision is stale.'), { status: 409, code: 'stale_project_revision' });
+      }
+      run.inventory = {
+        ...run.inventory,
+        intent: message,
+        projectRevision: nextRevision ?? run.projectRevision,
+        ...(Array.isArray(update?.existingOperations) ? { existingOperations: update.existingOperations.slice(0, 200) } : {}),
+        messages: [...(run.inventory.messages || []), { role: 'user', content: message }].slice(-30),
+      };
+      run.projectRevision = run.inventory.projectRevision;
+      this.event(run, 'analyzing', 'Continuing the same conversation with your latest request.');
+    } else if (recovering) {
       if (!['retry', 'clarify'].includes(update?.action)) {
         throw Object.assign(new Error('Retry or clarification is required.'), { status: 400, code: 'recovery_action_required' });
       }
@@ -179,7 +221,9 @@ class AgentRuns {
     }
     run = await this.store.save(run, run.stateVersion);
     try {
-      this.applyDecision(run, await this.orchestrator.orchestrate(principal, run.inventory));
+      this.applyDecision(run, await this.graph.invoke({
+        mode: 'continue', principal, inventory: run.inventory, threadId: run.id,
+      }));
       run = await this.store.save(run, run.stateVersion);
     } catch (error) {
       if (this.recoverFailure(run, error)) {
@@ -213,6 +257,27 @@ class AgentRuns {
     run.status = 'cancelled';
     run.decision = { type: 'fallback', reason: 'The conversation was cancelled.' };
     this.event(run, 'cancelled', 'The video edit was cancelled. Nothing was applied.');
+    run = await this.store.save(run, run.stateVersion);
+    return this.view(run);
+  }
+
+  async review(principal, runId, action, update = {}) {
+    let run = await this.owned(principal, runId);
+    if (run.status !== 'proposal_ready' || !['accept', 'reject'].includes(action)) {
+      throw Object.assign(new Error('The conversation has no pending proposal for this action.'), { status: 409, code: 'proposal_not_pending' });
+    }
+    if (action === 'accept') {
+      if (!Number.isSafeInteger(update.projectRevision) || update.projectRevision <= run.projectRevision || !Array.isArray(update.existingOperations)) {
+        throw Object.assign(new Error('Accepted proposal state is required.'), { status: 400, code: 'accepted_project_state_required' });
+      }
+      run.projectRevision = update.projectRevision;
+      run.inventory = { ...run.inventory, projectRevision: update.projectRevision, existingOperations: update.existingOperations.slice(0, 200) };
+    }
+    const content = action === 'accept' ? 'I accepted this proposal.' : 'I rejected this proposal.';
+    run.inventory.messages = [...(run.inventory.messages || []), { role: 'user', content }].slice(-30);
+    run.status = 'partial';
+    run.decision = { type: 'fallback', reason: action === 'accept' ? 'Proposal accepted.' : 'Proposal rejected.' };
+    this.event(run, 'partial', action === 'accept' ? 'The proposal was accepted.' : 'The proposal was rejected without changing the project.');
     run = await this.store.save(run, run.stateVersion);
     return this.view(run);
   }
