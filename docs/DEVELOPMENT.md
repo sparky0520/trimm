@@ -2,7 +2,7 @@
 
 ## Scope
 
-Work here for Android UI, chat state, local Layer 1 indexing, selective media
+Work here for Android UI, conversation state, selective tool-artifact media
 preparation, Media3 preview/export, Android persistence, device capability
 reporting, and Google Play client flows.
 
@@ -24,6 +24,12 @@ The debug APK is under `app/build/outputs/apk/debug`.
 The accepted cloud versions are pinned in
 `app/src/test/resources/contracts/cloud-contract.lock.json`. Do not add a
 handwritten cloud field without a matching canonical cloud contract change.
+
+The active cloud-agent path uses `/v1/conversations`: the full transcript and
+the initial authorized video window go to Gemini, later media is prepared only
+for an `inspect_video_range` tool call, and ordinary chat messages resume the
+same conversation. Legacy Layer 1 data remains decodable for existing projects
+but is not generated for this path.
 
 ## Device capability tiers
 

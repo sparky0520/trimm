@@ -43,6 +43,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
         val evidenceGraphs = mutableListOf<EvidenceGraph>()
         val evidenceReferences = mutableListOf<EvidenceGraphReference>()
         val analysisWarnings = mutableListOf<String>()
+        val cloudConversationEnabled = BuildConfig.AGENT_RUNS_URL.isNotBlank()
         var transcriptionFailed = false
         val evidenceCache = EvidenceCache(java.io.File(applicationContext.filesDir, "evidence"))
         var offset = 0L
@@ -87,14 +88,16 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                         override suspend fun analyze(context: AnalyzerContext): List<EvidenceObservation> = throw failure
                     } }
                 )
-                val graph = EvidencePipeline(evidenceCache, listOf(
-                    LocalVisualAnalyzer(applicationContext),
-                    LocalSoundAnalyzer(applicationContext, localWords.map(TranscriptWord::range)),
-                    speechAnalyzer
-                ) + unsupportedAnalyzers()).analyze(source)
-                evidenceGraphs += graph
-                evidenceReferences += graph.reference()
-            } else {
+                if (!cloudConversationEnabled) {
+                    val graph = EvidencePipeline(evidenceCache, listOf(
+                        LocalVisualAnalyzer(applicationContext),
+                        LocalSoundAnalyzer(applicationContext, localWords.map(TranscriptWord::range)),
+                        speechAnalyzer
+                    ) + unsupportedAnalyzers()).analyze(source)
+                    evidenceGraphs += graph
+                    evidenceReferences += graph.reference()
+                }
+            } else if (!cloudConversationEnabled) {
                 val graph = EvidencePipeline(evidenceCache, listOf(LocalVisualAnalyzer(applicationContext), object : EvidenceAnalyzer {
                     override val identity = AnalyzerIdentity("ctrlB speech structure", "1.0.0", ExecutionLocation.EXTERNAL_SERVICE)
                     override suspend fun analyze(context: AnalyzerContext): List<EvidenceObservation> = throw UnsupportedOperationException("Source has no audio track.")
@@ -104,26 +107,26 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
             }
             offset += source.durationMs
         }
-        val editorialProfile = EditorialProfileDeriver.derive(evidenceGraphs, project.preferences)
+        val editorialProfile = if (cloudConversationEnabled) null else EditorialProfileDeriver.derive(evidenceGraphs, project.preferences)
         progress("speech-hints", 65)
-        val candidates = FumbleDetector.detect(words, project.durationMs, project.preferences.pace, editorialProfile)
-        val retained = project.operations.filter {
+        val candidates = if (cloudConversationEnabled) emptyList() else FumbleDetector.detect(words, project.durationMs, project.preferences.pace, editorialProfile!!)
+        val retained = if (cloudConversationEnabled) project.operations.filter(OperationValidator::isRendered).toMutableList() else project.operations.filter {
             it !is RemoveFumbles && it !is AddCaptions && OperationValidator.isPlannerAvailable(it)
         }.toMutableList()
         val captions = CaptionSegmenter.segment(words)
-        val takeGroups = TakeRanker(profile = editorialProfile).detectAndRank(
+        val takeGroups = if (cloudConversationEnabled) emptyList() else TakeRanker(profile = editorialProfile!!).detectAndRank(
             TakeCandidateGenerator.fromEvidence(evidenceGraphs),
             TakeConstraints(mustKeepWording = listOf(project.preferences.mustKeep).filter(String::isNotBlank))
         )
-        val storyGraph = StoryGraphDeriver.derive(evidenceGraphs, takeGroups, project.preferences.mustKeep)
-        val mediaIndex = RequestShapedMediaIndexBuilder.build(
+        val storyGraph = if (cloudConversationEnabled) null else StoryGraphDeriver.derive(evidenceGraphs, takeGroups, project.preferences.mustKeep)
+        val mediaIndex = if (cloudConversationEnabled) null else RequestShapedMediaIndexBuilder.build(
             evidenceGraphs,
             MediaIndexRequestPlanner.plan(
                 initialPrompt,
                 evidenceGraphs.map { it.sourceFingerprint to it.sourceDurationMs }
             )
         )
-        if (project.preferences.captions && captions.isNotEmpty()) retained += AddCaptions(cues = captions)
+        if (!cloudConversationEnabled && project.preferences.captions && captions.isNotEmpty()) retained += AddCaptions(cues = captions)
         progress("persist", 90)
         var analyzed = project.copy(
             analysis = Analysis(
@@ -207,13 +210,13 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
             val planning = runCatching {
                 val prompt = initialPrompt
                 val client = PlannerClient(BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken)
-                var packet = BoundedEvidenceRetriever.retrieve(evidenceGraphs, storyGraph, EvidenceRetrievalQuery(prompt))
+                var packet = BoundedEvidenceRetriever.retrieve(evidenceGraphs, requireNotNull(storyGraph), EvidenceRetrievalQuery(prompt))
                 val learnedTaste = CreatorPreferenceResolver.resolve(analyzed.creatorPreferences, analyzed.preferences)
                 var response = client.plan(PlannerPrivacyBoundary.create(prompt, analyzed.source, analyzed.preferences, analyzed.operations, analyzed.revision, packet, learnedTaste))
                 var additionalPasses = 0
                 while (response is PlannerEvidenceRequest && additionalPasses++ < 2) {
                     val query = response.query.copy(excludeEvidenceIds = response.query.excludeEvidenceIds + packet.items.map { it.id })
-                    val additional = BoundedEvidenceRetriever.retrieve(evidenceGraphs, storyGraph, query)
+                    val additional = BoundedEvidenceRetriever.retrieve(evidenceGraphs, requireNotNull(storyGraph), query)
                     packet = packet.copy(items = (packet.items + additional.items).distinctBy { it.id })
                     response = client.plan(PlannerPrivacyBoundary.create(prompt, analyzed.source, analyzed.preferences, analyzed.operations, analyzed.revision, packet, learnedTaste))
                 }

@@ -35,7 +35,7 @@ android {
             backendUrl.takeIf { it.isNotEmpty() }?.let { "$it/v1/mobile/plan" } ?: ""
         ).get()
         val agentRunsUrl = providers.gradleProperty("CTRLB_AGENT_RUNS_URL").orElse(
-            backendUrl.takeIf { it.isNotEmpty() }?.let { "$it/v1/agent/runs" } ?: ""
+            backendUrl.takeIf { it.isNotEmpty() }?.let { "$it/v1/conversations" } ?: ""
         ).get()
         val transcriptionUrl = providers.gradleProperty("CTRLB_TRANSCRIPTION_URL").orElse(
             backendUrl.takeIf { it.isNotEmpty() }?.let { "$it/v1/transcribe" } ?: ""

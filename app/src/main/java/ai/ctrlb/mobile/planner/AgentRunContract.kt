@@ -14,6 +14,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.net.HttpURLConnection
 import java.net.URI
 
@@ -80,6 +82,15 @@ data class AgentUsageSummary(
     val estimatedCostMicros: Long = 0
 )
 
+@Serializable data class ClarificationOption(val id: String, val label: String, val description: String)
+@Serializable data class ClarificationQuestion(
+    val id: String,
+    val prompt: String,
+    val options: List<ClarificationOption>,
+    val recommendedOptionId: String = ""
+)
+@Serializable data class ClarificationDecision(val type: String, val questions: List<ClarificationQuestion>)
+
 @Serializable
 data class AgentRunRequest(
     val projectId: String,
@@ -127,7 +138,15 @@ data class Layer2ContractVersions(
 )
 
 @Serializable
-data class ContinueAgentRunRequest(val evidenceJobIds: List<String>)
+data class ToolArtifactResult(val toolCallId: String, val artifactId: String)
+
+@Serializable
+data class ContinueAgentRunRequest(
+    val toolArtifacts: List<ToolArtifactResult> = emptyList(),
+    val message: String? = null,
+    val projectRevision: Long? = null,
+    val existingOperations: List<JsonObject> = emptyList()
+)
 
 @Serializable
 data class RecoverAgentRunRequest(val action: String, val clarification: String? = null)
@@ -135,6 +154,8 @@ data class RecoverAgentRunRequest(val action: String, val clarification: String?
 interface AgentRunGateway {
     suspend fun start(request: AgentRunRequest): AgentRun
     suspend fun continueWith(runId: String, evidenceJobIds: List<String>): AgentRun
+    suspend fun sendMessage(runId: String, message: String, projectRevision: Long, existingOperations: List<JsonObject>): AgentRun =
+        error("Conversation messages are not implemented by this gateway.")
     suspend fun recover(runId: String, action: String, clarification: String? = null): AgentRun
     suspend fun cancel(runId: String): AgentRun = error("Cancellation is not implemented by this gateway.")
 }
@@ -212,6 +233,12 @@ object AgentDecisionMapper {
             evidenceIds = evidenceIds
         )
     }
+
+    fun clarification(run: PersistedAgentRun): List<ClarificationQuestion> {
+        if (run.status != AgentRunStatus.WAITING_FOR_USER || run.decision["type"]?.jsonPrimitive?.content != "clarification") return emptyList()
+        return runCatching { json.decodeFromJsonElement(ClarificationDecision.serializer(), run.decision).questions }
+            .getOrDefault(emptyList())
+    }
 }
 
 @Serializable
@@ -278,6 +305,22 @@ class AgentRunCoordinator(
         val snapshot = reduce(retrying, run, request)
         onPersist(snapshot)
         return advance(snapshot, request, onPersist)
+    }
+
+    suspend fun message(
+        previous: PersistedAgentRun,
+        request: AgentRunRequest,
+        message: String,
+        existingOperations: List<JsonObject>,
+        onPersist: suspend (PersistedAgentRun) -> Unit
+    ): PersistedAgentRun {
+        require(message.isNotBlank() && message.length <= 2_000)
+        var snapshot = reduce(previous, gateway.sendMessage(
+            previous.runId, message.trim(), request.projectRevision, existingOperations
+        ), request)
+        onPersist(snapshot)
+        snapshot = advance(snapshot, request, onPersist)
+        return snapshot
     }
 
     private suspend fun advance(
@@ -366,8 +409,21 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
         require(runId.isNotBlank() && runId.length <= 200)
         require(evidenceJobIds.isNotEmpty())
         post(
-            URI("${runsEndpoint.toString().trimEnd('/')}/$runId/continue"),
-            json.encodeToString(ContinueAgentRunRequest.serializer(), ContinueAgentRunRequest(evidenceJobIds))
+            URI("${runsEndpoint.toString().trimEnd('/')}/$runId/messages"),
+            json.encodeToString(ContinueAgentRunRequest.serializer(), ContinueAgentRunRequest(
+                toolArtifacts = evidenceJobIds.map { ToolArtifactResult(it, it) }
+            ))
+        )
+    }
+
+    override suspend fun sendMessage(runId: String, message: String, projectRevision: Long, existingOperations: List<JsonObject>): AgentRun = withContext(Dispatchers.IO) {
+        require(runId.isNotBlank() && runId.length <= 200)
+        require(message.isNotBlank() && message.length <= 2_000)
+        post(
+            URI("${runsEndpoint.toString().trimEnd('/')}/$runId/messages"),
+            json.encodeToString(ContinueAgentRunRequest.serializer(), ContinueAgentRunRequest(
+                message = message.trim(), projectRevision = projectRevision, existingOperations = existingOperations
+            ))
         )
     }
 
@@ -376,7 +432,7 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
         require(action in setOf("retry", "clarify"))
         if (action == "clarify") require(!clarification.isNullOrBlank() && clarification.length <= 500)
         post(
-            URI("${runsEndpoint.toString().trimEnd('/')}/$runId/continue"),
+            URI("${runsEndpoint.toString().trimEnd('/')}/$runId/messages"),
             json.encodeToString(
                 RecoverAgentRunRequest.serializer(),
                 RecoverAgentRunRequest(action, clarification)
@@ -395,7 +451,7 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
             connection.setRequestProperty("Authorization", "Bearer ${accessToken()}")
             val status = connection.responseCode
             if (status !in 200..299) throw IllegalArgumentException("Agent cancellation failed ($status)")
-            connection.inputStream.bufferedReader().use { json.decodeFromString(AgentRun.serializer(), it.readText()) }
+            connection.inputStream.bufferedReader().use { decodeRun(it.readText()) }
         } finally { connection.disconnect() }
     }
 
@@ -422,11 +478,46 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
                     }
                 )
             }
-            connection.inputStream.bufferedReader().use {
-                json.decodeFromString(AgentRun.serializer(), it.readText())
-            }
+            connection.inputStream.bufferedReader().use { decodeRun(it.readText()) }
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun decodeRun(text: String): AgentRun {
+        val root = json.parseToJsonElement(text).jsonObject
+        if (root["conversationId"] == null) return json.decodeFromString(AgentRun.serializer(), text)
+        val publicStatus = root.getValue("status").jsonPrimitive.content
+        val status = when (publicStatus) {
+            "waiting_for_tool" -> AgentRunStatus.WAITING_FOR_EVIDENCE
+            "awaiting_approval" -> AgentRunStatus.PROPOSAL_READY
+            "completed" -> AgentRunStatus.PARTIAL
+            else -> json.decodeFromJsonElement(AgentRunStatus.serializer(), root.getValue("status"))
+        }
+        val publicOutcome = root.getValue("outcome").jsonObject
+        val outcome = when (publicOutcome["type"]?.jsonPrimitive?.content) {
+            "tool_call" -> buildJsonObject {
+                put("type", "tool_request")
+                put("tool", publicOutcome.getValue("name"))
+                put("jobs", publicOutcome.getValue("calls"))
+            }
+            "proposal" -> buildJsonObject {
+                publicOutcome.forEach { (key, value) -> if (key != "proposalId") put(key, value) }
+                put("type", "edit_program")
+            }
+            else -> publicOutcome
+        }
+        return AgentRun(
+            contractVersion = 2,
+            runId = root.getValue("conversationId").jsonPrimitive.content,
+            projectId = root.getValue("projectId").jsonPrimitive.content,
+            projectRevision = root.getValue("projectRevision").jsonPrimitive.content.toLong(),
+            status = status,
+            events = json.decodeFromJsonElement(
+                kotlinx.serialization.builtins.ListSerializer(AgentActivityEvent.serializer()), root.getValue("events")
+            ),
+            decision = outcome,
+            usage = root["usage"]?.let { json.decodeFromJsonElement(AgentUsageSummary.serializer(), it) } ?: AgentUsageSummary()
+        )
     }
 }

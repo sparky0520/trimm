@@ -7,6 +7,8 @@ import ai.ctrlb.mobile.work.ExportWorker
 import ai.ctrlb.mobile.planner.AgentRecoveryAction
 import ai.ctrlb.mobile.planner.AgentRecoveryStatus
 import ai.ctrlb.mobile.planner.AgentUsageSummary
+import ai.ctrlb.mobile.planner.AgentDecisionMapper
+import ai.ctrlb.mobile.planner.ClarificationQuestion
 import android.net.Uri
 import android.os.Bundle
 import android.content.Intent
@@ -367,6 +369,11 @@ class MainActivity : ComponentActivity() {
                 items(run.events, key = { "agent-${run.runId}-${it.sequence}" }) { event ->
                     AssistantChatBubble(accent = Lavender) {
                         Text(event.message, color = CreamRaised, lineHeight = 20.sp)
+                    }
+                }
+                AgentDecisionMapper.clarification(run).takeIf { it.isNotEmpty() }?.let { questions ->
+                    item(key = "clarification-${run.runId}-${run.events.size}") {
+                        AgentClarificationCard(questions, reviseStory)
                     }
                 }
                 run.recovery?.let { recovery ->
@@ -821,6 +828,63 @@ private fun reviewPercent(value: Float) = "${(value * 100).toInt()}%"
     }
 }
 
+@Composable private fun AgentClarificationCard(
+    questions: List<ClarificationQuestion>,
+    submit: (String) -> Unit
+) {
+    var selected by rememberSaveable(questions) { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var custom by rememberSaveable(questions) { mutableStateOf<Map<String, String>>(emptyMap()) }
+    val complete = questions.all { question -> selected[question.id] != null || !custom[question.id].isNullOrBlank() }
+    AssistantChatBubble(accent = Lavender) {
+        Text("A few choices before I edit", color = CreamRaised, fontWeight = FontWeight.Bold)
+        questions.forEach { question ->
+            Spacer(Modifier.height(12.dp))
+            Text(question.prompt, color = CreamRaised, fontWeight = FontWeight.SemiBold)
+            question.options.forEach { option ->
+                val active = selected[question.id] == option.id
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp).clickable {
+                        selected = selected + (question.id to option.id)
+                        custom = custom - question.id
+                    },
+                    color = if (active) Lavender.copy(alpha = .18f) else Raised,
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, if (active) Lavender else Border)
+                ) {
+                    Column(Modifier.padding(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(option.label, color = CreamRaised, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                            if (question.recommendedOptionId == option.id) Text("Recommended", color = Green, fontSize = 9.sp)
+                        }
+                        Text(option.description, color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+                    }
+                }
+            }
+            OutlinedTextField(
+                value = custom[question.id].orEmpty(),
+                onValueChange = { value ->
+                    custom = custom + (question.id to value.take(300))
+                    if (value.isNotBlank()) selected = selected - question.id
+                },
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                label = { Text("Something else") }, singleLine = true
+            )
+        }
+        Button(
+            onClick = {
+                val answer = questions.joinToString("\n") { question ->
+                    val text = custom[question.id]?.trim().takeUnless { it.isNullOrBlank() }
+                        ?: question.options.first { it.id == selected[question.id] }.label
+                    "${question.prompt}: $text"
+                }
+                submit(answer)
+            },
+            enabled = complete,
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+        ) { Text("Send answers") }
+    }
+}
+
 @Composable private fun FullscreenProjectPreview(project: MobileProject, close: () -> Unit) {
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -855,8 +919,8 @@ private fun reviewPercent(value: Float) = "${(value * 100).toInt()}%"
 }
 
 private fun formatDuration(ms: Long): String = "%d:%02d".format(ms / 60_000, (ms / 1_000) % 60)
-private fun operationTitle(op: EditOperation) = when (op) { is RemoveFumbles -> "Fumble removal"; is SetColorGrade -> "Frame-based color"; is SetAudioCleanup -> "Background noise cleanup"; is SetAudioLevels -> "Dialogue leveling"; is AddTransition -> "Transition"; is AddMotionPreset -> "Motion preset"; is AddSoundEffect -> "Sound effect"; is SetBackgroundMusic -> "Background music"; is AddCaptions -> "Captions"; is ApplySemanticVisual -> op.intent.name.lowercase().replaceFirstChar(Char::uppercase) }
-private fun operationDetail(op: EditOperation) = when (op) { is RemoveFumbles -> "${op.ranges.size} high-confidence cuts"; is SetColorGrade -> "Natural, skin-safe grade"; is SetAudioCleanup -> "Local speech-safe processing"; is SetAudioLevels -> "${op.dialogueLufs.toInt()} LUFS dialogue"; is AddTransition -> op.preset; is AddMotionPreset -> op.preset; is AddSoundEffect -> op.catalogId; is SetBackgroundMusic -> op.structure?.let { "${op.catalogId} • ${it.decisions.size} reported mix decisions" } ?: op.catalogId; is AddCaptions -> "${op.cues.size} timed caption cards"; is ApplySemanticVisual -> "${op.treatment.name.lowercase()} • ${op.subject.kind.name.lowercase()}" }
+private fun operationTitle(op: EditOperation) = when (op) { is RemoveFumbles -> "Fumble removal"; is RemoveAwkwardSilences -> "Awkward silence removal"; is SetColorGrade -> "Frame-based color"; is SetAudioCleanup -> "Background noise cleanup"; is SetAudioLevels -> "Dialogue leveling"; is AddTransition -> "Transition"; is AddMotionPreset -> "Motion preset"; is AddSoundEffect -> "Sound effect"; is SetBackgroundMusic -> "Background music"; is AddCaptions -> "Captions"; is ApplySemanticVisual -> op.intent.name.lowercase().replaceFirstChar(Char::uppercase) }
+private fun operationDetail(op: EditOperation) = when (op) { is RemoveFumbles -> "${op.ranges.size} high-confidence cuts"; is RemoveAwkwardSilences -> "${op.ranges.size} ${op.pacing} pacing cuts"; is SetColorGrade -> "Natural, skin-safe grade"; is SetAudioCleanup -> "Local speech-safe processing"; is SetAudioLevels -> "${op.dialogueLufs.toInt()} LUFS dialogue"; is AddTransition -> op.preset; is AddMotionPreset -> op.preset; is AddSoundEffect -> op.catalogId; is SetBackgroundMusic -> op.structure?.let { "${op.catalogId} • ${it.decisions.size} reported mix decisions" } ?: op.catalogId; is AddCaptions -> "${op.cues.size} timed caption cards"; is ApplySemanticVisual -> "${op.treatment.name.lowercase()} • ${op.subject.kind.name.lowercase()}" }
 
 @Composable private fun CtrlBTheme(content: @Composable () -> Unit) = MaterialTheme(
     colorScheme = darkColorScheme(primary = Coral, secondary = Lavender, background = Ink, surface = Workspace, onSurface = CreamRaised, outline = Border),

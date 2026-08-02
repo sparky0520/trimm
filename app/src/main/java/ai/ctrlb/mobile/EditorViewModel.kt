@@ -28,6 +28,10 @@ import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.security.MessageDigest
 
 data class EditorState(
@@ -240,6 +244,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun reviseStory(request: String) {
         mutable.value.project?.let { project ->
+            if (project.analysis.agentRun?.status !in setOf(null, AgentRunStatus.FAILED, AgentRunStatus.CANCELLED)) {
+                continueAgentConversation(project, request)
+                return
+            }
             when (val result = ConversationalRevisionEngine.revise(project, request)) {
                 is ConversationalRevisionResult.Answer ->
                     updateProject(result.project).also {
@@ -326,6 +334,65 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
+
+    private fun continueAgentConversation(project: MobileProject, message: String) {
+        if (message.isBlank()) return
+        val previous = project.analysis.agentRun ?: return
+        viewModelScope.launch {
+            mutable.value = mutable.value.copy(isProcessing = true, jobMessage = "Continuing the conversation…")
+            val deviceSessionId = "android-${project.id}"
+            val client = AgentRunClient(BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken)
+            val uploadClient = DerivativeUploadClient(BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken, project.id, deviceSessionId)
+            val preparer = SelectiveDerivativePreparer(
+                java.io.File(getApplication<Application>().cacheDir, "agent-derivatives"), AndroidDerivativeWriter(getApplication())
+            )
+            val coordinator = AgentRunCoordinator(client, AgentEvidenceFulfiller { job ->
+                val derivative = preparer.prepare(DerivativeAuthorization(job), project.orderedSources)
+                try { uploadClient.upload(derivative) } finally { java.io.File(derivative.localPath).delete() }
+            })
+            val request = AgentRunRequest(
+                projectId = project.id, deviceSessionId = deviceSessionId, projectRevision = project.revision,
+                intent = message,
+                sources = project.orderedSources.map { source -> Layer2SourceInventory(
+                    source.fingerprint, source.fingerprint, source.durationMs, source.width, source.height, source.hasAudio
+                ) },
+                transcript = sourceTranscript(project.analysis.words, project.orderedSources)
+            )
+            val json = Json { encodeDefaults = true }
+            val existingOperations = project.operations.map { operation ->
+                json.encodeToJsonElement(EditOperation.serializer(), operation).jsonObject
+            }
+            runCatching {
+                coordinator.message(previous, request, message, existingOperations) { snapshot ->
+                    val latest = store.load(project.id)
+                    val updated = latest.copy(analysis = latest.analysis.copy(agentRun = snapshot))
+                    store.save(updated)
+                    mutable.value = mutable.value.copy(project = updated)
+                }
+            }.onSuccess { snapshot ->
+                val latest = store.load(project.id)
+                val proposal = AgentDecisionMapper.pendingProposal(snapshot)
+                val response = when (snapshot.decision["type"]?.jsonPrimitive?.content) {
+                    "clarification" -> AgentDecisionMapper.clarification(snapshot).firstOrNull()?.prompt ?: "I need one choice before continuing."
+                    "edit_program" -> snapshot.decision["summary"]?.jsonPrimitive?.content ?: "Updated proposal ready to review."
+                    else -> snapshot.decision["reason"]?.jsonPrimitive?.content ?: "Conversation updated."
+                }
+                val updated = latest.copy(analysis = latest.analysis.copy(
+                    agentRun = snapshot,
+                    pendingProposal = proposal ?: latest.analysis.pendingProposal,
+                    revisionConversation = (latest.analysis.revisionConversation + EditorialConversationTurn(
+                        request = message.trim(), response = response,
+                        evidenceIds = proposal?.evidenceIds.orEmpty()
+                    )).takeLast(30)
+                ))
+                store.save(updated)
+                mutable.value = mutable.value.copy(project = updated, isProcessing = false, jobMessage = response)
+                if (proposal != null) renderPreview(updated, simulatePendingProposal = true)
+            }.onFailure { error ->
+                mutable.value = mutable.value.copy(isProcessing = false, jobMessage = "Conversation could not continue: ${error.message ?: "try again"}")
+            }
+        }
+    }
     fun recordCreatorPreference(kind: CreatorPreferenceKind, value: String) {
         val current = mutable.value
         val profile = (current.project?.creatorPreferences ?: current.creatorPreferences)
@@ -384,7 +451,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
     private fun toggle(op: EditOperation): EditOperation = when (op) {
-        is RemoveFumbles -> op.copy(enabled = !op.enabled); is SetColorGrade -> op.copy(enabled = !op.enabled); is SetAudioCleanup -> op.copy(enabled = !op.enabled); is SetAudioLevels -> op.copy(enabled = !op.enabled)
+        is RemoveFumbles -> op.copy(enabled = !op.enabled); is RemoveAwkwardSilences -> op.copy(enabled = !op.enabled); is SetColorGrade -> op.copy(enabled = !op.enabled); is SetAudioCleanup -> op.copy(enabled = !op.enabled); is SetAudioLevels -> op.copy(enabled = !op.enabled)
         is AddTransition -> op.copy(enabled = !op.enabled); is AddMotionPreset -> op.copy(enabled = !op.enabled); is AddSoundEffect -> op.copy(enabled = !op.enabled); is SetBackgroundMusic -> op.copy(enabled = !op.enabled); is AddCaptions -> op.copy(enabled = !op.enabled); is ApplySemanticVisual -> op.copy(enabled = !op.enabled)
     }
     private fun processingMessage(stage: String?, percent: Int): String = when {
@@ -406,6 +473,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
     private fun EditOperation.editResultLabel(): String = when (this) {
         is RemoveFumbles -> "Tightened ${ranges.size} speech range${if (ranges.size == 1) "" else "s"}"
+        is RemoveAwkwardSilences -> "Removed ${ranges.size} awkward pause${if (ranges.size == 1) "" else "s"}"
         is SetColorGrade -> "Updated color grade"
         is SetAudioCleanup -> "Updated dialogue cleanup"
         is SetAudioLevels -> "Updated audio levels"

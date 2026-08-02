@@ -67,7 +67,8 @@ object EditorialReviewBuilder {
         val graph = project.analysis.storyGraph
         val takeById = project.analysis.takeGroups.flatMap { group -> group.candidates.map { it.id to group } }.toMap()
         val selected = proposal.plan.story.mapNotNull { choice -> choice.selectedTakeId?.let(takeById::get) }.distinctBy { it.id }.map(::comparison)
-        val removedRanges = proposal.operations.filterIsInstance<RemoveFumbles>().filter { it.enabled }.flatMap { it.ranges }
+        val removedRanges = proposal.operations.filterIsInstance<RemoveFumbles>().filter { it.enabled }.flatMap { it.ranges } +
+            proposal.operations.filterIsInstance<RemoveAwkwardSilences>().filter { it.enabled }.flatMap { it.ranges }
         val removedMs = mergeDuration(removedRanges)
         val warnings = buildList {
             if (proposal.expectedRevision != project.revision) add("This proposal targets revision ${proposal.expectedRevision}; the project is now revision ${project.revision}.")
@@ -84,6 +85,8 @@ object EditorialReviewBuilder {
             selectedTakes = selected,
             removals = proposal.operations.filterIsInstance<RemoveFumbles>().flatMap { operation ->
                 operation.ranges.mapIndexed { index, range -> "${operation.reasons.getOrNull(index) ?: "Cleanup"} — ${formatRange(range)}" }
+            } + proposal.operations.filterIsInstance<RemoveAwkwardSilences>().flatMap { operation ->
+                operation.ranges.map { range -> "Awkward pause (${operation.pacing}) — ${formatRange(range)}" }
             },
             beforeDurationMs = project.durationMs,
             afterDurationMs = (project.durationMs - removedMs).coerceAtLeast(0),

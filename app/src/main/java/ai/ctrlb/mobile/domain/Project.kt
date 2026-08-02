@@ -94,19 +94,26 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
 @Serializable enum class MusicChoice { AUTOMATIC, USER_FILE, NONE }
 
 @Serializable sealed interface EditOperation { val id: String; val enabled: Boolean }
-@Serializable @SerialName("remove_fumbles") data class RemoveFumbles(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val ranges: List<TimeRange>, val confidence: Float, val reasons: List<String>) : EditOperation
-@Serializable @SerialName("set_color_grade") data class SetColorGrade(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val grade: ColorGrade) : EditOperation
-@Serializable @SerialName("set_audio_cleanup") data class SetAudioCleanup(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val strength: Float = .55f) : EditOperation
-@Serializable @SerialName("set_audio_levels") data class SetAudioLevels(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val dialogueLufs: Float = -16f, val musicDuckDb: Float = -9f) : EditOperation
+@Serializable data class OperationTarget(val sourceId: String, val startMs: Long, val endMs: Long) {
+    init { require(sourceId.isNotBlank() && startMs >= 0 && endMs > startMs) }
+}
+@Serializable @SerialName("remove_fumbles") data class RemoveFumbles(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val ranges: List<TimeRange>, val confidence: Float, val reasons: List<String> = emptyList()) : EditOperation
+@Serializable @SerialName("remove_awkward_silences") data class RemoveAwkwardSilences(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val ranges: List<TimeRange>, val confidence: Float, val pacing: String = "natural") : EditOperation
+@Serializable @SerialName("set_color_grade") data class SetColorGrade(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val grade: ColorGrade? = null, val target: OperationTarget? = null, val parameter: String? = null, val value: Float? = null) : EditOperation
+@Serializable @SerialName("set_audio_cleanup") data class SetAudioCleanup(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val strength: Float = .55f, val target: OperationTarget? = null) : EditOperation
+@Serializable @SerialName("set_audio_levels") data class SetAudioLevels(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val parameter: String? = null, val dialogueLufs: Float = -16f, val musicDuckDb: Float = -9f, val attackMs: Long = 120, val releaseMs: Long = 450, val target: OperationTarget? = null) : EditOperation
 @Serializable @SerialName("add_transition") data class AddTransition(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val atSourceMs: Long, val preset: String = "dip", val durationMs: Long = 280) : EditOperation
 @Serializable @SerialName("add_motion_preset") data class AddMotionPreset(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val range: TimeRange, val preset: String, val intensity: Float = .5f) : EditOperation
-@Serializable @SerialName("add_sound_effect") data class AddSoundEffect(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val atSourceMs: Long, val catalogId: String, val gainDb: Float = -12f) : EditOperation
+@Serializable @SerialName("add_sound_effect") data class AddSoundEffect(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val atSourceMs: Long, val catalogId: String, val gainDb: Float = -12f, val durationMs: Long? = null, val target: OperationTarget? = null) : EditOperation
 @Serializable @SerialName("set_background_music") data class SetBackgroundMusic(
     override val id: String = UUID.randomUUID().toString(),
     override val enabled: Boolean = true,
     val catalogId: String,
     val gainDb: Float = -24f,
     val loop: Boolean = true,
+    val target: OperationTarget? = null,
+    val fadeInMs: Long = 0,
+    val fadeOutMs: Long = 0,
     val structure: StoryAudioStructure? = null
 ) : EditOperation
 @Serializable @SerialName("add_captions") data class AddCaptions(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val cues: List<CaptionCue>, val style: String = "bold-bottom") : EditOperation

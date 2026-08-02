@@ -13,7 +13,7 @@ class DerivativeUploadClient(
     private val projectId: String,
     private val deviceSessionId: String
 ) {
-    private val derivativeRoot = URI(agentRunsEndpoint.substringBefore("/v1/agent/runs") + "/v1/derivatives/jobs/")
+    private val derivativeRoot = URI(agentRunsEndpoint.substringBefore("/v1/") + "/v1/derivatives/jobs/")
 
     suspend fun upload(derivative: PreparedDerivative): String = withContext(Dispatchers.IO) {
         val endpoint = derivativeRoot.resolve(derivative.jobId)

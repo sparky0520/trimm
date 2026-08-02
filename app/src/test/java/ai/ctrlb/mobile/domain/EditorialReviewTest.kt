@@ -43,6 +43,21 @@ class EditorialReviewTest {
         assertEquals(project.undo, rejected.undo)
     }
 
+    @Test fun `awkward silence removals are validated and included in review duration`() {
+        val operation = RemoveAwkwardSilences(
+            id = "silence-1", ranges = listOf(TimeRange(3_000, 4_500)), confidence = .9f, pacing = "natural"
+        )
+        val proposal = PendingEditorialProposal(
+            0, "Natural pacing", StagedEditorialPlan(emptyList(), emptyList(), emptyList()),
+            listOf(operation), listOf("pause-observation")
+        )
+        val project = MobileProject(title = "Review", source = source, analysis = Analysis(pendingProposal = proposal))
+        assertEquals(listOf(operation), OperationValidator.validate(project, listOf(operation), 0))
+        val review = requireNotNull(EditorialReviewBuilder.proposal(project))
+        assertEquals(8_500, review.afterDurationMs)
+        assertTrue(review.removals.single().contains("Awkward pause"))
+    }
+
     @Test fun `atomic apply creates one checkpoint and undo restores exact operations`() {
         val before = listOf<EditOperation>(SetAudioCleanup(id = "before"))
         val after = listOf<EditOperation>(SetAudioLevels(id = "after"))

@@ -21,7 +21,6 @@ import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
-import androidx.media3.effect.HslAdjustment
 import androidx.media3.effect.Presentation
 import androidx.media3.effect.RgbAdjustment
 import androidx.media3.effect.OverlayEffect
@@ -36,8 +35,28 @@ import kotlin.math.pow
 @OptIn(UnstableApi::class)
 object ExportCoordinator {
     fun composition(context: Context, project: MobileProject): Composition {
-        val cuts = project.operations.filterIsInstance<RemoveFumbles>().filter { it.enabled }.flatMap { it.ranges }
-        val retained = retainedRanges(project.durationMs, TimelineMapper(cuts).removals)
+        val cuts = (
+            project.operations.filterIsInstance<RemoveFumbles>().filter { it.enabled }.flatMap { it.ranges } +
+                project.operations.filterIsInstance<RemoveAwkwardSilences>().filter { it.enabled }.flatMap { it.ranges }
+            ).distinct().sortedBy { it.startMs }
+        val sourceOffsets = buildMap {
+            var offset = 0L
+            project.orderedSources.forEach { source -> put(source.fingerprint, offset); offset += source.durationMs }
+        }
+        val fineTargets = project.operations.mapNotNull { operation ->
+            val target = when (operation) {
+                is SetAudioCleanup -> operation.target
+                is SetAudioLevels -> operation.target
+                is SetColorGrade -> operation.target
+                else -> null
+            } ?: return@mapNotNull null
+            val offset = sourceOffsets[target.sourceId] ?: return@mapNotNull null
+            TimeRange(offset + target.startMs, offset + target.endMs)
+        }
+        val retained = splitAtBoundaries(
+            retainedRanges(project.durationMs, TimelineMapper(cuts).removals),
+            fineTargets.flatMap { listOf(it.startMs, it.endMs) }
+        )
         val timelineMapper = TimelineMapper(cuts)
         require(retained.isNotEmpty()) { "The edit removes the entire source." }
         var timelineStart = 0L
@@ -54,10 +73,21 @@ object ExportCoordinator {
                     val item = MediaItem.Builder().setUri(source.uri).setClippingConfiguration(
                         MediaItem.ClippingConfiguration.Builder().setStartPositionMs(localStart).setEndPositionMs(localEnd).build()
                     ).build()
-                    val cleanup = project.operations.filterIsInstance<SetAudioCleanup>().lastOrNull { it.enabled }?.strength ?: 0f
-                    val target = project.operations.filterIsInstance<SetAudioLevels>().lastOrNull { it.enabled }?.dialogueLufs ?: -20f
+                    val globalRange = TimeRange(start, end)
+                    val cleanup = project.operations.filterIsInstance<SetAudioCleanup>().lastOrNull {
+                        it.enabled && targets(it.target, source.fingerprint, localStart, localEnd)
+                    }?.strength ?: 0f
+                    val target = project.operations.filterIsInstance<SetAudioLevels>().lastOrNull {
+                        it.enabled && it.parameter != "music_ducking" && targets(it.target, source.fingerprint, localStart, localEnd)
+                    }?.dialogueLufs ?: -20f
                     val audioEffects = if (cleanup > 0f || target != -20f) listOf(DialogueAudioProcessor(cleanup, target)) else emptyList()
-                    EditedMediaItem.Builder(item).setDurationUs(source.durationMs * 1_000).setEffects(Effects(audioEffects, emptyList())).build()
+                    val itemVideoEffects = mutableListOf<Effect>()
+                    val colorOperations = project.operations.filterIsInstance<SetColorGrade>().filter {
+                        it.enabled && targets(it.target, source.fingerprint, localStart, localEnd)
+                    }
+                    FineColorEffect.create(colorOperations)?.let(itemVideoEffects::add)
+                    EditedMediaItem.Builder(item).setDurationUs(globalRange.durationMs * 1_000)
+                        .setEffects(Effects(audioEffects, itemVideoEffects)).build()
                 }
             }
         }
@@ -86,13 +116,6 @@ object ExportCoordinator {
                 .setBlueScale(.999f)
                 .build()
         }
-        project.operations.filterIsInstance<SetColorGrade>().lastOrNull { it.enabled }?.grade?.let { grade ->
-            videoEffects += HslAdjustment.Builder().adjustSaturation((grade.saturation - 1f) * 100f).adjustLightness(grade.exposure * 22f).build()
-            videoEffects += RgbAdjustment.Builder()
-                .setRedScale((1f + grade.temperature * .08f).coerceAtLeast(.8f))
-                .setGreenScale(1f)
-                .setBlueScale((1f - grade.temperature * .08f).coerceAtLeast(.8f)).build()
-        }
         project.operations.filterIsInstance<AddCaptions>().lastOrNull { it.enabled }?.let { captions ->
             val mapped = captions.cues.mapNotNull { cue ->
                 val start = timelineMapper.sourceToOutput(cue.range.startMs)
@@ -109,18 +132,37 @@ object ExportCoordinator {
         val audioRepository = AudioAssetRepository(context)
         project.operations.filterIsInstance<SetBackgroundMusic>().lastOrNull { it.enabled }?.let { music ->
             val gain = 10f.pow(music.gainDb / 20f)
-            val duckDb = project.operations.filterIsInstance<SetAudioLevels>().lastOrNull { it.enabled }?.musicDuckDb ?: -9f
+            val duckOperation = project.operations.filterIsInstance<SetAudioLevels>().lastOrNull { it.enabled && it.parameter != "dialogue_loudness" }
+            val duckDb = duckOperation?.musicDuckDb ?: -9f
+            val duckTarget = duckOperation?.target?.let { target ->
+                val offset = sourceOffsets[target.sourceId] ?: 0L
+                TimeRange(timelineMapper.sourceToOutput(offset + target.startMs), timelineMapper.sourceToOutput(offset + target.endMs))
+            }
             val speechRanges = project.analysis.words.mapNotNull { word ->
                 val start = timelineMapper.sourceToOutput(word.range.startMs)
                 val end = timelineMapper.sourceToOutput(word.range.endMs)
-                if (end > start) TimeRange(start, end) else null
+                if (end > start && (duckTarget == null || start < duckTarget.endMs && end > duckTarget.startMs)) TimeRange(start, end) else null
             }
             val audioUri = Uri.fromFile(audioRepository.localFile(music.catalogId))
             val structure = music.structure
             if (structure == null || structure.segments.isEmpty()) {
-                val item = EditedMediaItem.Builder(MediaItem.fromUri(audioUri))
-                    .setEffects(Effects(listOf(GainProcessor(SpeechDuckingGainProvider(gain, duckDb, speechRanges))), emptyList())).build()
-                sequences += EditedMediaItemSequence.withAudioFrom(listOf(item)).buildUpon().setIsLooping(music.loop).build()
+                val target = music.target
+                val durationMs = target?.let { it.endMs - it.startMs }
+                val mediaItem = if (durationMs == null) MediaItem.fromUri(audioUri) else MediaItem.Builder().setUri(audioUri)
+                    .setClippingConfiguration(MediaItem.ClippingConfiguration.Builder().setEndPositionMs(durationMs).build()).build()
+                val item = EditedMediaItem.Builder(mediaItem)
+                    .setEffects(Effects(listOf(GainProcessor(SpeechDuckingGainProvider(
+                        gain, duckDb, speechRanges, attackMs = duckOperation?.attackMs ?: 120,
+                        releaseMs = duckOperation?.releaseMs ?: 450
+                    ))), emptyList())).build()
+                val builder = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO))
+                target?.let { selected ->
+                    val offset = sourceOffsets[selected.sourceId] ?: 0L
+                    val outputAt = timelineMapper.sourceToOutput(offset + selected.startMs)
+                    if (outputAt > 0) builder.addGap(outputAt * 1_000)
+                }
+                builder.addItem(item)
+                sequences += builder.build().buildUpon().setIsLooping(music.loop && target == null).build()
             } else {
                 val builder = EditedMediaItemSequence.Builder(setOf(C.TRACK_TYPE_AUDIO))
                 var cursorMs = 0L
@@ -191,5 +233,13 @@ object ExportCoordinator {
         removals.forEach { cut -> if (cut.startMs > cursor) result += TimeRange(cursor, cut.startMs); cursor = maxOf(cursor, cut.endMs) }
         if (cursor < durationMs) result += TimeRange(cursor, durationMs)
         return result
+    }
+
+    private fun targets(target: OperationTarget?, sourceId: String, startMs: Long, endMs: Long): Boolean =
+        target == null || (target.sourceId == sourceId && target.startMs <= startMs && target.endMs >= endMs)
+
+    private fun splitAtBoundaries(ranges: List<TimeRange>, boundaries: List<Long>): List<TimeRange> = ranges.flatMap { range ->
+        val points = (listOf(range.startMs) + boundaries.filter { it > range.startMs && it < range.endMs } + range.endMs).sorted()
+        points.zipWithNext { start, end -> TimeRange(start, end) }
     }
 }

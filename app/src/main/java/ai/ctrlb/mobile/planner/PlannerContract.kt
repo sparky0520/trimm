@@ -117,7 +117,8 @@ class PlannerClient(private val endpoint: String, private val accessToken: suspe
     val resolution: String,
     val uncertainty: String = "",
     val expiresAt: String,
-    val reused: Boolean
+    val reused: Boolean,
+    val toolCallId: String = id
 )
 @Serializable sealed interface Layer2Response
 @Serializable @SerialName("tool_request") data class Layer2EvidenceRequest(val tool: String, val jobs: List<AuthorizedEvidenceJob>) : Layer2Response

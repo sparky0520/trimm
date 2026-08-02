@@ -6,8 +6,7 @@ object OperationValidator {
         else -> true
     }
 
-    fun isPlannerAvailable(operation: EditOperation): Boolean =
-        isRendered(operation) && operation !is SetColorGrade
+    fun isPlannerAvailable(operation: EditOperation): Boolean = isRendered(operation)
 
     fun visible(operations: List<EditOperation>): List<EditOperation> =
         operations.filter(::isRendered)
@@ -16,8 +15,9 @@ object OperationValidator {
         operations.filter { it.enabled && isRendered(it) }.map { operation ->
             when (operation) {
                 is RemoveFumbles -> "timeline:${operation.ranges}"
-                is SetColorGrade -> "video-color:${operation.grade}"
-                is SetAudioCleanup -> "dialogue-cleanup:${operation.strength}"
+                is RemoveAwkwardSilences -> "timeline-silence:${operation.ranges}:${operation.pacing}"
+                is SetColorGrade -> "video-color:${operation.grade}:${operation.target}:${operation.parameter}:${operation.value}"
+                is SetAudioCleanup -> "dialogue-cleanup:${operation.strength}:${operation.target}"
                 is SetAudioLevels -> "dialogue-levels:${operation.dialogueLufs}:${operation.musicDuckDb}"
                 is AddSoundEffect -> "audio-effect:${operation.atSourceMs}:${operation.catalogId}:${operation.gainDb}"
                 is SetBackgroundMusic -> "audio-music:${operation.catalogId}:${operation.gainDb}:${operation.loop}:${operation.structure?.version}"
@@ -29,6 +29,7 @@ object OperationValidator {
 
     fun basis(operation: EditOperation): String = when (operation) {
         is RemoveFumbles -> "Transcript evidence • ${operation.reasons.joinToString()}"
+        is RemoveAwkwardSilences -> "Audiovisual pause evidence • ${operation.pacing} pacing"
         is SetColorGrade -> "Frame evidence"
         is SetAudioCleanup -> "Default • speech-safe local processing"
         is SetAudioLevels -> "Default • ${operation.dialogueLufs.toInt()} LUFS dialogue target"
@@ -45,14 +46,24 @@ object OperationValidator {
         require(proposed.all(::isPlannerAvailable)) { "Operation is unavailable without render support or frame evidence" }
         proposed.forEach { op -> when (op) {
             is RemoveFumbles -> { require(op.confidence in 0f..1f); require(op.ranges.isNotEmpty()); op.ranges.forEach { require(it.endMs <= project.durationMs) } }
-            is SetColorGrade -> Unit
-            is SetAudioCleanup -> require(op.strength in 0f..1f)
-            is SetAudioLevels -> { require(op.dialogueLufs in -24f..-12f); require(op.musicDuckDb in -18f..-3f) }
+            is RemoveAwkwardSilences -> { require(op.confidence in 0f..1f); require(op.pacing in setOf("natural", "tight")); require(op.ranges.isNotEmpty()); op.ranges.forEach { require(it.endMs <= project.durationMs) } }
+            is SetColorGrade -> {
+                require(op.grade != null || (op.parameter in setOf("exposure", "temperature", "contrast", "saturation", "highlights", "shadows", "skinProtection") && op.value != null))
+                validateTarget(project, op.target)
+            }
+            is SetAudioCleanup -> { require(op.strength in 0f..1f); validateTarget(project, op.target) }
+            is SetAudioLevels -> {
+                if (op.parameter == "dialogue_loudness") require(op.dialogueLufs in -24f..-12f)
+                else if (op.parameter == "music_ducking") require(op.musicDuckDb in -18f..-3f)
+                else { require(op.dialogueLufs in -24f..-12f); require(op.musicDuckDb in -18f..-3f) }
+                require(op.attackMs in 0..2_000 && op.releaseMs in 0..5_000); validateTarget(project, op.target)
+            }
             is AddTransition -> { require(op.atSourceMs in 0..project.durationMs); require(op.durationMs in 120..1_000) }
             is AddMotionPreset -> { require(op.range.endMs <= project.durationMs); require(op.intensity in 0f..1f) }
-            is AddSoundEffect -> { require(op.atSourceMs in 0..project.durationMs); require(op.gainDb in -36f..0f) }
+            is AddSoundEffect -> { require(op.atSourceMs in 0..project.durationMs); require(op.gainDb in -36f..0f); validateTarget(project, op.target) }
             is SetBackgroundMusic -> {
                 require(op.gainDb in -40f..-6f)
+                validateTarget(project, op.target)
                 op.structure?.let { structure ->
                     require(structure.segments.zipWithNext().all { (a, b) -> a.timelineEndMs <= b.timelineStartMs })
                     require(structure.segments.all {
@@ -67,5 +78,11 @@ object OperationValidator {
         } }
         SemanticVisualPolicy.validateDensity(proposed.filterIsInstance<ApplySemanticVisual>().filter { it.enabled })
         return proposed
+    }
+
+    private fun validateTarget(project: MobileProject, target: OperationTarget?) {
+        if (target == null) return // Backward-compatible projects used whole-project effects.
+        val source = project.orderedSources.firstOrNull { it.fingerprint == target.sourceId }
+        require(source != null && target.endMs <= source.durationMs) { "Operation target is outside its source" }
     }
 }

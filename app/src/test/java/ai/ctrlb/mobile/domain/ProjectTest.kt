@@ -62,7 +62,17 @@ class ProjectTest {
         assertTrue(OperationValidator.basis(operations[1]).startsWith("Default"))
         assertTrue(OperationValidator.basis(operations[2]).startsWith("User preference"))
     }
-    @Test(expected = IllegalArgumentException::class) fun `planner cannot enable color without frame evidence`() {
-        OperationValidator.validate(MobileProject(title = "Test", source = source), listOf(SetColorGrade(grade = ColorGrade())))
+    @Test fun `cloud-grounded color is available to the rendered proposal contract`() {
+        val color = SetColorGrade(grade = ColorGrade())
+        assertEquals(listOf(color), OperationValidator.validate(MobileProject(title = "Test", source = source), listOf(color)))
+    }
+    @Test fun `fine operations preserve exact source targets and reject ranges outside the source`() {
+        val project = MobileProject(title = "Test", source = source)
+        val cleanup = SetAudioCleanup(strength = .4f, target = OperationTarget("hash", 1_000, 4_000))
+        val exposure = SetColorGrade(target = OperationTarget("hash", 4_000, 6_000), parameter = "exposure", value = .15f)
+        assertEquals(listOf(cleanup, exposure), OperationValidator.validate(project, listOf(cleanup, exposure)))
+        assertThrows(IllegalArgumentException::class.java) {
+            OperationValidator.validate(project, listOf(cleanup.copy(target = OperationTarget("hash", 9_000, 11_000))))
+        }
     }
 }
