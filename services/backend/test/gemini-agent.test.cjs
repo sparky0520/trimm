@@ -31,7 +31,8 @@ test('new agent path is pinned to Gemini 3.6 Flash and requests JSON', async () 
     ['edit_program', 'clarification', 'fallback'],
   );
   assert.deepEqual(request.config.tools[0].functionDeclarations.map((tool) => tool.name), [
-    'inspect_video_range', 'propose_remove_fumbles', 'propose_remove_awkward_silences',
+    'inspect_video_range', 'search_sound_effects', 'search_background_music',
+    'propose_remove_fumbles', 'propose_remove_awkward_silences',
     'propose_reduce_background_noise', 'propose_set_dialogue_loudness', 'propose_set_music_ducking',
     'propose_place_sound_effect', 'propose_place_background_music', 'propose_add_caption_cue',
     'propose_adjust_exposure', 'propose_adjust_temperature', 'propose_adjust_contrast', 'propose_adjust_saturation',

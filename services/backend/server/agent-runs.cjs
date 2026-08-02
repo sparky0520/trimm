@@ -62,7 +62,10 @@ class AgentRuns {
     if (agentState) {
       run.inventory = {
         ...run.inventory,
-        agentDraft: { operations: agentState.operations || [] },
+        agentDraft: {
+          operations: agentState.operations || [],
+          audioSearchResults: agentState.audioSearchResults || run.inventory.agentDraft?.audioSearchResults || [],
+        },
         observations: [...(run.inventory.observations || []), ...(agentState.observations || [])],
       };
     } else if (decision.type !== 'tool_request') {

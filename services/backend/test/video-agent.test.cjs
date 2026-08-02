@@ -25,7 +25,8 @@ test('Gemini receives video directly and exposes evidence and focused proposal t
   assert.equal(request.contents[0].parts[0].inlineData.mimeType, 'video/mp4');
   assert.equal(request.contents[0].parts[0].mediaResolution.level, 'MEDIA_RESOLUTION_LOW');
   assert.deepEqual(request.config.tools[0].functionDeclarations.map((item) => item.name), [
-    'inspect_video_range', 'propose_remove_fumbles', 'propose_remove_awkward_silences',
+    'inspect_video_range', 'search_sound_effects', 'search_background_music',
+    'propose_remove_fumbles', 'propose_remove_awkward_silences',
     'propose_reduce_background_noise', 'propose_set_dialogue_loudness', 'propose_set_music_ducking',
     'propose_place_sound_effect', 'propose_place_background_music', 'propose_add_caption_cue',
     'propose_adjust_exposure', 'propose_adjust_temperature', 'propose_adjust_contrast', 'propose_adjust_saturation',
@@ -178,4 +179,38 @@ test('the bounded agent loop returns tool results to Gemini before finalizing an
   assert.equal(calls[0].ok, true);
   assert.equal(result.type, 'edit_program');
   assert.equal(result.operations[0].type, 'set_audio_cleanup');
+});
+
+test('audio placement is bound to an asset returned by the search tool', async () => {
+  const results = [];
+  const decide = async () => ({ toolCall: { name: 'search_sound_effects', args: {
+    query: 'soft click', minimumDurationMs: 100, maximumDurationMs: 1_000, maximumResults: 3,
+  } }, history: [], usage: {} });
+  decide.toolResult = async ({ toolCall, result }) => {
+    results.push(result);
+    if (toolCall.name === 'search_sound_effects') return { toolCall: { name: 'propose_place_sound_effect', args: {
+      expectedRevision: 1, summary: 'Add a click.', observations: [], operation: {
+        id: 'sfx-1', enabled: true, confidence: .9, evidenceIds: ['event-1'], sourceId: 'source-1',
+        startMs: 1_000, endMs: 1_400, catalogId: 'soft-click', gainDb: -14, reason: 'Grounded UI action.',
+      },
+    } }, history: [], usage: {} };
+    return { toolCall: { name: 'finalize_edit_program', args: {
+      expectedRevision: 1, summary: 'Add a click.', operationIds: ['sfx-1'],
+    } }, history: [], usage: {} };
+  };
+  const orchestrator = new Layer2Orchestrator({ derivativeJobs: {}, decide, audioSearch: { search: async () => ({ assets: [{
+    assetId: 'soft-click', kind: 'SOUND_EFFECT', title: 'Soft click', artist: '', durationMs: 400,
+    tags: ['click'], provider: 'fixture', previewUrl: null, license: { id: 'CC0', attributionRequired: false },
+    renderable: true, availability: 'READY',
+  }], sources: [] }) } });
+  const output = await orchestrator.orchestrate({ id: 'user-1' }, {
+    projectId: 'project-1', deviceSessionId: 'device-1', projectRevision: 1, intent: 'Add a click.',
+    sources: [{ id: 'source-1', fingerprint: 'b'.repeat(32), durationMs: 5_000, width: 1920, height: 1080, hasAudio: true }],
+    transcript: [], evidenceJobIds: [], existingOperations: [], observations: [{ id: 'event-1', sourceId: 'source-1',
+      startMs: 0, endMs: 2_000, description: 'A visible UI action occurs.', confidence: .9, resolution: 'LOW' }],
+    budgets: {}, mediaConsent: { mode: 'video_analysis', grantedAt: new Date().toISOString(), disclosureVersion: 'v2' },
+    supportedContractVersions: { agentRuns: [2], activityEvents: [2], videoToolRequests: [2], editPrograms: [2] },
+  });
+  assert.equal(results[0].assets[0].assetId, 'soft-click');
+  assert.equal(output.operations[0].catalogId, 'soft-click');
 });

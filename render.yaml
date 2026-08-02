@@ -38,3 +38,7 @@ services:
         value: pri_01ky700cx5s50k34sg76bbgz6d
       - key: CTRLB_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
         sync: false
+      - key: CTRLB_AUDIO_CATALOG_URL
+        sync: false
+      - key: FREESOUND_API_KEY
+        sync: false

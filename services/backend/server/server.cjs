@@ -24,6 +24,7 @@ const { AgentRuns } = require('./agent-runs.cjs');
 const { Conversations } = require('./conversations.cjs');
 const { PostgresAgentRunStore, VolatileAgentRunStore } = require('./agent-run-store.cjs');
 const { createGeminiDecisionProvider } = require('./gemini-agent.cjs');
+const { AudioSearchService } = require('./audio-search.cjs');
 const plannerCore = require('./planner-core.cjs');
 
 const port = Number(process.env.PORT || 8787);
@@ -60,6 +61,10 @@ const derivativeJobs = process.env.SUPABASE_DB_URL
 const layer2Orchestrator = new Layer2Orchestrator({
   derivativeJobs,
   decide: createGeminiDecisionProvider(),
+  audioSearch: new AudioSearchService({
+    catalogUrl: process.env.CTRLB_AUDIO_CATALOG_URL,
+    freesoundApiKey: process.env.FREESOUND_API_KEY,
+  }),
 });
 const agentRuns = new AgentRuns({
   orchestrator: layer2Orchestrator,

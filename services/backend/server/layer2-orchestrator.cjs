@@ -22,6 +22,7 @@ Return one JSON object with type edit_program, clarification, or fallback, or ca
 Use proposal tools for operations they cover; their descriptions contain the operation-specific editorial policy.
 Proposal tools build a private draft. After every successful tool result, continue until all necessary operations are present, then call finalize_edit_program.
 Call one tool at a time so each deterministic result can inform the next step.
+Search audio sources before placing music or sound effects. Place only an assetId returned with renderable=true in this conversation; clarify when a provider requires authorization or assisted import.
 Call ask_clarification when a consequential user choice is unresolved. Never guess merely to avoid asking.
 Use inspect_video_range when more audiovisual evidence is needed. Each range is at most 30 seconds. Use LOW normally. Use HIGH only after overlapping LOW evidence left a specific uncertainty.
 Never request rendered output, executable instructions, or provider credentials.
@@ -459,11 +460,12 @@ function validateDecision(decision, inventory, evidence) {
 }
 
 class Layer2Orchestrator {
-  constructor({ derivativeJobs, decide, repair = decide?.repair }) {
+  constructor({ derivativeJobs, decide, repair = decide?.repair, audioSearch = null }) {
     if (!derivativeJobs || typeof decide !== 'function') throw new TypeError('Layer2Orchestrator dependencies are required.');
     this.derivativeJobs = derivativeJobs;
     this.decide = decide;
     this.repair = repair;
+    this.audioSearch = audioSearch;
   }
 
   async authorizeVideo(principal, inventory, request, selectionReason = 'agent_requested') {
@@ -507,6 +509,7 @@ class Layer2Orchestrator {
     const usage = [];
     const drafts = new Map((workingInventory.agentDraft?.operations || []).map((operation) => [operation.id, operation]));
     const draftObservations = [];
+    const audioSearchResults = new Map((workingInventory.agentDraft?.audioSearchResults || []).map((asset) => [asset.assetId, asset]));
     for (let iteration = 0; iteration < 8 && raw.toolCall; iteration++) {
       usage.push(raw.usage);
       const call = raw.toolCall;
@@ -518,8 +521,26 @@ class Layer2Orchestrator {
         }
         return {
           type: 'tool_request', tool: 'inspect_video_range', jobs: [job], _usage: usage,
-          _agentState: { operations: [...drafts.values()], observations: draftObservations },
+          _agentState: { operations: [...drafts.values()], observations: draftObservations, audioSearchResults: [...audioSearchResults.values()] },
         };
+      }
+      if (['search_sound_effects', 'search_background_music'].includes(call.name)) {
+        let result;
+        try {
+          if (!this.audioSearch) throw orchestrationError('The governed audio registry is unavailable.', 503, 'audio_registry_unavailable');
+          const searchResult = await this.audioSearch.search({
+            ...(call.args || {}), kind: call.name === 'search_sound_effects' ? 'SOUND_EFFECT' : 'MUSIC',
+          });
+          const assets = searchResult.assets || [];
+          assets.forEach((asset) => audioSearchResults.set(asset.assetId, asset));
+          result = { ok: true, assets, sources: searchResult.sources || [], resultCount: assets.length };
+        } catch (error) {
+          result = { ok: false, code: error.code || 'audio_search_failed', message: String(error.message).slice(0, 300) };
+        }
+        raw = await this.decide.toolResult({
+          systemPolicy: SYSTEM_POLICY, inventory: workingInventory, evidence, history: raw.history, toolCall: call, result,
+        });
+        continue;
       }
       if (call.name === 'ask_clarification') {
         const questions = Array.isArray(call.args?.questions) ? call.args.questions.slice(0, 3) : [];
@@ -527,7 +548,7 @@ class Layer2Orchestrator {
         return {
           type: 'clarification', questions, question: questions[0].prompt, options: questions[0].options,
           observations: [], _usage: usage,
-          _agentState: { operations: [...drafts.values()], observations: draftObservations },
+          _agentState: { operations: [...drafts.values()], observations: draftObservations, audioSearchResults: [...audioSearchResults.values()] },
         };
       }
       if (call.name === 'finish_without_proposal') {
@@ -560,6 +581,13 @@ class Layer2Orchestrator {
       try {
         const args = call.args || {};
         const operation = fineOperationFor(call, operationType, workingInventory);
+        if (['propose_place_sound_effect', 'propose_place_background_music'].includes(call.name)) {
+          const asset = audioSearchResults.get(operation.catalogId);
+          const expectedKind = call.name === 'propose_place_sound_effect' ? 'SOUND_EFFECT' : 'MUSIC';
+          if (!asset || asset.kind !== expectedKind || asset.renderable !== true) {
+            throw orchestrationError('Audio placement must reference a matching asset returned by an audio search tool.', 422, 'unsearched_audio_asset');
+          }
+        }
         const validated = validateDecision({
           type: 'edit_program', expectedRevision: args.expectedRevision,
           summary: args.summary, operations: [operation], observations: args.observations,

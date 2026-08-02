@@ -162,6 +162,24 @@ const PROPOSE_REMOVE_AWKWARD_SILENCES_TOOL = Object.freeze({
   }),
 });
 
+const audioSearchTool = (name, kind) => Object.freeze({
+  name,
+  description: `Search default ${kind === 'MUSIC' ? 'background-music' : 'sound-effect'} sources: the governed renderable registry, Freesound discovery when configured, and YouTube Audio Library assisted search. Call this before placement. Only results with renderable=true may be placed; authorization-required and assisted results require user action first.`,
+  parametersJsonSchema: {
+    type: 'object', additionalProperties: false,
+    required: ['query', 'minimumDurationMs', 'maximumDurationMs', 'maximumResults'],
+    properties: {
+      query: { type: 'string', minLength: 2, maxLength: 160 },
+      minimumDurationMs: { type: 'integer', minimum: 0, maximum: 3600000 },
+      maximumDurationMs: { type: 'integer', minimum: 1, maximum: 3600000 },
+      maximumResults: { type: 'integer', minimum: 1, maximum: 8 },
+    },
+  },
+  kind,
+});
+const SEARCH_SOUND_EFFECTS_TOOL = audioSearchTool('search_sound_effects', 'SOUND_EFFECT');
+const SEARCH_BACKGROUND_MUSIC_TOOL = audioSearchTool('search_background_music', 'MUSIC');
+
 const operationTool = (name, description, required, properties) => Object.freeze({
   name,
   description: `${description} This tool constructs a draft operation only; it never edits the project.`,
@@ -297,6 +315,7 @@ const FINISH_WITHOUT_PROPOSAL_TOOL = Object.freeze({
 
 const AGENT_TOOLS = Object.freeze([
   INSPECT_VIDEO_RANGE_TOOL,
+  SEARCH_SOUND_EFFECTS_TOOL, SEARCH_BACKGROUND_MUSIC_TOOL,
   PROPOSE_REMOVE_FUMBLES_TOOL,
   PROPOSE_REMOVE_AWKWARD_SILENCES_TOOL,
   PROPOSE_AUDIO_CLEANUP_TOOL, PROPOSE_DIALOGUE_LOUDNESS_TOOL, PROPOSE_MUSIC_DUCKING_TOOL,
