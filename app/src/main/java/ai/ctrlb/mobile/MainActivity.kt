@@ -431,15 +431,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-            state.capabilityMessage?.let { message ->
-                item(key = "device-capability") {
-                    AssistantChatBubble(accent = Coral) {
-                        Text("Your device", color = CreamRaised, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(5.dp))
-                        Text(message, color = Muted, lineHeight = 19.sp)
-                    }
-                }
-            }
+
         }
         Surface(color = Workspace, tonalElevation = 4.dp) {
             Row(
@@ -535,7 +527,7 @@ private fun formatUsdMicros(micros: Long): String =
     AssistantChatBubble {
         Text("Here’s what I found in your footage:", color = CreamRaised, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        ChatFinding("Story", read.likelyStory.ifEmpty { listOf("I couldn’t confidently identify a complete spoken story.") })
+        if (read.likelyStory.isNotEmpty()) ChatFinding("Story", read.likelyStory)
         if (read.repeatedTakes.isNotEmpty()) ChatFinding("Repeated takes", read.repeatedTakes.map {
             "${it.sentence} — ${it.alternatives.size + 1} versions, ${reviewPercent(it.confidence)} confidence"
         })

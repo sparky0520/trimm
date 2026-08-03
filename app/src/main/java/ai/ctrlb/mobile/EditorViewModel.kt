@@ -43,6 +43,8 @@ data class EditorState(
     val previewUri: String? = null,
     val jobMessage: String? = null,
     val initialRequest: String? = null,
+    /** Message submitted to the cloud agent but not yet committed as a completed turn. */
+    val pendingChatMessage: String? = null,
     val isProcessing: Boolean = false,
 ) {
     val source: SourceMedia? get() = sources.firstOrNull()
@@ -244,7 +246,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun reviseStory(request: String) {
         mutable.value.project?.let { project ->
-            if (project.analysis.agentRun?.status !in setOf(null, AgentRunStatus.FAILED, AgentRunStatus.CANCELLED)) {
+            // Once cloud conversations are enabled, every follow-up belongs to the
+            // agent. A failed/cancelled prior run starts a fresh cloud turn instead
+            // of silently falling back to the legacy local revision engine.
+            if (BuildConfig.AGENT_RUNS_URL.isNotBlank()) {
                 continueAgentConversation(project, request)
                 return
             }
@@ -337,9 +342,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun continueAgentConversation(project: MobileProject, message: String) {
         if (message.isBlank()) return
-        val previous = project.analysis.agentRun ?: return
+        val previous = project.analysis.agentRun
         viewModelScope.launch {
-            mutable.value = mutable.value.copy(isProcessing = true, jobMessage = "Continuing the conversation…")
+            mutable.value = mutable.value.copy(
+                isProcessing = true,
+                jobMessage = "Continuing the conversation…",
+                pendingChatMessage = message.trim()
+            )
             val deviceSessionId = "android-${project.id}"
             val client = AgentRunClient(BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken)
             val uploadClient = DerivativeUploadClient(BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken, project.id, deviceSessionId)
@@ -363,11 +372,16 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 json.encodeToJsonElement(EditOperation.serializer(), operation).jsonObject
             }
             runCatching {
-                coordinator.message(previous, request, message, existingOperations) { snapshot ->
+                val persist: suspend (PersistedAgentRun) -> Unit = { snapshot ->
                     val latest = store.load(project.id)
                     val updated = latest.copy(analysis = latest.analysis.copy(agentRun = snapshot))
                     store.save(updated)
                     mutable.value = mutable.value.copy(project = updated)
+                }
+                if (previous == null || previous.status in setOf(AgentRunStatus.FAILED, AgentRunStatus.CANCELLED)) {
+                    coordinator.run(request, persist)
+                } else {
+                    coordinator.message(previous, request, message, existingOperations, persist)
                 }
             }.onSuccess { snapshot ->
                 val latest = store.load(project.id)
@@ -386,10 +400,16 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     )).takeLast(30)
                 ))
                 store.save(updated)
-                mutable.value = mutable.value.copy(project = updated, isProcessing = false, jobMessage = response)
+                mutable.value = mutable.value.copy(
+                    project = updated, isProcessing = false, jobMessage = response, pendingChatMessage = null
+                )
                 if (proposal != null) renderPreview(updated, simulatePendingProposal = true)
             }.onFailure { error ->
-                mutable.value = mutable.value.copy(isProcessing = false, jobMessage = "Conversation could not continue: ${error.message ?: "try again"}")
+                mutable.value = mutable.value.copy(
+                    isProcessing = false,
+                    pendingChatMessage = null,
+                    jobMessage = "Conversation could not continue: ${error.message ?: "try again"}"
+                )
             }
         }
     }
