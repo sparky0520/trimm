@@ -18,6 +18,8 @@ import java.util.UUID
     val request: String,
     val response: String,
     val evidenceIds: List<String> = emptyList(),
+    val isPending: Boolean = false,
+    val isError: Boolean = false,
     val createdAtEpochMs: Long = System.currentTimeMillis()
 )
 

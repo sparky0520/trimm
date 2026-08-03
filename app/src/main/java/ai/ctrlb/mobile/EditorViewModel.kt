@@ -245,34 +245,87 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
     fun reviseStory(request: String) {
-        mutable.value.project?.let { project ->
-            // Once cloud conversations are enabled, every follow-up belongs to the
-            // agent. A failed/cancelled prior run starts a fresh cloud turn instead
-            // of silently falling back to the legacy local revision engine.
+        val text = request.trim()
+        if (text.isBlank()) return
+        val currentProject = mutable.value.project ?: return
+        val turnId = java.util.UUID.randomUUID().toString()
+        val pendingTurn = EditorialConversationTurn(
+            id = turnId,
+            request = text,
+            response = "ctrlB is thinking…",
+            isPending = true,
+            isError = false
+        )
+        val updatedProject = currentProject.copy(
+            analysis = currentProject.analysis.copy(
+                revisionConversation = (currentProject.analysis.revisionConversation + pendingTurn).takeLast(50)
+            )
+        )
+        mutable.value = mutable.value.copy(
+            project = updatedProject,
+            isProcessing = true,
+            jobMessage = "Continuing the conversation…"
+        )
+        viewModelScope.launch {
+            store.save(updatedProject)
             if (BuildConfig.AGENT_RUNS_URL.isNotBlank()) {
-                continueAgentConversation(project, request)
-                return
-            }
-            when (val result = ConversationalRevisionEngine.revise(project, request)) {
-                is ConversationalRevisionResult.Answer ->
-                    updateProject(result.project).also {
-                        mutable.value = mutable.value.copy(jobMessage = result.text)
+                continueAgentConversation(updatedProject, turnId, text)
+            } else {
+                when (val result = ConversationalRevisionEngine.revise(updatedProject, text)) {
+                    is ConversationalRevisionResult.Answer -> {
+                        val finished = updatedProject.copy(analysis = updatedProject.analysis.copy(
+                            revisionConversation = updatedProject.analysis.revisionConversation.map {
+                                if (it.id == turnId) it.copy(response = result.text, isPending = false, isError = false) else it
+                            }
+                        ))
+                        store.save(finished)
+                        mutable.value = mutable.value.copy(project = finished, jobMessage = result.text, isProcessing = false)
                     }
-                is ConversationalRevisionResult.Clarification ->
-                    updateProject(result.project).also {
-                        mutable.value = mutable.value.copy(jobMessage = result.question)
+                    is ConversationalRevisionResult.Clarification -> {
+                        val finished = updatedProject.copy(analysis = updatedProject.analysis.copy(
+                            revisionConversation = updatedProject.analysis.revisionConversation.map {
+                                if (it.id == turnId) it.copy(response = result.question, isPending = false, isError = false) else it
+                            }
+                        ))
+                        store.save(finished)
+                        mutable.value = mutable.value.copy(project = finished, jobMessage = result.question, isProcessing = false)
                     }
-                is ConversationalRevisionResult.Revision ->
-                    run {
-                        mutable.value = mutable.value.copy(project = result.project, jobMessage = "Revised proposal ready to review")
-                        viewModelScope.launch {
-                            store.save(result.project)
-                            renderPreview(result.project, simulatePendingProposal = true)
-                        }
+                    is ConversationalRevisionResult.Revision -> {
+                        val finished = result.project.copy(analysis = result.project.analysis.copy(
+                            revisionConversation = result.project.analysis.revisionConversation.map {
+                                if (it.id == turnId) it.copy(response = "Revised proposal ready to review", isPending = false, isError = false) else it
+                            }
+                        ))
+                        store.save(finished)
+                        mutable.value = mutable.value.copy(project = finished, jobMessage = "Revised proposal ready to review", isProcessing = false)
+                        renderPreview(finished, simulatePendingProposal = true)
                     }
+                }
             }
         }
     }
+
+    fun retryTurn(turnId: String) {
+        val project = mutable.value.project ?: return
+        val turn = project.analysis.revisionConversation.firstOrNull { it.id == turnId } ?: return
+        val updatedProject = project.copy(
+            analysis = project.analysis.copy(
+                revisionConversation = project.analysis.revisionConversation.map {
+                    if (it.id == turnId) it.copy(response = "ctrlB is thinking…", isPending = true, isError = false) else it
+                }
+            )
+        )
+        mutable.value = mutable.value.copy(project = updatedProject, isProcessing = true, jobMessage = "Retrying conversation…")
+        viewModelScope.launch {
+            store.save(updatedProject)
+            if (BuildConfig.AGENT_RUNS_URL.isNotBlank()) {
+                continueAgentConversation(updatedProject, turnId, turn.request)
+            } else {
+                reviseStory(turn.request)
+            }
+        }
+    }
+
     fun recoverAgent(action: AgentRecoveryAction) {
         val current = mutable.value
         val project = current.project ?: return
@@ -340,15 +393,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private fun continueAgentConversation(project: MobileProject, message: String) {
-        if (message.isBlank()) return
+    private fun continueAgentConversation(project: MobileProject, turnId: String, message: String) {
         val previous = project.analysis.agentRun
         viewModelScope.launch {
-            mutable.value = mutable.value.copy(
-                isProcessing = true,
-                jobMessage = "Continuing the conversation…",
-                pendingChatMessage = message.trim()
-            )
             val deviceSessionId = "android-${project.id}"
             val client = AgentRunClient(BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken)
             val uploadClient = DerivativeUploadClient(BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken, project.id, deviceSessionId)
@@ -391,13 +438,18 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     "edit_program" -> snapshot.decision["summary"]?.jsonPrimitive?.content ?: "Updated proposal ready to review."
                     else -> snapshot.decision["reason"]?.jsonPrimitive?.content ?: "Conversation updated."
                 }
+                val updatedConversation = latest.analysis.revisionConversation.map { turn ->
+                    if (turn.id == turnId) turn.copy(
+                        response = response,
+                        evidenceIds = proposal?.evidenceIds.orEmpty(),
+                        isPending = false,
+                        isError = false
+                    ) else turn
+                }
                 val updated = latest.copy(analysis = latest.analysis.copy(
                     agentRun = snapshot,
                     pendingProposal = proposal ?: latest.analysis.pendingProposal,
-                    revisionConversation = (latest.analysis.revisionConversation + EditorialConversationTurn(
-                        request = message.trim(), response = response,
-                        evidenceIds = proposal?.evidenceIds.orEmpty()
-                    )).takeLast(30)
+                    revisionConversation = updatedConversation
                 ))
                 store.save(updated)
                 mutable.value = mutable.value.copy(
@@ -405,10 +457,22 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 )
                 if (proposal != null) renderPreview(updated, simulatePendingProposal = true)
             }.onFailure { error ->
+                val latest = store.load(project.id)
+                val errorMsg = error.message ?: "Unable to continue conversation. Please try again."
+                val updatedConversation = latest.analysis.revisionConversation.map { turn ->
+                    if (turn.id == turnId) turn.copy(
+                        response = errorMsg,
+                        isPending = false,
+                        isError = true
+                    ) else turn
+                }
+                val updated = latest.copy(analysis = latest.analysis.copy(revisionConversation = updatedConversation))
+                store.save(updated)
                 mutable.value = mutable.value.copy(
+                    project = updated,
                     isProcessing = false,
                     pendingChatMessage = null,
-                    jobMessage = "Conversation could not continue: ${error.message ?: "try again"}"
+                    jobMessage = "Conversation error"
                 )
             }
         }
@@ -416,7 +480,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun recordCreatorPreference(kind: CreatorPreferenceKind, value: String) {
         val current = mutable.value
         val profile = (current.project?.creatorPreferences ?: current.creatorPreferences)
-            .record(kind, value, "explicit:${UUID.randomUUID()}", explicit = true)
+            .record(kind, value, "explicit:${java.util.UUID.randomUUID()}", explicit = true)
         persistCreatorPreferences(profile)
     }
     fun setCreatorPreferenceEnabled(kind: CreatorPreferenceKind, value: String, enabled: Boolean) {

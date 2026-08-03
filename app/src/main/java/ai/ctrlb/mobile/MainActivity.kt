@@ -63,6 +63,8 @@ import com.clerk.api.Clerk
 import com.clerk.ui.auth.AuthView
 import com.clerk.ui.userbutton.UserButton
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 private val Ink = Color(0xFF0B0B0D)
@@ -115,7 +117,7 @@ class MainActivity : ComponentActivity() {
         state.project != null -> EditorScreen(
             state, vm::undo, vm::export, vm::applyProposal, vm::rejectProposal,
             vm::undoCheckpoint,
-            vm::reviseStory, vm::recoverAgent, vm::cancelAnalysis
+            vm::reviseStory, vm::retryTurn, vm::recoverAgent, vm::cancelAnalysis
         )
         else -> NewEditChatScreen(state, vm::generateDraft, vm::moveClip)
     }
@@ -129,8 +131,13 @@ class MainActivity : ComponentActivity() {
     onSecondary: (() -> Unit)? = null,
 ) {
     Row(
-        Modifier.fillMaxWidth().background(Workspace).statusBarsPadding().height(58.dp).padding(horizontal = 16.dp),
+        Modifier
+            .fillMaxWidth()
+            .background(Workspace)
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
             buildAnnotatedString {
@@ -138,19 +145,27 @@ class MainActivity : ComponentActivity() {
                 withStyle(SpanStyle(color = Coral, fontWeight = FontWeight.ExtraBold)) { append("B") }
             },
             fontFamily = FontFamily.SansSerif,
-            fontSize = 26.sp,
+            fontSize = 24.sp,
             letterSpacing = (-1.2).sp,
             maxLines = 1,
         )
         Spacer(Modifier.weight(1f))
         AccountControl()
         if (secondaryLabel != null && onSecondary != null) {
-            TextButton(onClick = onSecondary) { Text(secondaryLabel, color = Cream) }
+            TextButton(
+                onClick = onSecondary,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            ) { Text(secondaryLabel, color = Cream, fontSize = 13.sp) }
         }
         if (actionLabel != null && onAction != null) {
-            Button(onClick = onAction, enabled = actionEnabled, shape = RoundedCornerShape(9.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText)) {
-                Text(actionLabel, fontWeight = FontWeight.Bold)
+            Button(
+                onClick = onAction,
+                enabled = actionEnabled,
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text(actionLabel, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
         }
     }
@@ -313,37 +328,53 @@ class MainActivity : ComponentActivity() {
     rejectProposal: () -> Unit,
     undoCheckpoint: (String) -> Unit,
     reviseStory: (String) -> Unit,
+    retryTurn: (String) -> Unit,
     recoverAgent: (AgentRecoveryAction) -> Unit,
     cancelAnalysis: () -> Unit,
 ) {
     val project = requireNotNull(state.project)
     var fullscreen by rememberSaveable { mutableStateOf(false) }
+    var showVideo by rememberSaveable { mutableStateOf(false) }
     var request by rememberSaveable { mutableStateOf("") }
     val read = EditorialReviewBuilder.editorialRead(project)
     val review = EditorialReviewBuilder.proposal(project)
+    val followUpSuggestions = listOf(
+        "Keep only the best takes",
+        "Remove silent pauses & stumbles",
+        "Add punchy captions for TikTok",
+        "Make the pace faster"
+    )
+
     Column(Modifier.fillMaxSize().background(Ink)) {
-        BrandBar(actionLabel = "Export ${minOf(project.export.width, project.export.height)}p", onAction = export, secondaryLabel = "Undo", onSecondary = undo)
+        BrandBar(
+            actionLabel = "Export ${minOf(project.export.width, project.export.height)}p",
+            onAction = export,
+            secondaryLabel = if (showVideo) "Hide Video" else "Show Video",
+            onSecondary = { showVideo = !showVideo }
+        )
         LazyColumn(
             Modifier.weight(1f),
             contentPadding = PaddingValues(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item {
-                Column(Modifier.fillMaxWidth().background(Workspace, RoundedCornerShape(18.dp)).border(1.dp, Border, RoundedCornerShape(18.dp))) {
-                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("YOUR VIDEO", color = Coral, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                            Text(if (state.previewUri == null) "Original clips" else "Current edit", color = CreamRaised, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            if (showVideo) {
+                item(key = "video-preview-header") {
+                    Column(Modifier.fillMaxWidth().background(Workspace, RoundedCornerShape(18.dp)).border(1.dp, Border, RoundedCornerShape(18.dp))) {
+                        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("YOUR VIDEO", color = Coral, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                                Text(if (state.previewUri == null) "Original clips" else "Current edit", color = CreamRaised, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            }
+                            SmallAction("Expand") { fullscreen = true }
                         }
-                        SmallAction("Expand") { fullscreen = true }
-                    }
-                    val ratio = project.export.width.toFloat() / project.export.height
-                    Box(Modifier.fillMaxWidth().padding(10.dp).background(Ink, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                        CanonicalVideoPreview(project, Modifier.fillMaxWidth().aspectRatio(ratio))
-                    }
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("00:00", color = Muted, fontSize = 10.sp)
-                        Text("${project.orderedSources.size} CLIPS  •  ${project.preferences.aspectRatio}", color = Muted, fontSize = 9.sp, letterSpacing = .6.sp)
+                        val ratio = project.export.width.toFloat() / project.export.height
+                        Box(Modifier.fillMaxWidth().padding(10.dp).background(Ink, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                            CanonicalVideoPreview(project, Modifier.fillMaxWidth().aspectRatio(ratio))
+                        }
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("00:00", color = Muted, fontSize = 10.sp)
+                            Text("${project.orderedSources.size} CLIPS  •  ${project.preferences.aspectRatio}", color = Muted, fontSize = 9.sp, letterSpacing = .6.sp)
+                        }
                     }
                 }
             }
@@ -355,7 +386,39 @@ class MainActivity : ComponentActivity() {
             items(project.analysis.revisionConversation, key = { it.id }) { turn ->
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     UserChatBubble(turn.request)
-                    AssistantChatBubble { Text(turn.response, color = CreamRaised, lineHeight = 20.sp) }
+                    AssistantChatBubble(accent = if (turn.isError) Color(0xFFFF6B6B) else Lavender) {
+                        when {
+                            turn.isPending -> {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Lavender)
+                                    Text(turn.response, color = CreamRaised, lineHeight = 20.sp)
+                                }
+                            }
+                            turn.isError -> {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(formatUserFacingError(turn.response), color = Color(0xFFFF8888), lineHeight = 20.sp, fontSize = 13.sp)
+                                    Button(
+                                        onClick = { retryTurn(turn.id) },
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Raised, contentColor = Cream),
+                                        border = BorderStroke(1.dp, Border),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Text("↻", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Coral)
+                                            Text("Retry request", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        }
+                                    }
+                                }
+                            }
+                            else -> {
+                                Text(turn.response, color = CreamRaised, lineHeight = 20.sp)
+                            }
+                        }
+                    }
                 }
             }
             items(project.analysis.appliedEditCheckpoints, key = { "checkpoint-${it.id}" }) { checkpoint ->
@@ -418,15 +481,24 @@ class MainActivity : ComponentActivity() {
             if (review != null) {
                 item { ProposalChatBubble(review, applyProposal, rejectProposal) }
             }
-            state.jobMessage?.let { message ->
-                item(key = "job-status") {
-                    AssistantChatBubble(accent = Lavender) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            if (state.isProcessing) {
+            if (state.isProcessing && project.analysis.revisionConversation.none { it.isPending }) {
+                state.jobMessage?.let { message ->
+                    item(key = "job-status") {
+                        AssistantChatBubble(accent = Lavender) {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
                                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Lavender)
+                                Text(message, color = CreamRaised, modifier = Modifier.weight(1f), fontSize = 13.sp)
+                                TextButton(
+                                    onClick = cancelAnalysis,
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text("Cancel", color = Coral, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
                             }
-                            Text(message, color = CreamRaised)
-                            if (state.isProcessing) TextButton(onClick = cancelAnalysis) { Text("Cancel") }
                         }
                     }
                 }
@@ -434,30 +506,47 @@ class MainActivity : ComponentActivity() {
 
         }
         Surface(color = Workspace, tonalElevation = 4.dp) {
-            Row(
-                Modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp),
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedTextField(
-                    value = request,
-                    onValueChange = { request = it.take(2_000) },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Ask for another change…") },
-                    maxLines = 5,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = CreamRaised, unfocusedTextColor = CreamRaised,
-                        focusedBorderColor = Lavender, unfocusedBorderColor = Border
+            Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().padding(bottom = 8.dp).horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    followUpSuggestions.forEach { suggestion ->
+                        SuggestionChip(
+                            onClick = { request = suggestion },
+                            label = { Text(suggestion, fontSize = 11.sp, color = Cream) }
+                        )
+                    }
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = request,
+                        onValueChange = { request = it.take(2_000) },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Ask ctrlB for changes or edits…") },
+                        maxLines = 5,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = CreamRaised, unfocusedTextColor = CreamRaised,
+                            focusedBorderColor = Lavender, unfocusedBorderColor = Border
+                        )
                     )
-                )
-                Button(
-                    onClick = { reviseStory(request); request = "" },
-                    enabled = request.isNotBlank(),
-                    modifier = Modifier.height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText)
-                ) { Text("Send", fontWeight = FontWeight.Bold) }
+                    Button(
+                        onClick = {
+                            val promptToSend = request
+                            request = ""
+                            reviseStory(promptToSend)
+                        },
+                        enabled = request.isNotBlank(),
+                        modifier = Modifier.height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText)
+                    ) { Text("Send", fontWeight = FontWeight.Bold) }
+                }
             }
         }
     }
@@ -499,14 +588,40 @@ class MainActivity : ComponentActivity() {
 private fun formatUsdMicros(micros: Long): String =
     "$" + String.format(java.util.Locale.US, "%.4f", micros / 1_000_000.0)
 
+private fun formatUserFacingError(raw: String): String {
+    return when {
+        "entitlement_required" in raw || "Entitlement required" in raw ->
+            "Subscription or entitlement required. Sign in or upgrade your account to continue using cloud AI runs."
+        "column" in raw && "does not exist" in raw ->
+            "Database schema update required. Please retry your request."
+        raw.startsWith("Agent run failed") && "{" in raw -> {
+            val jsonPart = raw.substringAfter("{", "").let { if (it.isNotBlank()) "{$it" else "" }
+            runCatching {
+                val json = Json.parseToJsonElement(jsonPart).jsonObject
+                val msg = json["error"]?.jsonPrimitive?.content ?: json["message"]?.jsonPrimitive?.content
+                if (!msg.isNullOrBlank()) "Agent run failure: $msg" else raw
+            }.getOrElse { raw }
+        }
+        else -> raw
+    }
+}
+
 @Composable private fun UserChatBubble(text: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        Text(
-            text,
-            color = DarkText,
-            modifier = Modifier.fillMaxWidth(.86f).background(Coral, RoundedCornerShape(18.dp, 4.dp, 18.dp, 18.dp)).padding(13.dp),
-            lineHeight = 20.sp
-        )
+        Surface(
+            color = Color(0xFF2E2E38),
+            shape = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp),
+            border = BorderStroke(1.dp, Color(0xFF3E3E4C)),
+            modifier = Modifier.widthIn(max = 320.dp)
+        ) {
+            Text(
+                text,
+                color = CreamRaised,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+            )
+        }
     }
 }
 
