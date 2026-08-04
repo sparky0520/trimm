@@ -594,7 +594,7 @@ private fun formatUserFacingError(raw: String): String {
             "Subscription or entitlement required. Sign in or upgrade your account to continue using cloud AI runs."
         "column" in raw && "does not exist" in raw ->
             "Database schema update required. Please retry your request."
-        raw.startsWith("Agent run failed") && "{" in raw -> {
+        ("Agent run" in raw || raw.startsWith("Agent run failed")) && "{" in raw -> {
             val jsonPart = raw.substringAfter("{", "").let { if (it.isNotBlank()) "{$it" else "" }
             runCatching {
                 val json = Json.parseToJsonElement(jsonPart).jsonObject
