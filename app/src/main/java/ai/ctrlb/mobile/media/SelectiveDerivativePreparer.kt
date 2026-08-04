@@ -67,7 +67,7 @@ class SelectiveDerivativePreparer(
             ?: throw DerivativePreparationException("Evidence source is not selected.")
         val range = TimeRange(job.range.startMs, job.range.endMs)
         if (range.endMs > source.durationMs) throw DerivativePreparationException("Evidence range exceeds the source.")
-        if (range.durationMs > 30_000 || job.maximumDurationMs == null || range.durationMs > job.maximumDurationMs) {
+        if (range.durationMs > 15_000 || job.maximumDurationMs == null || range.durationMs > job.maximumDurationMs) {
             throw DerivativePreparationException("Evidence range exceeds its duration budget.")
         }
         val type = type(job.type)

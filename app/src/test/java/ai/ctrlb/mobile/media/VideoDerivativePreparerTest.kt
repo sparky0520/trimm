@@ -25,16 +25,16 @@ class VideoDerivativePreparerTest {
             assertEquals("video/mp4", format)
             output.writeBytes(ByteArray(16) { 1 })
         }, now = { Instant.parse("2026-07-31T00:00:00Z") })
-        val result = preparer.prepare(DerivativeAuthorization(job(0, 30_000)), listOf(source))
-        assertEquals(30_000, result.sourceRange.durationMs)
+        val result = preparer.prepare(DerivativeAuthorization(job(0, 15_000)), listOf(source))
+        assertEquals(15_000, result.sourceRange.durationMs)
     }
 
-    @Test fun `rejects windows longer than thirty seconds`() {
+    @Test fun `rejects windows longer than fifteen seconds`() {
         val root = Files.createTempDirectory("video-window-limit").toFile()
         val preparer = SelectiveDerivativePreparer(root, DerivativeWriter { _, _, _, _, _, output -> output.writeBytes(byteArrayOf(1)) },
             now = { Instant.parse("2026-07-31T00:00:00Z") })
         assertThrows(DerivativePreparationException::class.java) {
-            runBlocking { preparer.prepare(DerivativeAuthorization(job(0, 30_001)), listOf(source)) }
+            runBlocking { preparer.prepare(DerivativeAuthorization(job(0, 15_001)), listOf(source)) }
         }
     }
 }

@@ -198,10 +198,11 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                     ))
                     store.save(analyzed)
                 }
-            }.onFailure {
-                Log.w("AnalysisWorker", "Agent run could not continue", it)
+            }.onFailure { error ->
+                Log.w("AnalysisWorker", "Agent run could not continue", error)
+                val detail = error.message?.takeIf { it.isNotBlank() } ?: "Retry when the connection is available."
                 analyzed = analyzed.copy(analysis = analyzed.analysis.copy(
-                    warnings = analyzed.analysis.warnings + "Agent run could not continue. Retry when the connection is available."
+                    warnings = analyzed.analysis.warnings + "Agent run could not continue: $detail"
                 ))
                 store.save(analyzed)
             }
