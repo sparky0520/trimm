@@ -97,6 +97,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
 @Serializable data class OperationTarget(val sourceId: String, val startMs: Long, val endMs: Long) {
     init { require(sourceId.isNotBlank() && startMs >= 0 && endMs > startMs) }
 }
+@Serializable @SerialName("remove_ranges") data class RemoveRanges(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val ranges: List<TimeRange>, val confidence: Float, val reason: String = "", val pacing: String = "natural") : EditOperation
 @Serializable @SerialName("remove_fumbles") data class RemoveFumbles(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val ranges: List<TimeRange>, val confidence: Float, val reasons: List<String> = emptyList()) : EditOperation
 @Serializable @SerialName("remove_awkward_silences") data class RemoveAwkwardSilences(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val ranges: List<TimeRange>, val confidence: Float, val pacing: String = "natural") : EditOperation
 @Serializable @SerialName("set_color_grade") data class SetColorGrade(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val grade: ColorGrade? = null, val target: OperationTarget? = null, val parameter: String? = null, val value: Float? = null) : EditOperation

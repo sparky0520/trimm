@@ -535,7 +535,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
     private fun toggle(op: EditOperation): EditOperation = when (op) {
-        is RemoveFumbles -> op.copy(enabled = !op.enabled); is RemoveAwkwardSilences -> op.copy(enabled = !op.enabled); is SetColorGrade -> op.copy(enabled = !op.enabled); is SetAudioCleanup -> op.copy(enabled = !op.enabled); is SetAudioLevels -> op.copy(enabled = !op.enabled)
+        is RemoveRanges -> op.copy(enabled = !op.enabled); is RemoveFumbles -> op.copy(enabled = !op.enabled); is RemoveAwkwardSilences -> op.copy(enabled = !op.enabled); is SetColorGrade -> op.copy(enabled = !op.enabled); is SetAudioCleanup -> op.copy(enabled = !op.enabled); is SetAudioLevels -> op.copy(enabled = !op.enabled)
         is AddTransition -> op.copy(enabled = !op.enabled); is AddMotionPreset -> op.copy(enabled = !op.enabled); is AddSoundEffect -> op.copy(enabled = !op.enabled); is SetBackgroundMusic -> op.copy(enabled = !op.enabled); is AddCaptions -> op.copy(enabled = !op.enabled); is ApplySemanticVisual -> op.copy(enabled = !op.enabled)
     }
     private fun processingMessage(stage: String?, percent: Int): String = when {
@@ -556,6 +556,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         return (added + removed + changed).ifEmpty { listOf("~ Updated the current edit") }.take(12)
     }
     private fun EditOperation.editResultLabel(): String = when (this) {
+        is RemoveRanges -> "Cut ${ranges.size} range${if (ranges.size == 1) "" else "s"}"
         is RemoveFumbles -> "Tightened ${ranges.size} speech range${if (ranges.size == 1) "" else "s"}"
         is RemoveAwkwardSilences -> "Removed ${ranges.size} awkward pause${if (ranges.size == 1) "" else "s"}"
         is SetColorGrade -> "Updated color grade"

@@ -36,7 +36,8 @@ import kotlin.math.pow
 object ExportCoordinator {
     fun composition(context: Context, project: MobileProject): Composition {
         val cuts = (
-            project.operations.filterIsInstance<RemoveFumbles>().filter { it.enabled }.flatMap { it.ranges } +
+            project.operations.filterIsInstance<RemoveRanges>().filter { it.enabled }.flatMap { it.ranges } +
+                project.operations.filterIsInstance<RemoveFumbles>().filter { it.enabled }.flatMap { it.ranges } +
                 project.operations.filterIsInstance<RemoveAwkwardSilences>().filter { it.enabled }.flatMap { it.ranges }
             ).distinct().sortedBy { it.startMs }
         val sourceOffsets = buildMap {

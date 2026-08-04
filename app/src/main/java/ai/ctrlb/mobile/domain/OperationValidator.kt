@@ -14,6 +14,7 @@ object OperationValidator {
     fun renderFingerprint(operations: List<EditOperation>): List<String> =
         operations.filter { it.enabled && isRendered(it) }.map { operation ->
             when (operation) {
+                is RemoveRanges -> "timeline-range:${operation.ranges}"
                 is RemoveFumbles -> "timeline:${operation.ranges}"
                 is RemoveAwkwardSilences -> "timeline-silence:${operation.ranges}:${operation.pacing}"
                 is SetColorGrade -> "video-color:${operation.grade}:${operation.target}:${operation.parameter}:${operation.value}"
@@ -28,6 +29,7 @@ object OperationValidator {
         }
 
     fun basis(operation: EditOperation): String = when (operation) {
+        is RemoveRanges -> "Transcript evidence • ${operation.reason.ifBlank { "Range removal" }}"
         is RemoveFumbles -> "Transcript evidence • ${operation.reasons.joinToString()}"
         is RemoveAwkwardSilences -> "Audiovisual pause evidence • ${operation.pacing} pacing"
         is SetColorGrade -> "Frame evidence"
@@ -45,6 +47,7 @@ object OperationValidator {
         require(proposed.map { it.id }.distinct().size == proposed.size) { "Duplicate operation id" }
         require(proposed.all(::isPlannerAvailable)) { "Operation is unavailable without render support or frame evidence" }
         proposed.forEach { op -> when (op) {
+            is RemoveRanges -> { require(op.confidence in 0f..1f); require(op.ranges.isNotEmpty()); op.ranges.forEach { require(it.endMs <= project.durationMs) } }
             is RemoveFumbles -> { require(op.confidence in 0f..1f); require(op.ranges.isNotEmpty()); op.ranges.forEach { require(it.endMs <= project.durationMs) } }
             is RemoveAwkwardSilences -> { require(op.confidence in 0f..1f); require(op.pacing in setOf("natural", "tight")); require(op.ranges.isNotEmpty()); op.ranges.forEach { require(it.endMs <= project.durationMs) } }
             is SetColorGrade -> {
