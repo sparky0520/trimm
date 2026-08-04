@@ -10,8 +10,10 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.MediaItem
+import androidx.media3.effect.Presentation
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
+import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
@@ -120,10 +122,31 @@ class AndroidDerivativeWriter(private val context: Context) : DerivativeWriter {
                 destination.delete()
             }
         }
+        val videoEffects = if (!removeVideo) {
+            val maxDim = 720
+            val rawW = if (source.rotation == 90 || source.rotation == 270) source.height else source.width
+            val rawH = if (source.rotation == 90 || source.rotation == 270) source.width else source.height
+            val srcW = if (rawW > 0) rawW else 1280
+            val srcH = if (rawH > 0) rawH else 720
+            val maxSrc = maxOf(srcW, srcH)
+            val scale = if (maxSrc > maxDim) maxDim.toFloat() / maxSrc else 1.0f
+            val targetW = ((srcW * scale).toInt() / 2) * 2
+            val targetH = ((srcH * scale).toInt() / 2) * 2
+            listOf(
+                Presentation.createForWidthAndHeight(
+                    targetW.coerceAtLeast(2),
+                    targetH.coerceAtLeast(2),
+                    Presentation.LAYOUT_SCALE_TO_FIT
+                )
+            )
+        } else {
+            emptyList()
+        }
         transformer.start(
             EditedMediaItem.Builder(mediaItem)
                 .setRemoveAudio(removeAudio)
                 .setRemoveVideo(removeVideo)
+                .setEffects(Effects(emptyList(), videoEffects))
                 .build(),
             destination.absolutePath
         )
