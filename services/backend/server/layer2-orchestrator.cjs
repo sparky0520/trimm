@@ -39,8 +39,7 @@ User asks for captions and quieter music with sufficient evidence -> call both f
 A tool rejects an invented evidence ID -> correct the call using only supplied IDs; never fabricate a replacement.`;
 
 const PROPOSAL_TOOL_TYPES = Object.freeze({
-  propose_remove_fumbles: 'remove_fumbles',
-  propose_remove_awkward_silences: 'remove_awkward_silences',
+  propose_remove_ranges: 'remove_ranges',
   propose_reduce_background_noise: 'set_audio_cleanup',
   propose_set_dialogue_loudness: 'set_audio_levels',
   propose_set_music_ducking: 'set_audio_levels',
@@ -90,10 +89,14 @@ function fineOperationFor(call, operationType, inventory) {
   if (['propose_add_visual_callout', 'propose_add_visual_spotlight', 'propose_reframe_subject'].includes(call.name)) {
     const visualSourceIndex = inventory.sources.findIndex((source) => source.id === raw.range?.sourceId);
     const offset = inventory.sources.slice(0, visualSourceIndex).reduce((total, source) => total + source.durationMs, 0);
-    const treatment = { propose_add_visual_callout: 'CALLOUT', propose_add_visual_spotlight: 'SPOTLIGHT',
-      propose_reframe_subject: 'REFRAME' }[call.name];
-    return { ...common, treatment, range: { startMs: offset + raw.range.startMs, endMs: offset + raw.range.endMs },
-      target: raw.range };
+    const treatment = {
+      propose_add_visual_callout: 'CALLOUT', propose_add_visual_spotlight: 'SPOTLIGHT',
+      propose_reframe_subject: 'REFRAME'
+    }[call.name];
+    return {
+      ...common, treatment, range: { startMs: offset + raw.range.startMs, endMs: offset + raw.range.endMs },
+      target: raw.range
+    };
   }
   return common;
 }
@@ -126,7 +129,7 @@ function validateInventory(value) {
   if (!value || typeof value !== 'object') throw orchestrationError('Invalid project inventory.');
   for (const name of ['agentRuns', 'activityEvents', 'videoToolRequests', 'editPrograms']) {
     if (!Array.isArray(value.supportedContractVersions?.[name]) ||
-        !value.supportedContractVersions[name].includes(2)) {
+      !value.supportedContractVersions[name].includes(2)) {
       throw orchestrationError('No mutually supported agent contract version.', 406, 'contract_version_not_supported');
     }
   }
@@ -162,15 +165,15 @@ function validateInventory(value) {
     } : null,
     clarifications: Array.isArray(value.clarifications)
       ? value.clarifications.slice(-10).map((item) => {
-          if (typeof item !== 'string' || !item.trim() || item.length > 500) {
-            throw orchestrationError('Invalid user clarification.', 400, 'invalid_clarification');
-          }
-          return item.trim();
-        })
+        if (typeof item !== 'string' || !item.trim() || item.length > 500) {
+          throw orchestrationError('Invalid user clarification.', 400, 'invalid_clarification');
+        }
+        return item.trim();
+      })
       : [],
     messages: Array.isArray(value.messages) ? value.messages.slice(-30).map((message) => {
       if (!message || !['user', 'assistant'].includes(message.role) || typeof message.content !== 'string' ||
-          !message.content.trim() || message.content.length > 4000) {
+        !message.content.trim() || message.content.length > 4000) {
         throw orchestrationError('Invalid conversation message.', 400, 'invalid_conversation');
       }
       return { role: message.role, content: message.content.trim() };
@@ -180,8 +183,8 @@ function validateInventory(value) {
     },
   };
   if (value.mediaConsent?.mode !== 'video_analysis' ||
-      typeof value.mediaConsent.grantedAt !== 'string' || !Number.isFinite(Date.parse(value.mediaConsent.grantedAt)) ||
-      typeof value.mediaConsent.disclosureVersion !== 'string') {
+    typeof value.mediaConsent.grantedAt !== 'string' || !Number.isFinite(Date.parse(value.mediaConsent.grantedAt)) ||
+    typeof value.mediaConsent.disclosureVersion !== 'string') {
     throw orchestrationError('Selective media consent is required.', 400, 'consent_required');
   }
   inventory.mediaConsent = {
@@ -267,9 +270,9 @@ function validateObservations(items, inventory, evidence) {
   return items.map((item) => {
     const source = sources.get(item?.sourceId);
     if (!source || typeof item.id !== 'string' || !/^[A-Za-z0-9._:-]{1,200}$/.test(item.id) || seen.has(item.id) ||
-        !Number.isSafeInteger(item.startMs) || !Number.isSafeInteger(item.endMs) || item.startMs < 0 ||
-        item.endMs <= item.startMs || item.endMs > source.durationMs || typeof item.description !== 'string' ||
-        typeof item.confidence !== 'number' || item.confidence < 0 || item.confidence > 1 || !['LOW', 'HIGH'].includes(item.resolution)) {
+      !Number.isSafeInteger(item.startMs) || !Number.isSafeInteger(item.endMs) || item.startMs < 0 ||
+      item.endMs <= item.startMs || item.endMs > source.durationMs || typeof item.description !== 'string' ||
+      typeof item.confidence !== 'number' || item.confidence < 0 || item.confidence > 1 || !['LOW', 'HIGH'].includes(item.resolution)) {
       throw orchestrationError('Gemini returned invalid or duplicate observations.', 422, 'invalid_observations');
     }
     seen.add(item.id);
@@ -302,13 +305,13 @@ function validateEditProgram(decision, inventory, observations) {
   const operationIds = new Set();
   for (const operation of decision.operations) {
     if (!operation || !ALLOWED_OPERATIONS.has(operation.type) || typeof operation.id !== 'string' ||
-        typeof operation.enabled !== 'boolean' || operationIds.has(operation.id)) {
+      typeof operation.enabled !== 'boolean' || operationIds.has(operation.id)) {
       throw orchestrationError('Planner returned an unsupported edit operation.', 422, 'invalid_edit_program');
     }
     operationIds.add(operation.id);
     if (typeof operation.confidence !== 'number' || operation.confidence < 0 || operation.confidence > 1 ||
-        !Array.isArray(operation.evidenceIds) || !operation.evidenceIds.length ||
-        operation.evidenceIds.some((id) => !evidenceIds.has(id))) {
+      !Array.isArray(operation.evidenceIds) || !operation.evidenceIds.length ||
+      operation.evidenceIds.some((id) => !evidenceIds.has(id))) {
       throw orchestrationError('Edit operation has missing, stale, or invented evidence.', 422, 'invalid_evidence_reference');
     }
     if (operation.type === 'remove_fumbles') validateContextualSpeechDecision(operation, evidenceIds);
@@ -317,7 +320,7 @@ function validateEditProgram(decision, inventory, observations) {
       const target = operation.target;
       const source = inventory.sources.find((item) => item.id === target?.sourceId);
       if (!source || !Number.isSafeInteger(target.startMs) || !Number.isSafeInteger(target.endMs) ||
-          target.startMs < 0 || target.endMs <= target.startMs || target.endMs > source.durationMs) {
+        target.startMs < 0 || target.endMs <= target.startMs || target.endMs > source.durationMs) {
         throw orchestrationError('Fine edit target is outside its source.', 422, 'invalid_edit_target');
       }
       const covered = observations.some((item) => operation.evidenceIds.includes(item.id) &&
@@ -335,9 +338,9 @@ function validateEditProgram(decision, inventory, observations) {
       for (const range of operation.ranges) {
         const source = sources.get(range?.sourceId);
         if (!source || !Number.isSafeInteger(range.startMs) || !Number.isSafeInteger(range.endMs) ||
-            range.startMs < 0 || range.endMs <= range.startMs || range.endMs > source.durationMs ||
-            !Array.isArray(range.evidenceIds) || !range.evidenceIds.length ||
-            range.evidenceIds.some((id) => !evidenceIds.has(id))) {
+          range.startMs < 0 || range.endMs <= range.startMs || range.endMs > source.durationMs ||
+          !Array.isArray(range.evidenceIds) || !range.evidenceIds.length ||
+          range.evidenceIds.some((id) => !evidenceIds.has(id))) {
           throw orchestrationError('Removal range is outside its source or lacks evidence.', 422, 'invalid_edit_program');
         }
         const coversRange = observations.some((item) => range.evidenceIds.includes(item.id) &&
@@ -348,20 +351,22 @@ function validateEditProgram(decision, inventory, observations) {
       }
     }
     if (operation.type === 'set_color_grade') {
-      const bounds = { exposure: [-1, 1], temperature: [-1, 1], contrast: [.75, 1.35],
-        saturation: [.7, 1.3], highlights: [-1, 1], shadows: [-1, 1], skinProtection: [0, 1] };
+      const bounds = {
+        exposure: [-1, 1], temperature: [-1, 1], contrast: [.75, 1.35],
+        saturation: [.7, 1.3], highlights: [-1, 1], shadows: [-1, 1], skinProtection: [0, 1]
+      };
       const limit = bounds[operation.parameter];
       const grade = operation.grade;
       const legacyGrade = grade && typeof grade === 'object' &&
         [['exposure', -1, 1], ['temperature', -1, 1], ['contrast', .75, 1.35], ['saturation', .7, 1.3],
-          ['highlights', -1, 1], ['shadows', -1, 1], ['skinProtection', 0, 1]]
+        ['highlights', -1, 1], ['shadows', -1, 1], ['skinProtection', 0, 1]]
           .every(([key, minimum, maximum]) => typeof grade[key] === 'number' && grade[key] >= minimum && grade[key] <= maximum);
       if (!legacyGrade && (!limit || typeof operation.value !== 'number' || operation.value < limit[0] || operation.value > limit[1])) {
         throw orchestrationError('Color adjustment is outside renderer-safe bounds.', 422, 'invalid_edit_program');
       }
     }
     if (operation.type === 'set_audio_cleanup' &&
-        (typeof operation.strength !== 'number' || operation.strength < 0 || operation.strength > 1)) {
+      (typeof operation.strength !== 'number' || operation.strength < 0 || operation.strength > 1)) {
       throw orchestrationError('Audio cleanup strength is invalid.', 422, 'invalid_edit_program');
     }
     if (operation.type === 'set_audio_levels') {
@@ -377,30 +382,30 @@ function validateEditProgram(decision, inventory, observations) {
       if (!validDialogue && !validDucking && !legacy) throw orchestrationError('Audio level operation is invalid.', 422, 'invalid_edit_program');
     }
     if (operation.type === 'add_sound_effect' &&
-        (!Number.isSafeInteger(operation.atSourceMs) || operation.atSourceMs < 0 ||
-         (operation.target && (operation.atSourceMs !== inventory.sources.slice(0,
-           inventory.sources.findIndex((source) => source.id === operation.target.sourceId))
-           .reduce((total, source) => total + source.durationMs, operation.target.startMs) ||
-           !Number.isSafeInteger(operation.durationMs) || operation.durationMs < 1)) ||
-         typeof operation.catalogId !== 'string' || !operation.catalogId ||
-         typeof operation.gainDb !== 'number' || operation.gainDb < -36 || operation.gainDb > 0)) {
+      (!Number.isSafeInteger(operation.atSourceMs) || operation.atSourceMs < 0 ||
+        (operation.target && (operation.atSourceMs !== inventory.sources.slice(0,
+          inventory.sources.findIndex((source) => source.id === operation.target.sourceId))
+          .reduce((total, source) => total + source.durationMs, operation.target.startMs) ||
+          !Number.isSafeInteger(operation.durationMs) || operation.durationMs < 1)) ||
+        typeof operation.catalogId !== 'string' || !operation.catalogId ||
+        typeof operation.gainDb !== 'number' || operation.gainDb < -36 || operation.gainDb > 0)) {
       throw orchestrationError('Sound effect parameters are invalid.', 422, 'invalid_edit_program');
     }
     if (operation.type === 'set_background_music' &&
-        (typeof operation.catalogId !== 'string' || !operation.catalogId ||
-         typeof operation.gainDb !== 'number' || operation.gainDb < -40 || operation.gainDb > -6 ||
-         typeof operation.loop !== 'boolean' || (operation.target && (!Number.isSafeInteger(operation.fadeInMs) || operation.fadeInMs < 0 ||
-         !Number.isSafeInteger(operation.fadeOutMs) || operation.fadeOutMs < 0 ||
-         operation.fadeInMs + operation.fadeOutMs > operation.target.endMs - operation.target.startMs)))) {
+      (typeof operation.catalogId !== 'string' || !operation.catalogId ||
+        typeof operation.gainDb !== 'number' || operation.gainDb < -40 || operation.gainDb > -6 ||
+        typeof operation.loop !== 'boolean' || (operation.target && (!Number.isSafeInteger(operation.fadeInMs) || operation.fadeInMs < 0 ||
+          !Number.isSafeInteger(operation.fadeOutMs) || operation.fadeOutMs < 0 ||
+          operation.fadeInMs + operation.fadeOutMs > operation.target.endMs - operation.target.startMs)))) {
       throw orchestrationError('Background music parameters are invalid.', 422, 'invalid_edit_program');
     }
     if (operation.type === 'add_captions') {
       if (!Array.isArray(operation.cues) || !operation.cues.length || operation.style !== 'bold-bottom' ||
-          operation.cues.some((cue) => typeof cue?.text !== 'string' || !cue.text.trim() || cue.text.length > 120 ||
-            !Number.isSafeInteger(cue.range?.startMs) || !Number.isSafeInteger(cue.range?.endMs) ||
-            cue.range.startMs < 0 || cue.range.endMs <= cue.range.startMs ||
-            !transcriptTextForProjectRange(inventory, cue.range.startMs, cue.range.endMs)
-              .includes(cue.text.replace(/\s+/g, ' ').trim().toLocaleLowerCase()))) {
+        operation.cues.some((cue) => typeof cue?.text !== 'string' || !cue.text.trim() || cue.text.length > 120 ||
+          !Number.isSafeInteger(cue.range?.startMs) || !Number.isSafeInteger(cue.range?.endMs) ||
+          cue.range.startMs < 0 || cue.range.endMs <= cue.range.startMs ||
+          !transcriptTextForProjectRange(inventory, cue.range.startMs, cue.range.endMs)
+            .includes(cue.text.replace(/\s+/g, ' ').trim().toLocaleLowerCase()))) {
         throw orchestrationError('Captions must be bounded and grounded in the supplied transcript.', 422, 'invalid_edit_program');
       }
     }
@@ -410,16 +415,16 @@ function validateEditProgram(decision, inventory, observations) {
       const values = bounds && [bounds.left, bounds.top, bounds.right, bounds.bottom];
       const range = operation.range;
       if (!['INTRODUCE', 'POINT_OUT', 'TRANSITION', 'REVEAL', 'EMPHASIZE', 'RECAP'].includes(operation.intent) ||
-          !['CALLOUT', 'SPOTLIGHT', 'REFRAME'].includes(operation.treatment) ||
-          !range || !Number.isSafeInteger(range.startMs) || !Number.isSafeInteger(range.endMs) ||
-          range.startMs < 0 || range.endMs - range.startMs < 300 || range.endMs - range.startMs > 8000 ||
-          !subject || !evidenceIds.has(subject.evidenceId) ||
-          !['FACE', 'SCREEN_UI', 'PRODUCT', 'OCR_TEXT', 'SALIENCE'].includes(subject.kind) ||
-          typeof subject.confidence !== 'number' || subject.confidence < .55 || subject.confidence > 1 ||
-          !values || values.some((value) => typeof value !== 'number' || value < 0 || value > 1) ||
-          bounds.right <= bounds.left || bounds.bottom <= bounds.top ||
-          operation.treatment === 'REFRAME' && (!operation.framing ||
-            operation.framing.preservesSubject !== true || operation.framing.preservesText !== true)) {
+        !['CALLOUT', 'SPOTLIGHT', 'REFRAME'].includes(operation.treatment) ||
+        !range || !Number.isSafeInteger(range.startMs) || !Number.isSafeInteger(range.endMs) ||
+        range.startMs < 0 || range.endMs - range.startMs < 300 || range.endMs - range.startMs > 8000 ||
+        !subject || !evidenceIds.has(subject.evidenceId) ||
+        !['FACE', 'SCREEN_UI', 'PRODUCT', 'OCR_TEXT', 'SALIENCE'].includes(subject.kind) ||
+        typeof subject.confidence !== 'number' || subject.confidence < .55 || subject.confidence > 1 ||
+        !values || values.some((value) => typeof value !== 'number' || value < 0 || value > 1) ||
+        bounds.right <= bounds.left || bounds.bottom <= bounds.top ||
+        operation.treatment === 'REFRAME' && (!operation.framing ||
+          operation.framing.preservesSubject !== true || operation.framing.preservesText !== true)) {
         throw orchestrationError('Semantic visual is unsafe or ungrounded.', 422, 'invalid_edit_program');
       }
     }
@@ -447,8 +452,8 @@ function validateDecision(decision, inventory, evidence) {
   if (decision.type === 'clarification') {
     const questions = Array.isArray(decision.questions) ? decision.questions.slice(0, 3) : [];
     if (!questions.length || questions.some((question) => typeof question?.id !== 'string' ||
-        typeof question?.prompt !== 'string' || !question.prompt.trim() || question.prompt.length > 500 ||
-        !Array.isArray(question.options) || question.options.length < 2 || question.options.length > 4)) {
+      typeof question?.prompt !== 'string' || !question.prompt.trim() || question.prompt.length > 500 ||
+      !Array.isArray(question.options) || question.options.length < 2 || question.options.length > 4)) {
       throw orchestrationError('Invalid clarification.', 502, 'invalid_planner_response');
     }
     return { type: 'clarification', questions, question: questions[0].prompt, options: questions[0].options, observations: added };
