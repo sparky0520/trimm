@@ -21,7 +21,7 @@ function createGeminiDecisionProvider({
       return { fileData: { fileUri: cached.uri, mimeType: 'video/mp4' },
         mediaResolution: { level: item.resolution === 'HIGH' ? 'MEDIA_RESOLUTION_HIGH' : 'MEDIA_RESOLUTION_LOW' } };
     }
-    if (ai?.files?.upload) {
+    if (ai?.files?.upload && item.bytes && item.bytes.length > 0) {
       try {
         let file = await ai.files.upload({ file: new Blob([item.bytes], { type: 'video/mp4' }), config: { mimeType: 'video/mp4' } });
         for (let attempt = 0; file?.state && String(file.state) !== 'ACTIVE' && attempt < 60; attempt++) {
@@ -41,7 +41,11 @@ function createGeminiDecisionProvider({
         }
       } catch {}
     }
-    return { inlineData: { mimeType: 'video/mp4', data: item.bytes.toString('base64') },
+    if (!item.bytes) {
+      throw Object.assign(new Error('Video evidence media bytes are missing or expired.'), { status: 409, code: 'evidence_bytes_missing' });
+    }
+    const data = Buffer.isBuffer(item.bytes) ? item.bytes.toString('base64') : Buffer.from(item.bytes).toString('base64');
+    return { inlineData: { mimeType: 'video/mp4', data },
       mediaResolution: { level: item.resolution === 'HIGH' ? 'MEDIA_RESOLUTION_HIGH' : 'MEDIA_RESOLUTION_LOW' } };
   }
   async function generate({
@@ -91,9 +95,9 @@ function createGeminiDecisionProvider({
       endMs: evidence.at(-1).endMs, resolution: evidence.at(-1).resolution,
     } : {},
   });
-  decide.toolResult = async ({ systemPolicy, inventory, evidence, history, toolCall, result }) => decide({
+  decide.toolResult = async ({ systemPolicy, inventory, evidence = [], history = [], toolCall, result }) => decide({
     systemPolicy, inventory, evidence,
-    history: [...history, { role: 'user', parts: [{ functionResponse: {
+    history: [...(history || []), { role: 'user', parts: [{ functionResponse: {
       name: toolCall.name,
       ...(toolCall.id ? { id: toolCall.id } : {}),
       response: result,

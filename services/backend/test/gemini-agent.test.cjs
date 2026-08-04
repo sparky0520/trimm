@@ -64,3 +64,14 @@ test('new agent path is pinned to Gemini 3.6 Flash and requests JSON', async () 
   assert.ok(Array.isArray(request.config.responseJsonSchema.anyOf));
   assert.equal(request.config.temperature, 0);
 });
+
+test('gemini agent throws structured error when evidence bytes are missing', async () => {
+  const decide = createGeminiDecisionProvider({
+    model: 'gemini-3.6-flash',
+    client: { models: { generateContent: async () => ({ text: '{}' }) } },
+  });
+  await assert.rejects(
+    () => decide({ systemPolicy: 'policy', inventory: { projectId: 'p' }, evidence: [{ id: 'job-1', resolution: 'LOW' }] }),
+    (error) => error.code === 'evidence_bytes_missing' && error.status === 409
+  );
+});
