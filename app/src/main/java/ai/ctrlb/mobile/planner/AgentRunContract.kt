@@ -446,7 +446,7 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
         val connection = endpoint.toURL().openConnection() as HttpURLConnection
         try {
             connection.requestMethod = "DELETE"
-            connection.connectTimeout = 15_000
+            connection.connectTimeout = 30_000
             connection.readTimeout = 30_000
             connection.setRequestProperty("Authorization", "Bearer ${accessToken()}")
             val status = connection.responseCode
@@ -459,7 +459,7 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
         val connection = endpoint.toURL().openConnection() as HttpURLConnection
         return try {
             connection.requestMethod = "POST"
-            connection.connectTimeout = 15_000
+            connection.connectTimeout = 30_000
             connection.readTimeout = AGENT_RUN_READ_TIMEOUT_MS
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json")

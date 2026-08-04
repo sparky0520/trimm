@@ -594,6 +594,8 @@ private fun formatUserFacingError(raw: String): String {
             "Subscription or entitlement required. Sign in or upgrade your account to continue using cloud AI runs."
         "column" in raw && "does not exist" in raw ->
             "Database schema update required. Please retry your request."
+        "timed out" in raw.lowercase() || "timeout" in raw.lowercase() ->
+            "The request timed out while waiting for the cloud AI agent. If the backend was sleeping, retrying now will succeed."
         ("Agent run" in raw || raw.startsWith("Agent run failed")) && "{" in raw -> {
             val jsonPart = raw.substringAfter("{", "").let { if (it.isNotBlank()) "{$it" else "" }
             runCatching {

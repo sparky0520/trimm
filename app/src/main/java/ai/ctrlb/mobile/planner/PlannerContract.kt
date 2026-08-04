@@ -63,7 +63,7 @@ class PlannerClient(private val endpoint: String, private val accessToken: suspe
     suspend fun plan(request: PlannerRequest): PlannerResponse = withContext(Dispatchers.IO) {
         val connection = URI(endpoint).toURL().openConnection() as HttpURLConnection
         try {
-            connection.requestMethod = "POST"; connection.connectTimeout = 15_000; connection.readTimeout = 45_000; connection.doOutput = true
+            connection.requestMethod = "POST"; connection.connectTimeout = 30_000; connection.readTimeout = 180_000; connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json"); connection.setRequestProperty("Authorization", "Bearer ${accessToken()}")
             connection.outputStream.use { it.write(json.encodeToString(PlannerRequest.serializer(), request).toByteArray()) }
             val status = connection.responseCode
@@ -140,8 +140,8 @@ class Layer2Client(endpoint: String, private val accessToken: suspend () -> Stri
         val connection = orchestrationEndpoint.toURL().openConnection() as HttpURLConnection
         try {
             connection.requestMethod = "POST"
-            connection.connectTimeout = 15_000
-            connection.readTimeout = 45_000
+            connection.connectTimeout = 30_000
+            connection.readTimeout = 180_000
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("Authorization", "Bearer ${accessToken()}")
