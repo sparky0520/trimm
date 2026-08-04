@@ -3,7 +3,7 @@
 const { recoverProposal } = require('./proposal-recovery.cjs');
 const { validateContextualSpeechDecision } = require('./contextual-speech.cjs');
 const ALLOWED_OPERATIONS = new Set([
-  'remove_fumbles', 'remove_awkward_silences', 'set_color_grade', 'set_audio_cleanup', 'set_audio_levels',
+  'remove_ranges', 'remove_fumbles', 'remove_awkward_silences', 'set_color_grade', 'set_audio_cleanup', 'set_audio_levels',
   'add_sound_effect', 'set_background_music', 'add_captions', 'semantic_visual',
 ]);
 const MAX_VIDEO_RANGE_MS = 30_000;
@@ -301,7 +301,7 @@ function validateEditProgram(decision, inventory, observations) {
   if (decision.expectedRevision !== inventory.projectRevision || !Array.isArray(decision.operations)) {
     throw orchestrationError('Invalid edit program envelope.', 422, 'invalid_edit_program');
   }
-  const evidenceIds = new Set(observations.map((item) => item.id));
+  const evidenceIds = new Set([...observations.map((item) => item.id), 'transcript:full', 'transcript']);
   const operationIds = new Set();
   for (const operation of decision.operations) {
     if (!operation || !ALLOWED_OPERATIONS.has(operation.type) || typeof operation.id !== 'string' ||
@@ -330,7 +330,7 @@ function validateEditProgram(decision, inventory, observations) {
         throw orchestrationError('Fine edit requires a reason.', 422, 'invalid_edit_program');
       }
     }
-    if (['remove_fumbles', 'remove_awkward_silences'].includes(operation.type)) {
+    if (['remove_ranges', 'remove_fumbles', 'remove_awkward_silences'].includes(operation.type)) {
       const sources = new Map(inventory.sources.map((source) => [source.id, source]));
       if (!Array.isArray(operation.ranges) || !operation.ranges.length) {
         throw orchestrationError('Speech and silence removals require bounded ranges.', 422, 'invalid_edit_program');

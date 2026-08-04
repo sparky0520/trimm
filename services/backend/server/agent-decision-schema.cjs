@@ -21,7 +21,7 @@ const operationSchema = {
     id: { type: 'string' },
     type: {
       type: 'string', enum: [
-        'remove_fumbles', 'remove_awkward_silences', 'set_color_grade', 'set_audio_cleanup', 'set_audio_levels',
+        'remove_ranges', 'remove_fumbles', 'remove_awkward_silences', 'set_color_grade', 'set_audio_cleanup', 'set_audio_levels',
         'add_sound_effect', 'set_background_music', 'add_captions', 'semantic_visual',
       ]
     },
