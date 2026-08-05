@@ -222,9 +222,6 @@ class DerivativeJobs {
     const usageKey = this.monthKey(principal.id);
     const usage = this.monthlyUsage.get(usageKey) || { transcriptionMinutes: 0, estimatedCostMicros: 0 };
     if (durationMinutes && usage.transcriptionMinutes + durationMinutes > access.quotas.transcriptionMinutesPerMonth) {
-    const usageKey = this.monthKey(principal.id);
-    const usage = this.monthlyUsage.get(usageKey) || { transcriptionMinutes: 0, estimatedCostMicros: 0 };
-    if (durationMinutes && usage.transcriptionMinutes + durationMinutes > access.quotas.transcriptionMinutesPerMonth) {
       throw jobError('Monthly derivative quota exceeded.', 429, 'quota_exceeded');
     }
     const costCeiling = Number.isSafeInteger(access.quotas.derivativeCostMicrosPerMonth)

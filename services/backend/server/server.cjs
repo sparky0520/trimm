@@ -307,10 +307,6 @@ const server = http.createServer(async (request, response) => {
       return json(response, authorized.reused ? 200 : 201, { ...derivativeView(authorized.job), reused: authorized.reused, chunkSize: 4 * 1024 * 1024, requestId });
     } catch (error) {
       return json(response, Number.isInteger(error?.status) ? error.status : 400, { error: error?.message || 'Could not authorize derivative.', code: error?.code, requestId });
-      const authorized = await derivativeJobs.authorize(principal, await collect(request, 16 * 1024));
-      return json(response, authorized.reused ? 200 : 201, { ...derivativeView(authorized.job), reused: authorized.reused, chunkSize: 4 * 1024 * 1024, requestId });
-    } catch (error) {
-      return json(response, Number.isInteger(error?.status) ? error.status : 400, { error: error?.message || 'Could not authorize derivative.', code: error?.code, requestId });
     }
   }
   if (request.method === 'GET' && requestUrl.pathname === '/v1/derivatives/activity') {
