@@ -398,7 +398,6 @@ class DerivativeJobs {
       if (!TERMINAL.has(job.status) && job.expiresAt <= now) { job.status = 'expired'; this.removeBytes(job); this.log(job, 'expired'); }
       if (job.deleteAt <= now) { this.removeBytes(job); this.jobs.delete(job.id); }
     }
-    for (const [key, cached] of this.results) if (cached.createdAt + this.retentionMs <= now) this.results.delete(key);
     const referenced = new Set([...this.jobs.keys()].map((id) => `${id}.derivative`));
     for (const name of fs.readdirSync(this.directory)) if (!referenced.has(name)) { try { fs.unlinkSync(path.join(this.directory, name)); } catch {} }
   }
