@@ -2,7 +2,6 @@
 
 const crypto = require('node:crypto');
 const { VolatileAgentRunStore } = require('./agent-run-store.cjs');
-const { ProposalRecoveryError } = require('./proposal-recovery.cjs');
 const { usageSummary } = require('./model-usage.cjs');
 const { AgentGraph } = require('./agent-graph.cjs');
 
@@ -71,14 +70,7 @@ class AgentRuns {
     } else if (decision.type !== 'tool_request') {
       run.inventory = { ...run.inventory, agentDraft: null };
     }
-    if (recovery) {
-      this.event(run, 'proposal_repairing', 'The proposal needed a bounded structural repair.');
-      run.attempts.push(...recovery.attempts);
-      run.recovery = { status: recovery.status, canRetry: false, canClarify: false };
-      this.event(run, 'proposal_repaired', 'The repaired proposal passed validation without changing the edit intent.');
-    } else if (run.recovery?.status === 'repair_failed') {
-      run.recovery = { ...run.recovery, status: 'resolved', canRetry: false, canClarify: false };
-    }
+
     run.decision = decision;
     run.inventory.messages = [...(run.inventory.messages || []), {
       role: 'assistant', content: JSON.stringify(decision),
@@ -90,30 +82,6 @@ class AgentRuns {
     this.event(run, ...EVENT_FOR[decision.type]);
   }
 
-  recoverFailure(run, error) {
-    if (!(error instanceof ProposalRecoveryError)) return false;
-    run.attempts ||= [];
-    run.usage = usageSummary([
-      ...(run.usage?.calls || run.usage || []),
-      ...error.recovery.attempts.map((attempt) => attempt.usage).filter(Boolean),
-    ]);
-    this.event(run, 'proposal_repairing', 'The proposal was malformed, so a bounded structural repair was attempted.');
-    run.attempts.push(...error.recovery.attempts);
-    run.recovery = {
-      status: 'repair_failed',
-      canRetry: true,
-      canClarify: true,
-      attemptCount: error.recovery.attempts.length,
-    };
-    run.status = 'waiting_for_user';
-    run.decision = {
-      type: 'clarification',
-      question: 'The proposal could not be repaired safely. Would you like to retry or clarify the edit?',
-      options: ['retry', 'clarify'],
-    };
-    this.event(run, 'proposal_repair_failed', 'Nothing was applied. Your project and accepted edits are unchanged; you can retry or clarify.');
-    return true;
-  }
 
   async start(principal, inventory) {
     const initialIntent = typeof inventory?.intent === 'string' ? inventory.intent.trim() : '';
@@ -146,10 +114,7 @@ class AgentRuns {
       }));
       run = await this.store.save(run, run.stateVersion);
     } catch (error) {
-      if (this.recoverFailure(run, error)) {
-        run = await this.store.save(run, run.stateVersion);
-        return this.view(run);
-      }
+
       run.status = 'failed';
       run.decision = { type: 'fallback', reason: 'The analysis could not be completed.' };
       this.event(run, 'failed', 'The analysis stopped safely and can be retried.');
@@ -161,10 +126,9 @@ class AgentRuns {
 
   async continue(principal, runId, update) {
     let run = await this.owned(principal, runId);
-    const recovering = run.status === 'waiting_for_user' && run.recovery?.status === 'repair_failed';
     const message = typeof update?.message === 'string' ? update.message.trim() : '';
     const conversational = ['waiting_for_user', 'proposal_ready', 'partial'].includes(run.status) && message;
-    if (!recovering && run.status !== 'waiting_for_evidence' && !conversational) {
+    if (run.status !== 'waiting_for_evidence' && !conversational) {
       throw Object.assign(new Error('Agent run is not waiting for evidence or a user message.'), { status: 409, code: 'agent_run_not_waiting' });
     }
     if (message.length > 2000) {
@@ -184,22 +148,7 @@ class AgentRuns {
       };
       run.projectRevision = run.inventory.projectRevision;
       this.event(run, 'analyzing', 'Continuing the same conversation with your latest request.');
-    } else if (recovering) {
-      if (!['retry', 'clarify'].includes(update?.action)) {
-        throw Object.assign(new Error('Retry or clarification is required.'), { status: 400, code: 'recovery_action_required' });
-      }
-      if (update.action === 'clarify') {
-        if (typeof update.clarification !== 'string' || !update.clarification.trim() || update.clarification.length > 500) {
-          throw Object.assign(new Error('A bounded clarification is required.'), { status: 400, code: 'clarification_required' });
-        }
-        run.inventory = {
-          ...run.inventory,
-          clarifications: [...(run.inventory.clarifications || []), update.clarification.trim()].slice(-10),
-        };
-      }
-      this.event(run, 'analyzing', update.action === 'retry'
-        ? 'Retrying the same request without applying the malformed proposal.'
-        : 'Retrying the same request with your clarification.');
+
     } else {
       const evidenceJobIds = Array.isArray(update?.evidenceJobIds) ? update.evidenceJobIds : [];
       if (!evidenceJobIds.length) {
@@ -229,10 +178,7 @@ class AgentRuns {
       }));
       run = await this.store.save(run, run.stateVersion);
     } catch (error) {
-      if (this.recoverFailure(run, error)) {
-        run = await this.store.save(run, run.stateVersion);
-        return this.view(run);
-      }
+
       run.status = 'failed';
       run.decision = { type: 'fallback', reason: 'The analysis could not be completed.' };
       this.event(run, 'failed', 'The analysis stopped safely and can be retried.');

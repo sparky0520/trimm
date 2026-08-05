@@ -151,17 +151,14 @@ class DerivativeJobs {
     this.now = options.now || Date.now;
     this.ttlMs = options.ttlMs || DEFAULT_TTL_MS;
     this.retentionMs = options.retentionMs || DEFAULT_RETENTION_MS;
-    this.accessFor = options.accessFor || (async () => ({ entitlements: ['cloud_planning'], quotas: { concurrentJobs: 4, transcriptionMinutesPerMonth: 30 } }));
     this.jobs = new Map();
     this.idempotency = new Map();
     this.activity = new Map();
-    this.monthlyUsage = new Map();
     this.activeWrites = new Set();
     fs.mkdirSync(this.directory, { recursive: true });
   }
 
   mediaPath(id) { return path.join(this.directory, `${id}.derivative`); }
-  monthKey(userId) { return `${userId}:${new Date(this.now()).toISOString().slice(0, 7)}`; }
   activeCount(userId) {
     return [...this.jobs.values()].filter((job) => job.userId === userId && !TERMINAL.has(job.status) && job.expiresAt > this.now()).length;
   }
@@ -214,19 +211,7 @@ class DerivativeJobs {
       timelineReferences: mapping, retentionMs, resolution,
     })).digest('hex');
     if (maximumDurationMs == null || maximumDurationMs > 30_000) throw jobError('Video jobs require a duration no greater than 30 seconds.');
-    const access = await this.accessFor(principal.id);
-    const entitlement = 'cloud_planning';
-    if (!access.entitlements?.includes(entitlement)) throw jobError('Entitlement required.', 403, 'entitlement_required');
-    if (this.activeCount(principal.id) >= access.quotas.concurrentJobs) throw jobError('Concurrent job limit reached.', 429, 'concurrency_limit');
-    const durationMinutes = 0;
-    const usageKey = this.monthKey(principal.id);
-    const usage = this.monthlyUsage.get(usageKey) || { transcriptionMinutes: 0, estimatedCostMicros: 0 };
-    if (durationMinutes && usage.transcriptionMinutes + durationMinutes > access.quotas.transcriptionMinutesPerMonth) {
-      throw jobError('Monthly derivative quota exceeded.', 429, 'quota_exceeded');
-    }
-    const costCeiling = Number.isSafeInteger(access.quotas.derivativeCostMicrosPerMonth)
-      ? access.quotas.derivativeCostMicrosPerMonth : 100_000_000;
-    if (usage.estimatedCostMicros + estimatedCostMicros > costCeiling) throw jobError('Derivative cost ceiling exceeded.', 429, 'cost_ceiling_exceeded');
+
     const idemKey = `${principal.id}:${projectId}:${idempotencyKey}`;
     const existingId = this.idempotency.get(idemKey);
     if (existingId) {
@@ -252,10 +237,6 @@ class DerivativeJobs {
     };
     this.jobs.set(id, job);
     this.idempotency.set(idemKey, id);
-    this.monthlyUsage.set(usageKey, {
-      transcriptionMinutes: usage.transcriptionMinutes + durationMinutes,
-      estimatedCostMicros: usage.estimatedCostMicros + estimatedCostMicros,
-    });
     fs.writeFileSync(this.mediaPath(id), Buffer.alloc(0), { flag: 'wx' });
     this.log(job, 'authorized', {
       format: acceptedFormat, maximumBytes, maximumDurationMs, selectionReason,

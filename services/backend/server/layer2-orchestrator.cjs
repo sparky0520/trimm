@@ -1,6 +1,5 @@
 'use strict';
 
-const { recoverProposal } = require('./proposal-recovery.cjs');
 const { validateContextualSpeechDecision } = require('./contextual-speech.cjs');
 const ALLOWED_OPERATIONS = new Set([
   'remove_ranges', 'remove_fumbles', 'remove_awkward_silences', 'set_color_grade', 'set_audio_cleanup', 'set_audio_levels',
@@ -465,12 +464,11 @@ function validateDecision(decision, inventory, evidence) {
 }
 
 class Layer2Orchestrator {
-  constructor({ derivativeJobs, decide, repair = decide?.repair, audioSearch = null }) {
+  constructor({ derivativeJobs, decide, repair = decide?.repair }) {
     if (!derivativeJobs || typeof decide !== 'function') throw new TypeError('Layer2Orchestrator dependencies are required.');
     this.derivativeJobs = derivativeJobs;
     this.decide = decide;
     this.repair = repair;
-    this.audioSearch = audioSearch;
   }
 
   async authorizeVideo(principal, inventory, request, selectionReason = 'agent_requested') {
@@ -529,24 +527,7 @@ class Layer2Orchestrator {
           _agentState: { operations: [...drafts.values()], observations: draftObservations, audioSearchResults: [...audioSearchResults.values()] },
         };
       }
-      if (['search_sound_effects', 'search_background_music'].includes(call.name)) {
-        let result;
-        try {
-          if (!this.audioSearch) throw orchestrationError('The governed audio registry is unavailable.', 503, 'audio_registry_unavailable');
-          const searchResult = await this.audioSearch.search({
-            ...(call.args || {}), kind: call.name === 'search_sound_effects' ? 'SOUND_EFFECT' : 'MUSIC',
-          });
-          const assets = searchResult.assets || [];
-          assets.forEach((asset) => audioSearchResults.set(asset.assetId, asset));
-          result = { ok: true, assets, sources: searchResult.sources || [], resultCount: assets.length };
-        } catch (error) {
-          result = { ok: false, code: error.code || 'audio_search_failed', message: String(error.message).slice(0, 300) };
-        }
-        raw = await this.decide.toolResult({
-          systemPolicy: SYSTEM_POLICY, inventory: workingInventory, evidence, history: raw.history, toolCall: call, result,
-        });
-        continue;
-      }
+
       if (call.name === 'ask_clarification') {
         const questions = Array.isArray(call.args?.questions) ? call.args.questions.slice(0, 3) : [];
         if (!questions.length) throw orchestrationError('Clarification questions are required.', 422, 'invalid_clarification');
@@ -617,18 +598,9 @@ class Layer2Orchestrator {
       });
     }
     if (raw.toolCall) return { type: 'fallback', reason: 'The bounded editing loop reached its iteration limit.', observations: [], _usage: usage };
-    const recovered = await recoverProposal({
-      primary: raw,
-      repair: this.repair,
-      validate: (value) => validateDecision(value, workingInventory, evidence),
-      originalRequest: workingInventory,
-      editorialIntent: workingInventory.intent,
-    });
-    const decision = recovered.decision;
-    usage.push(...(recovered.usage || []));
+    const decision = validateDecision(raw, workingInventory, evidence);
     return {
       ...decision,
-      ...(recovered.recovery ? { _recovery: recovered.recovery } : {}),
       ...(usage.length ? { _usage: usage } : {}),
     };
   }

@@ -15,12 +15,11 @@ function payloadFor(engine) {
     jobs: cloneMap(engine.jobs),
     idempotency: cloneMap(engine.idempotency),
     activity: cloneMap(engine.activity),
-    monthlyUsage: cloneMap(engine.monthlyUsage),
   };
 }
 
 function hydrate(engine, payload = {}) {
-  for (const name of ['jobs', 'idempotency', 'activity', 'monthlyUsage']) {
+  for (const name of ['jobs', 'idempotency', 'activity']) {
     engine[name] = new Map(Array.isArray(payload[name]) ? payload[name] : []);
   }
 }
@@ -35,7 +34,6 @@ class PostgresDerivativeJobs {
       now: options.now,
       ttlMs: options.ttlMs,
       retentionMs: options.retentionMs,
-      accessFor: options.accessFor,
     };
   }
 

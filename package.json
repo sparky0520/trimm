@@ -6,9 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test \"services/backend/test/*.test.cjs\"",
-    "backend:serve": "node services/backend/server/server.cjs",
-    "billing:verify-db": "node services/backend/scripts/verify-billing-db.cjs",
-    "audio:import": "node services/backend/scripts/ingest-audio.cjs"
+    "backend:serve": "node services/backend/server/server.cjs"
   },
   "dependencies": {
     "@google/genai": "^2.13.0",

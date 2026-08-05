@@ -11,12 +11,7 @@ const OpenAI = require('openai').default;
 const transcriptionCore = require('./transcription-core.cjs');
 const { TranscriptionUploads } = require('./transcription-uploads.cjs');
 const { fromEnvironment: authenticationFromEnvironment } = require('./authentication.cjs');
-const desktopPlanner = require('./desktop-planner-core.cjs');
 const { IdentityRateLimiter, auditEvent, correlationId, requireScope } = require('./authorization.cjs');
-const { BillingService, VolatileBillingStore } = require('./billing-core.cjs');
-const { PostgresBillingStore } = require('./postgres-billing-store.cjs');
-const { createPaddleWebhookVerifier } = require('./paddle-billing.cjs');
-const { GooglePlayPurchaseVerifier } = require('./google-play-billing.cjs');
 const { DerivativeJobs } = require('./derivative-jobs.cjs');
 const { PostgresDerivativeJobs } = require('./postgres-derivative-jobs.cjs');
 const { Layer2Orchestrator } = require('./layer2-orchestrator.cjs');
@@ -24,17 +19,12 @@ const { AgentRuns } = require('./agent-runs.cjs');
 const { Conversations } = require('./conversations.cjs');
 const { PostgresAgentRunStore, VolatileAgentRunStore } = require('./agent-run-store.cjs');
 const { createGeminiDecisionProvider } = require('./gemini-agent.cjs');
-const { AudioSearchService } = require('./audio-search.cjs');
-const plannerCore = require('./planner-core.cjs');
 
 const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.MOONSHOT_API_KEY;
 const baseURL = process.env.MOONSHOT_BASE_URL || 'https://api.moonshot.ai/v1';
 const model = process.env.MOONSHOT_MODEL || 'kimi-k3';
 const MAX_BODY_BYTES = 512 * 1024;
-// Frozen v1 compatibility routes for the first ctrlB clients. Keep their
-// request/response behavior stable while new agent work moves to a new route.
-const LEGACY_PLANNER_ROUTES = new Set(['/v1/desktop/plan', '/v1/mobile/plan']);
 const privacyPolicy = fs.readFileSync(path.join(__dirname, 'privacy.html'));
 const transcriptionUploads = new TranscriptionUploads();
 const uploadCleanupTimer = setInterval(() => transcriptionUploads.cleanup(), 15 * 60 * 1000);
@@ -42,29 +32,14 @@ uploadCleanupTimer.unref();
 const authentication = authenticationFromEnvironment();
 const rateLimiter = new IdentityRateLimiter({ limit: Number(process.env.CTRLB_RATE_LIMIT_PER_MINUTE) || 120 });
 if (process.env.NODE_ENV === 'production' && !process.env.SUPABASE_DB_URL) {
-  throw new Error('Production billing database is not configured; agent run persistence also requires it.');
+  throw new Error('Production database is not configured; agent run persistence requires it.');
 }
-const billing = new BillingService({
-  store: process.env.SUPABASE_DB_URL
-    ? new PostgresBillingStore({ databaseUrl: process.env.SUPABASE_DB_URL })
-    : new VolatileBillingStore(),
-  verifiers: {
-    paddle: createPaddleWebhookVerifier({ secret: process.env.CTRLB_PADDLE_WEBHOOK_SECRET }),
-  },
-});
 const derivativeJobs = process.env.SUPABASE_DB_URL
-  ? new PostgresDerivativeJobs({
-      databaseUrl: process.env.SUPABASE_DB_URL,
-      accessFor: (userId) => billing.accessFor(userId),
-    })
-  : new DerivativeJobs({ accessFor: (userId) => billing.accessFor(userId) });
+  ? new PostgresDerivativeJobs({ databaseUrl: process.env.SUPABASE_DB_URL })
+  : new DerivativeJobs({});
 const layer2Orchestrator = new Layer2Orchestrator({
   derivativeJobs,
   decide: createGeminiDecisionProvider(),
-  audioSearch: new AudioSearchService({
-    catalogUrl: process.env.CTRLB_AUDIO_CATALOG_URL,
-    freesoundApiKey: process.env.FREESOUND_API_KEY,
-  }),
 });
 const agentRuns = new AgentRuns({
   orchestrator: layer2Orchestrator,
@@ -79,9 +54,6 @@ const derivativeCleanupTimer = setInterval(() => {
   });
 }, 15 * 60 * 1000);
 derivativeCleanupTimer.unref();
-const googlePlay = process.env.CTRLB_GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
-  ? new GooglePlayPurchaseVerifier()
-  : null;
 authentication.assertProductionConfigured();
 
 function policyFor(request, pathname) {
@@ -91,12 +63,10 @@ function policyFor(request, pathname) {
     resourceType: 'derivative_job',
   };
   if (pathname.startsWith('/v1/transcribe')) return { scope: 'transcribe:create', action: request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'update' : 'create', resourceType: 'transcription' };
-  if (LEGACY_PLANNER_ROUTES.has(pathname) || pathname === '/v1/mobile/orchestrate' || pathname === '/v1/agent/runs' || pathname.startsWith('/v1/conversations') ||
+  if (pathname === '/v1/agent/runs' || pathname.startsWith('/v1/conversations') ||
       /^\/v1\/agent\/runs\/[0-9a-f-]{36}(?:\/continue)?$/i.test(pathname)) {
     return { scope: 'plan:create', action: 'create', resourceType: 'plan' };
   }
-  if (pathname === '/v1/billing/catalog' || pathname === '/v1/billing/status') return { action: 'read', resourceType: 'billing' };
-  if (pathname === '/v1/billing/google-play/verify') return { action: 'verify', resourceType: 'billing' };
   return null;
 }
 
@@ -113,13 +83,7 @@ function json(response, status, body, headers = {}) {
   response.end(encoded);
 }
 
-function legacyPlannerJson(response, status, body) {
-  return json(response, status, body, {
-    deprecation: 'true',
-    'x-ctrlb-route-lifecycle': 'legacy',
-    'x-ctrlb-contract-version': '1',
-  });
-}
+
 
 function html(response, status, body) {
   response.writeHead(status, {
@@ -153,30 +117,7 @@ function derivativeContext(request) {
   };
 }
 
-function validateRequest(value) {
-  if (!value || typeof value !== 'object' || typeof value.prompt !== 'string' || value.prompt.length > 2000) return false;
-  if (!Array.isArray(value.operations) || !value.evidence || value.evidence.schemaVersion !== 1 ||
-      typeof value.evidence.evidenceFingerprint !== 'string' || !Array.isArray(value.evidence.items) || value.evidence.items.length > 256) return false;
-  const ids = new Set();
-  for (const item of value.evidence.items) {
-    if (!item || typeof item.id !== 'string' || ids.has(item.id) ||
-        !['STORY_BEAT', 'TRANSCRIPT', 'FRAME', 'VISUAL', 'AUDIO_SUMMARY', 'SHOT'].includes(item.type) ||
-        typeof item.sourceId !== 'string' || !/^source-\d+$/.test(item.sourceId) ||
-        !item.range || !Number.isSafeInteger(item.range.startMs) || !Number.isSafeInteger(item.range.endMs) ||
-        item.range.startMs < 0 || item.range.endMs <= item.range.startMs ||
-        typeof item.summary !== 'string' || item.summary.length > 1000) return false;
-    ids.add(item.id);
-  }
-  const wire = JSON.stringify(value).toLowerCase();
-  return !['"uri"', '"proxyuri"', '"sourcefingerprint"', '"artifactpath"', '"path"', '"bytes"', '"image"', '"audio"'].some((key) => wire.includes(key));
-}
 
-function validateProposal(value, revision, validEvidenceIds = new Set()) {
-  const allowed = new Set(['remove_fumbles', 'set_audio_cleanup', 'set_audio_levels', 'add_sound_effect', 'set_background_music', 'add_captions', 'semantic_visual']);
-  // Shared mobile policy: Color requires frame evidence. Legacy generic transitions and motion presets are unavailable.
-  void allowed;
-  return plannerCore.validateProposal(value, revision, validEvidenceIds);
-}
 
 async function collect(request, maxBytes = MAX_BODY_BYTES) {
   const chunks = []; let size = 0;
@@ -194,22 +135,7 @@ async function collectBuffer(request, maxBytes = 256 * 1024) {
   return Buffer.concat(chunks);
 }
 
-async function planDesktop(payload) {
-  const frames = Array.isArray(payload?.frameImages) ? payload.frameImages : [];
-  if (!payload || !desktopPlanner.validateRequest(payload.request) || frames.length > 6 || frames.some((frame) =>
-    !frame || typeof frame.id !== 'string' || typeof frame.data !== 'string' || frame.data.length > 1_000_000 || !/^[a-zA-Z0-9+/=]+$/.test(frame.data))) {
-    throw Object.assign(new Error('Invalid desktop planner request'), { status: 400 });
-  }
-  const provider = String(process.env.CTRLB_DESKTOP_AI_PROVIDER || 'kimi').toLowerCase();
-  if (!['kimi', 'openai'].includes(provider)) throw Object.assign(new Error('Unsupported desktop AI provider configuration'), { status: 503 });
-  return desktopPlanner.createAiPlanner({
-    provider,
-    apiKey: provider === 'openai' ? process.env.OPENAI_API_KEY : process.env.MOONSHOT_API_KEY,
-    baseURL: provider === 'kimi' ? baseURL : undefined,
-    model: provider === 'openai' ? process.env.CTRLB_DESKTOP_OPENAI_MODEL : model,
-    frameDataById: Object.fromEntries(frames.map((frame) => [frame.id, frame.data])),
-  })(payload.request);
-}
+
 
 const server = http.createServer(async (request, response) => {
   const requestUrl = new URL(request.url, 'http://localhost');
@@ -219,25 +145,6 @@ const server = http.createServer(async (request, response) => {
   }
   let principal;
   const requestId = correlationId(request);
-  if (request.method === 'POST' && requestUrl.pathname === '/v1/billing/webhook') {
-    try {
-      rateLimiter.consume(request, null);
-      const provider = requestUrl.searchParams.get('provider') || '';
-      const result = await billing.ingest(provider, {
-        body: await collectBuffer(request),
-        signature: provider === 'paddle'
-          ? request.headers['paddle-signature']
-          : request.headers['x-ctrlb-signature'],
-      });
-      audit({ action: 'billing.webhook', resourceType: 'billing', outcome: 'allowed', requestId });
-      return json(response, 200, { accepted: true, duplicate: result.duplicate, requestId });
-    } catch (error) {
-      audit({ action: 'billing.webhook', resourceType: 'billing', outcome: 'denied', reason: error?.code, requestId });
-      return json(response, Number.isInteger(error?.status) ? error.status : 503, {
-        error: error?.message || 'Billing webhook failed.', code: error?.code || 'billing_webhook_failed', requestId,
-      });
-    }
-  }
   if (requestUrl.pathname.startsWith('/v1/')) {
     const policy = policyFor(request, requestUrl.pathname);
     try {
@@ -254,51 +161,7 @@ const server = http.createServer(async (request, response) => {
       return json(response, Number.isInteger(error?.status) ? error.status : 401, { error: error?.message || 'Unauthorized', code: error?.code || 'unauthorized', requestId });
     }
   }
-  if (request.method === 'GET' && requestUrl.pathname === '/v1/billing/catalog') {
-    return json(response, 200, billing.catalog());
-  }
-  if (request.method === 'GET' && requestUrl.pathname === '/v1/billing/status') {
-    try { return json(response, 200, await billing.accessFor(principal.id)); }
-    catch (error) {
-      return json(response, Number.isInteger(error?.status) ? error.status : 503, {
-        error: error?.message || 'Billing status failed.', code: error?.code || 'billing_status_failed', requestId,
-      });
-    }
-  }
-  if (request.method === 'POST' && requestUrl.pathname === '/v1/billing/google-play/verify') {
-    try {
-      if (!googlePlay) throw Object.assign(new Error('Google Play purchase verification is not configured.'), {
-        status: 503, code: 'billing_unconfigured',
-      });
-      const submission = await collect(request, 8 * 1024);
-      const verified = await googlePlay.verify({
-        purchaseToken: submission.purchaseToken,
-        productId: submission.productId,
-        canonicalUserId: principal.id,
-      });
-      const [result] = await billing.reconcile('google_play', [verified]);
-      if (verified.acknowledgementPending) {
-        await googlePlay.acknowledge({
-          purchaseToken: submission.purchaseToken,
-          productId: submission.productId,
-        });
-      }
-      audit({ principal, action: 'billing.verify', resourceType: 'billing', outcome: 'allowed', requestId });
-      return json(response, 200, {
-        accepted: true,
-        duplicate: result.duplicate,
-        access: await billing.accessFor(principal.id),
-        requestId,
-      });
-    } catch (error) {
-      audit({ principal, action: 'billing.verify', resourceType: 'billing', outcome: 'denied', reason: error?.code, requestId });
-      return json(response, Number.isInteger(error?.status) ? error.status : 503, {
-        error: error?.message || 'Purchase verification failed.',
-        code: error?.code || 'purchase_verification_failed',
-        requestId,
-      });
-    }
-  }
+
   const derivativeMatch = requestUrl.pathname.match(/^\/v1\/derivatives\/jobs\/([0-9a-f-]{36})(\/complete)?$/i);
   if (request.method === 'POST' && requestUrl.pathname === '/v1/derivatives/jobs') {
     try {
@@ -379,27 +242,7 @@ const server = http.createServer(async (request, response) => {
       return json(response, error?.status && Number.isInteger(error.status) ? error.status : 502, { error: error?.message || 'Transcription failed' });
     }
   }
-  if (request.method === 'POST' && requestUrl.pathname === '/v1/desktop/plan') {
-    try {
-      const result = await planDesktop(await collect(request, 7 * 1024 * 1024));
-      return legacyPlannerJson(response, result.ok ? 200 : result.error?.category === 'authentication' ? 503 : 502, result);
-    } catch (error) {
-      console.error('[desktop-planner] request failed', { message: error?.message, status: error?.status });
-      return legacyPlannerJson(response, Number.isInteger(error?.status) ? error.status : 502, { error: error?.message || 'Planner failed' });
-    }
-  }
-  if (request.method === 'POST' && requestUrl.pathname === '/v1/mobile/orchestrate') {
-    try {
-      return json(response, 200, await layer2Orchestrator.orchestrate(principal, await collect(request)));
-    } catch (error) {
-      console.error('[legacy-mobile-orchestrator] request failed', { message: error?.message, status: error?.status, code: error?.code });
-      return json(response, Number.isInteger(error?.status) ? error.status : 502, {
-        error: error?.message || 'Legacy mobile orchestration failed',
-        code: error?.code || 'orchestration_failed',
-        requestId,
-      });
-    }
-  }
+
   if (request.method === 'POST' && requestUrl.pathname === '/v1/agent/runs') {
     try {
       return json(response, 201, await agentRuns.start(principal, await collect(request)));
@@ -462,28 +305,7 @@ const server = http.createServer(async (request, response) => {
       });
     }
   }
-  if (request.method !== 'POST' || requestUrl.pathname !== '/v1/mobile/plan') return json(response, 404, { error: 'Not found' });
-  try {
-    if (!apiKey) throw Object.assign(new Error('MOONSHOT_API_KEY is not configured'), { status: 503 });
-    const payload = await collect(request);
-    if (!validateRequest(payload)) return legacyPlannerJson(response, 400, { error: 'Invalid planner request' });
-    const client = new OpenAI({ apiKey, baseURL });
-    const completion = await client.chat.completions.create({
-      model,
-      response_format: { type: 'json_object' },
-      max_completion_tokens: 4096,
-      messages: [
-        { role: 'system', content: plannerCore.SYSTEM_POLICY },
-        { role: 'user', content: JSON.stringify(payload) },
-      ],
-    });
-    const content = completion.choices?.[0]?.message?.content;
-    const proposal = validateProposal(JSON.parse(content), payload.projectRevision, new Set(payload.evidence.items.map((item) => item.id)));
-    return legacyPlannerJson(response, 200, proposal);
-  } catch (error) {
-    console.error('[mobile-planner] request failed', { message: error?.message, status: error?.status });
-    return legacyPlannerJson(response, error?.status && Number.isInteger(error.status) ? error.status : 502, { error: error?.message || 'Planner failed' });
-  }
+  return json(response, 404, { error: 'Not found' });
 });
 
 // A transcription request includes both a potentially slow mobile upload and
