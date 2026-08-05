@@ -4,7 +4,6 @@ import ai.ctrlb.mobile.media.DeviceCapability
 import ai.ctrlb.mobile.media.ExportCoordinator
 import ai.ctrlb.mobile.data.ProjectStore
 import ai.ctrlb.mobile.domain.*
-import ai.ctrlb.mobile.media.AudioAssetRepository
 import ai.ctrlb.mobile.BuildConfig
 import ai.ctrlb.mobile.auth.AuthTokenProvider
 import ai.ctrlb.mobile.planner.*
@@ -37,8 +36,6 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
             ?: "Create a polished, conservative first cut using the supplied evidence and preferences."
         val store = ProjectStore(applicationContext)
         val project = store.load(projectId)
-        val transcriber = BuildConfig.TRANSCRIPTION_URL.takeIf(String::isNotBlank)
-            ?.let { TranscriptionClient(it, AuthTokenProvider::currentToken) }
         val words = mutableListOf<TranscriptWord>()
         val evidenceGraphs = mutableListOf<EvidenceGraph>()
         val evidenceReferences = mutableListOf<EvidenceGraphReference>()
@@ -50,58 +47,10 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
         project.orderedSources.forEachIndexed { index, source ->
             if (isStopped) return Result.failure()
             progress("transcript-${index + 1}-of-${project.orderedSources.size}", 10 + index * 45 / project.orderedSources.size)
-            if (source.hasAudio) {
-                val transcription: kotlin.Result<List<TranscriptWord>> = transcriber?.let { client -> runCatching {
-                    val transcriptionRoot = java.io.File(applicationContext.cacheDir, "transcription").apply { mkdirs() }
-                    val audio = java.io.File(transcriptionRoot, "${source.fingerprint}.mp4")
-                    audio.delete()
-                    try {
-                        AndroidDerivativeWriter(applicationContext).write(
-                            SelectiveDerivativeType.AUDIO,
-                            source,
-                            TimeRange(0, source.durationMs),
-                            null,
-                            "audio/mp4",
-                            audio
-                        )
-                        client.transcribe(audio) { uploaded, total ->
-                            val sourceShare = ((uploaded * 45L / total) / project.orderedSources.size).toInt()
-                            progress("upload-${index + 1}-of-${project.orderedSources.size}", 10 + index * 45 / project.orderedSources.size + sourceShare)
-                        }
-                    } finally {
-                        audio.delete()
-                        transcriptionRoot.takeIf { it.listFiles().isNullOrEmpty() }?.delete()
-                    }
-                } } ?: runCatching { throw IllegalStateException("Transcription service is not configured.") }
-                val localWords = transcription.getOrElse { error ->
-                    transcriptionFailed = true
-                    analysisWarnings += "Speech analyzer (${source.fingerprint.take(8)}): ${error.message ?: "failed"}"
-                    emptyList()
-                }
-                words += localWords.map { word ->
-                    word.copy(range = TimeRange(word.range.startMs + offset, word.range.endMs + offset))
-                }
-                val speechAnalyzer: EvidenceAnalyzer = transcription.fold(
-                    onSuccess = { SpeechEvidenceAnalyzer(it) },
-                    onFailure = { failure -> object : EvidenceAnalyzer {
-                        override val identity = AnalyzerIdentity("ctrlB speech structure", "1.0.0", ExecutionLocation.EXTERNAL_SERVICE)
-                        override suspend fun analyze(context: AnalyzerContext): List<EvidenceObservation> = throw failure
-                    } }
-                )
-                if (!cloudConversationEnabled) {
-                    val graph = EvidencePipeline(evidenceCache, listOf(
-                        LocalVisualAnalyzer(applicationContext),
-                        LocalSoundAnalyzer(applicationContext, localWords.map(TranscriptWord::range)),
-                        speechAnalyzer
-                    ) + unsupportedAnalyzers()).analyze(source)
-                    evidenceGraphs += graph
-                    evidenceReferences += graph.reference()
-                }
-            } else if (!cloudConversationEnabled) {
-                val graph = EvidencePipeline(evidenceCache, listOf(LocalVisualAnalyzer(applicationContext), object : EvidenceAnalyzer {
-                    override val identity = AnalyzerIdentity("ctrlB speech structure", "1.0.0", ExecutionLocation.EXTERNAL_SERVICE)
-                    override suspend fun analyze(context: AnalyzerContext): List<EvidenceObservation> = throw UnsupportedOperationException("Source has no audio track.")
-                }) + unsupportedAnalyzers()).analyze(source)
+            if (!cloudConversationEnabled) {
+                val graph = EvidencePipeline(evidenceCache, listOf(
+                    LocalVisualAnalyzer(applicationContext)
+                ) + unsupportedAnalyzers()).analyze(source)
                 evidenceGraphs += graph
                 evidenceReferences += graph.reference()
             }
@@ -206,45 +155,6 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                 ))
                 store.save(analyzed)
             }
-        } else if (BuildConfig.AGENT_RUNS_URL.isBlank() && BuildConfig.PLANNER_URL.isNotBlank()) {
-            progress("planner", 94)
-            val planning = runCatching {
-                val prompt = initialPrompt
-                val client = PlannerClient(BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken)
-                var packet = BoundedEvidenceRetriever.retrieve(evidenceGraphs, requireNotNull(storyGraph), EvidenceRetrievalQuery(prompt))
-                val learnedTaste = CreatorPreferenceResolver.resolve(analyzed.creatorPreferences, analyzed.preferences)
-                var response = client.plan(PlannerPrivacyBoundary.create(prompt, analyzed.source, analyzed.preferences, analyzed.operations, analyzed.revision, packet, learnedTaste))
-                var additionalPasses = 0
-                while (response is PlannerEvidenceRequest && additionalPasses++ < 2) {
-                    val query = response.query.copy(excludeEvidenceIds = response.query.excludeEvidenceIds + packet.items.map { it.id })
-                    val additional = BoundedEvidenceRetriever.retrieve(evidenceGraphs, requireNotNull(storyGraph), query)
-                    packet = packet.copy(items = (packet.items + additional.items).distinctBy { it.id })
-                    response = client.plan(PlannerPrivacyBoundary.create(prompt, analyzed.source, analyzed.preferences, analyzed.operations, analyzed.revision, packet, learnedTaste))
-                }
-                if (response is PlannerProposal) BoundedEvidenceRetriever.validateReferences(packet, response.evidenceIds)
-                response
-            }
-            planning.onSuccess { response -> if (response is PlannerProposal) {
-                OperationValidator.validate(analyzed, response.operations, response.expectedRevision)
-                analyzed = analyzed.copy(analysis = analyzed.analysis.copy(
-                    pendingProposal = PendingEditorialProposal(
-                        expectedRevision = response.expectedRevision,
-                        summary = response.summary,
-                        plan = response.plan,
-                        operations = response.operations,
-                        evidenceIds = response.evidenceIds
-                    ),
-                    revisionConversation = listOf(EditorialConversationTurn(
-                        request = initialPrompt,
-                        response = response.summary,
-                        evidenceIds = response.evidenceIds
-                    ))
-                ))
-                store.save(analyzed)
-            } }.onFailure { error ->
-                analyzed = analyzed.copy(analysis = analyzed.analysis.copy(warnings = analyzed.analysis.warnings + "AI planner: ${error.message ?: "failed"}"))
-                store.save(analyzed)
-            }
         }
         progress("complete", 100)
         Result.success()
@@ -272,8 +182,7 @@ class ExportWorker(context: Context, params: WorkerParameters) : ProgressWorker(
     override suspend fun doWork(): Result = runCatching {
         val projectId = requireNotNull(inputData.getString("projectId"))
         val store = ProjectStore(applicationContext)
-        val project = AudioAssetRepository(applicationContext).prepare(store.load(projectId))
-        store.save(project)
+        val project = store.load(projectId)
         val capability = DeviceCapability.evaluate(
             applicationContext,
             project.export.width,
@@ -328,10 +237,7 @@ class PreviewWorker(context: Context, params: WorkerParameters) : ProgressWorker
             } ?: persisted
         } else persisted
         var warning: String? = null
-        val prepared = runCatching { AudioAssetRepository(applicationContext).prepare(stored) }.getOrElse { error ->
-            warning = "Audio preview unavailable: ${error.message}"
-            stored.copy(operations = stored.operations.filterNot { it is SetBackgroundMusic || it is AddSoundEffect })
-        }
+        val prepared = stored
         progress("preview", 5)
         val output = java.io.File(applicationContext.cacheDir, "previews/${prepared.id}-${prepared.revision}.mp4")
         val previewSize = prepared.orderedSources.renderSizeWithin(

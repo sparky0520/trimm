@@ -7,7 +7,7 @@ class ProjectTest {
     private val source = SourceMedia("content://private/video", "hash", 10_000, 1920, 1080)
     @Test fun `new projects do not require an audio catalog`() {
         assertEquals(MusicChoice.NONE, WizardPreferences().music)
-        assertTrue(MobileProject(title = "Test", source = source).operations.none { it is SetBackgroundMusic || it is AddSoundEffect })
+        assertTrue(MobileProject(title = "Test", source = source).operations.isEmpty())
     }
     @Test fun `operation changes are exactly undoable`() {
         val project = MobileProject(title = "Test", source = source)
@@ -32,8 +32,6 @@ class ProjectTest {
             SetColorGrade(grade = ColorGrade(exposure = .1f)),
             SetAudioCleanup(strength = .4f),
             SetAudioLevels(dialogueLufs = -16f),
-            AddSoundEffect(atSourceMs = 500, catalogId = "fixture-effect"),
-            SetBackgroundMusic(catalogId = "fixture-music"),
             AddCaptions(cues = listOf(CaptionCue("Fixture", TimeRange(0, 500)))),
             ApplySemanticVisual(
                 intent = SemanticIntent.POINT_OUT,
@@ -55,12 +53,10 @@ class ProjectTest {
     @Test fun `cards disclose evidence preference or default basis`() {
         val operations = listOf<EditOperation>(
             RemoveFumbles(ranges = listOf(TimeRange(100, 200)), confidence = .96f, reasons = listOf("retake")),
-            SetAudioCleanup(),
-            SetBackgroundMusic(catalogId = "chosen-track")
+            SetAudioCleanup()
         )
         assertTrue(OperationValidator.basis(operations[0]).startsWith("Transcript evidence"))
         assertTrue(OperationValidator.basis(operations[1]).startsWith("Default"))
-        assertTrue(OperationValidator.basis(operations[2]).startsWith("User preference"))
     }
     @Test fun `cloud-grounded color is available to the rendered proposal contract`() {
         val color = SetColorGrade(grade = ColorGrade())

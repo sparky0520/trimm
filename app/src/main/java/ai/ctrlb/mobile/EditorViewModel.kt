@@ -130,7 +130,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val candidates = FumbleDetector.detect(words, durationMs, preferences.pace)
         val operations = buildList<EditOperation> {
             if (source.hasAudio) { add(SetAudioCleanup()); add(SetAudioLevels()) }
-            if (preferences.music == MusicChoice.AUTOMATIC) add(SetBackgroundMusic(catalogId = "automatic"))
         }
         // Export may preserve or reduce source resolution, never invent extra detail by upscaling.
         val sourceCeiling = sources.renderSizeWithin(3840, 2160)
@@ -536,7 +535,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
     private fun toggle(op: EditOperation): EditOperation = when (op) {
         is RemoveRanges -> op.copy(enabled = !op.enabled); is RemoveFumbles -> op.copy(enabled = !op.enabled); is RemoveAwkwardSilences -> op.copy(enabled = !op.enabled); is SetColorGrade -> op.copy(enabled = !op.enabled); is SetAudioCleanup -> op.copy(enabled = !op.enabled); is SetAudioLevels -> op.copy(enabled = !op.enabled)
-        is AddTransition -> op.copy(enabled = !op.enabled); is AddMotionPreset -> op.copy(enabled = !op.enabled); is AddSoundEffect -> op.copy(enabled = !op.enabled); is SetBackgroundMusic -> op.copy(enabled = !op.enabled); is AddCaptions -> op.copy(enabled = !op.enabled); is ApplySemanticVisual -> op.copy(enabled = !op.enabled)
+        is AddTransition -> op.copy(enabled = !op.enabled); is AddMotionPreset -> op.copy(enabled = !op.enabled); is AddCaptions -> op.copy(enabled = !op.enabled); is ApplySemanticVisual -> op.copy(enabled = !op.enabled)
     }
     private fun processingMessage(stage: String?, percent: Int): String = when {
         stage?.startsWith("transcript-") == true -> "Preparing speech analysis…"
@@ -564,8 +563,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         is SetAudioLevels -> "Updated audio levels"
         is AddTransition -> "Updated transition"
         is AddMotionPreset -> "Updated motion"
-        is AddSoundEffect -> "Updated sound effect"
-        is SetBackgroundMusic -> "Updated background music"
         is AddCaptions -> "Updated ${cues.size} caption cue${if (cues.size == 1) "" else "s"}"
         is ApplySemanticVisual -> "Updated ${treatment.name.lowercase().replace('_', ' ')}"
     }

@@ -105,18 +105,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
 @Serializable @SerialName("set_audio_levels") data class SetAudioLevels(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val parameter: String? = null, val dialogueLufs: Float = -16f, val musicDuckDb: Float = -9f, val attackMs: Long = 120, val releaseMs: Long = 450, val target: OperationTarget? = null) : EditOperation
 @Serializable @SerialName("add_transition") data class AddTransition(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val atSourceMs: Long, val preset: String = "dip", val durationMs: Long = 280) : EditOperation
 @Serializable @SerialName("add_motion_preset") data class AddMotionPreset(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val range: TimeRange, val preset: String, val intensity: Float = .5f) : EditOperation
-@Serializable @SerialName("add_sound_effect") data class AddSoundEffect(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val atSourceMs: Long, val catalogId: String, val gainDb: Float = -12f, val durationMs: Long? = null, val target: OperationTarget? = null) : EditOperation
-@Serializable @SerialName("set_background_music") data class SetBackgroundMusic(
-    override val id: String = UUID.randomUUID().toString(),
-    override val enabled: Boolean = true,
-    val catalogId: String,
-    val gainDb: Float = -24f,
-    val loop: Boolean = true,
-    val target: OperationTarget? = null,
-    val fadeInMs: Long = 0,
-    val fadeOutMs: Long = 0,
-    val structure: StoryAudioStructure? = null
-) : EditOperation
+
 @Serializable @SerialName("add_captions") data class AddCaptions(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val cues: List<CaptionCue>, val style: String = "bold-bottom") : EditOperation
 @Serializable @SerialName("semantic_visual") data class ApplySemanticVisual(
     override val id: String = UUID.randomUUID().toString(),

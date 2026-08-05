@@ -18,6 +18,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.net.HttpURLConnection
 import java.net.URI
+import ai.ctrlb.mobile.layer1.RequestShapedMediaIndex
 
 @Serializable
 enum class AgentRunStatus {
@@ -521,3 +522,56 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
         )
     }
 }
+@Serializable data class Layer2SourceInventory(
+    val id: String,
+    val fingerprint: String,
+    val durationMs: Long,
+    val width: Int,
+    val height: Int,
+    val hasAudio: Boolean
+)
+@Serializable data class Layer2Budgets(
+    val maximumBytes: Long = 8L * 1024 * 1024,
+    val maximumDurationMs: Long = 10L * 60 * 1000,
+    val retentionMs: Long = 6L * 60 * 60 * 1000
+)
+@Serializable data class Layer2TranscriptWord(
+    val sourceId: String, val text: String, val startMs: Long, val endMs: Long,
+    val confidence: Float, val speakerId: String? = null
+)
+@Serializable data class Layer2Inventory(
+    val projectId: String,
+    val deviceSessionId: String,
+    val projectRevision: Long,
+    val intent: String,
+    val sources: List<Layer2SourceInventory>,
+    val mediaIndex: RequestShapedMediaIndex,
+    val evidenceJobIds: List<String> = emptyList(),
+    val existingOperations: List<EditOperation> = emptyList(),
+    val budgets: Layer2Budgets = Layer2Budgets()
+)
+@Serializable data class EvidenceRange(val startMs: Long, val endMs: Long)
+@Serializable data class AuthorizedEvidenceJob(
+    val id: String,
+    val sourceId: String,
+    val type: String,
+    val purpose: String,
+    val acceptedFormat: String,
+    val range: EvidenceRange,
+    val maximumBytes: Long,
+    val maximumDurationMs: Long? = null,
+    val resolution: String,
+    val uncertainty: String = "",
+    val expiresAt: String,
+    val reused: Boolean,
+    val toolCallId: String = id
+)
+@Serializable sealed interface Layer2Response
+@Serializable @SerialName("tool_request") data class Layer2EvidenceRequest(val tool: String, val jobs: List<AuthorizedEvidenceJob>) : Layer2Response
+@Serializable @SerialName("edit_program") data class Layer2EditProgram(
+    val expectedRevision: Long,
+    val summary: String,
+    val operations: List<JsonObject>
+) : Layer2Response
+@Serializable @SerialName("clarification") data class Layer2Clarification(val question: String, val options: List<String>) : Layer2Response
+@Serializable @SerialName("fallback") data class Layer2Fallback(val reason: String) : Layer2Response
