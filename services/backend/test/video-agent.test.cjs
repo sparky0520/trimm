@@ -44,7 +44,7 @@ test('a persisted Gemini file reference is reused after creating a new provider 
   } });
   await decide({ systemPolicy: 'policy', inventory: {}, evidence: [{
     id: 'job-1', sourceId: 'source-1', startMs: 0, endMs: 30_000, resolution: 'LOW',
-    contentKey: 'content-1', bytes: Buffer.from('video'), providerFile: {
+    bytes: Buffer.from('video'), providerFile: {
       provider: 'google-gemini', name: 'files/persisted',
       uri: 'https://generativelanguage.googleapis.com/v1beta/files/persisted', expiresAt: Date.now() + 60_000,
     },
