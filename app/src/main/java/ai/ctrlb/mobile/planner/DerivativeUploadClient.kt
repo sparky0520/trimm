@@ -18,9 +18,11 @@ class DerivativeUploadClient(
     suspend fun upload(derivative: PreparedDerivative): String = withContext(Dispatchers.IO) {
         val endpoint = derivativeRoot.resolve(derivative.jobId)
         val token = accessToken()
-        var offset = head(endpoint, token)
+        var offset = runCatching { head(endpoint, token) }.getOrDefault(0L)
         val file = java.io.File(derivative.localPath)
-        require(offset in 0..file.length()) { "Cloud derivative offset is invalid." }
+        if (offset >= file.length()) {
+            offset = 0L
+        }
         file.inputStream().use { input ->
             input.skipNBytes(offset)
             val buffer = ByteArray(4 * 1024 * 1024)
@@ -41,7 +43,8 @@ class DerivativeUploadClient(
     private fun head(endpoint: URI, token: String): Long {
         val connection = open(endpoint, token, "HEAD")
         return try {
-            require(connection.responseCode in 200..299) { "Could not resume derivative upload." }
+            if (connection.responseCode == 404) return 0L
+            require(connection.responseCode in 200..299) { "Could not resume derivative upload (${connection.responseCode})." }
             connection.getHeaderField("upload-offset")?.toLongOrNull() ?: 0L
         } finally { connection.disconnect() }
     }

@@ -332,7 +332,7 @@ class AgentRunCoordinator(
         while (snapshot.status == AgentRunStatus.WAITING_FOR_EVIDENCE) {
             val evidence = json.decodeFromJsonElement(EvidenceRequestDecision.serializer(), snapshot.decision)
             require(evidence.type == "tool_request" && evidence.tool == "inspect_video_range" && evidence.jobs.isNotEmpty()) { "Agent video tool request is invalid." }
-            val completed = evidence.jobs.map { job -> if (job.reused) job.id else fulfiller.fulfill(job) }
+            val completed = evidence.jobs.map { job -> fulfiller.fulfill(job) }
             require(completed.toSet() == evidence.jobs.map { it.id }.toSet()) { "Evidence fulfillment returned unexpected job ids." }
             snapshot = snapshot.copy(fulfilledEvidenceJobIds = (snapshot.fulfilledEvidenceJobIds + completed).distinct())
             onPersist(snapshot)

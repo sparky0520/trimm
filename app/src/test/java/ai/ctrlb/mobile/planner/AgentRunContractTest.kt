@@ -94,7 +94,7 @@ class AgentRunContractTest {
             job.id
         }).run(request) { persisted += it }
 
-        assertEquals(listOf("job-1"), fulfilled)
+        assertEquals(listOf("job-1", "job-2"), fulfilled)
         assertEquals(listOf(listOf("job-1"), listOf("job-2")), calls)
         assertEquals(AgentRunStatus.PROPOSAL_READY, final.status)
         assertEquals(listOf(1, 2, 3, 4, 5), final.events.map { it.sequence })
