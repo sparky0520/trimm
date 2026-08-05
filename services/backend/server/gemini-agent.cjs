@@ -14,9 +14,9 @@ function createGeminiDecisionProvider({
   const fileCache = new Map();
   async function videoPart(item) {
     if (item.providerFile?.expiresAt > Date.now()) {
-      fileCache.set(item.contentKey, { uri: item.providerFile.uri, expiresAt: item.providerFile.expiresAt });
+      fileCache.set(item.id, { uri: item.providerFile.uri, expiresAt: item.providerFile.expiresAt });
     }
-    const cached = fileCache.get(item.contentKey);
+    const cached = fileCache.get(item.id);
     if (cached && (!cached.expiresAt || cached.expiresAt > Date.now())) {
       return { fileData: { fileUri: cached.uri, mimeType: 'video/mp4' },
         mediaResolution: { level: item.resolution === 'HIGH' ? 'MEDIA_RESOLUTION_HIGH' : 'MEDIA_RESOLUTION_LOW' } };
@@ -32,7 +32,7 @@ function createGeminiDecisionProvider({
         if (file?.uri) {
           const expiresAt = Number.isFinite(Date.parse(file.expirationTime))
             ? Date.parse(file.expirationTime) : Date.now() + 47 * 60 * 60 * 1000;
-          fileCache.set(item.contentKey, { uri: file.uri, expiresAt });
+          fileCache.set(item.id, { uri: file.uri, expiresAt });
           if (typeof item.persistProviderFile === 'function') {
             await item.persistProviderFile({ provider: 'google-gemini', uri: file.uri, name: file.name, expiresAt });
           }

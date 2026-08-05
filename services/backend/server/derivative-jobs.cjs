@@ -382,7 +382,6 @@ class DerivativeJobs {
   delete(id, principal, context) {
     const job = this.read(id, principal, context);
     this.removeBytes(job);
-    if (job.contentKey) this.results.delete(job.contentKey);
     job.result = null;
     job.status = 'deleted';
     job.deletedAt = this.now();

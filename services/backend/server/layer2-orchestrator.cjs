@@ -219,7 +219,6 @@ async function evidenceFor(inventory, principal, derivativeJobs) {
       startMs: job.timelineReferences[0].startMs,
       endMs: job.timelineReferences[0].endMs,
       resolution: job.resolution || 'LOW',
-      contentKey: job.contentKey,
       bytes: derivative.bytes,
       providerFile: job.providerFile?.expiresAt > Date.now() ? job.providerFile : null,
       persistProviderFile: (value) => derivativeJobs.setProviderFile(jobId, principal, value, {
