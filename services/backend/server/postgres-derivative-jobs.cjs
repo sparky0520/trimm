@@ -99,9 +99,6 @@ class PostgresDerivativeJobs {
   complete(id, principal, declaration, context) {
     return this.withOwner(principal.id, (engine) => engine.complete(id, principal, declaration, context));
   }
-  preserveResult(id, principal, result) {
-    return this.withOwner(principal.id, (engine) => engine.preserveResult(id, principal, result));
-  }
   readCompletedBytes(id, principal, context) {
     return this.withOwner(principal.id, (engine) => engine.readCompletedBytes(id, principal, context));
   }

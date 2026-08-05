@@ -247,7 +247,7 @@ class DerivativeJobs {
       mediaMode: request.mediaMode, consent, selectionReason, providerDisclosures: disclosures, resolution,
       sourceFingerprint, timelineReferences: mapping, retentionMs, authorizationFingerprint,
       offset: 0, status: 'authorized', createdAt: this.now(), expiresAt: this.now() + this.ttlMs,
-      deleteAt: this.now() + retentionMs, contentKey: null, result: null,
+      deleteAt: this.now() + retentionMs,
       providerFile: null,
     };
     this.jobs.set(id, job);
@@ -371,42 +371,15 @@ class DerivativeJobs {
     }
     if (declaration.count != null && declaration.count > job.maximumCount) throw jobError('Derivative exceeds its authorized item count.', 413, 'count_limit_exceeded');
     validateActualContent(this.mediaPath(id), job);
-    const digest = crypto.createHash('sha256').update(fs.readFileSync(this.mediaPath(id))).digest('hex');
-    job.contentKey = crypto.createHash('sha256').update([
-      job.userId, job.projectId, job.type, job.acceptedFormat, job.purpose, job.sourceFingerprint, digest,
-    ].join(':')).digest('hex');
-    const cached = this.results.get(job.contentKey);
     job.status = 'completed';
     job.completedAt = this.now();
-    if (cached) {
-      job.result = cached.result;
-      job.resultReused = true;
-      this.log(job, 'reused', { contentKey: job.contentKey });
-      return { job, reused: true, result: cached.result };
-    }
-    job.resultReused = false;
     this.log(job, 'transferred', { bytes: job.offset, format: job.acceptedFormat });
     return { job, reused: false, openStream: () => fs.createReadStream(this.mediaPath(id)) };
   }
 
-  preserveResult(id, principal, result) {
-    const job = this.read(id, principal);
-    if (job.status !== 'completed' || !job.contentKey) throw jobError('Derivative job is not complete.', 409, 'job_incomplete');
-    const record = Object.freeze({
-      value: result, provenance: Object.freeze({
-        jobId: job.id, projectId: job.projectId, sourceFingerprint: job.sourceFingerprint,
-        timelineReferences: job.timelineReferences, derivativeType: job.type, purpose: job.purpose,
-      }),
-    });
-    job.result = record;
-    this.results.set(job.contentKey, { result: record, createdAt: this.now() });
-    this.log(job, 'result_preserved', { contentKey: job.contentKey });
-    return record;
-  }
-
   readCompletedBytes(id, principal, context) {
     const job = this.read(id, principal, context);
-    if (job.status !== 'completed' || !job.contentKey) {
+    if (job.status !== 'completed') {
       throw jobError('Derivative job is not complete.', 409, 'job_incomplete');
     }
     return { job, bytes: fs.readFileSync(this.mediaPath(id)) };
