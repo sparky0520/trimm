@@ -22,7 +22,7 @@ const operationSchema = {
     type: {
       type: 'string', enum: [
         'remove_ranges', 'remove_fumbles', 'remove_awkward_silences', 'set_color_grade', 'set_audio_cleanup', 'set_audio_levels',
-        'add_sound_effect', 'set_background_music', 'add_captions', 'semantic_visual',
+        'add_captions', 'semantic_visual',
       ]
     },
     enabled: { type: 'boolean' },
@@ -144,23 +144,7 @@ const PROPOSE_REMOVE_RANGES_TOOL = Object.freeze({
 
 
 
-const audioSearchTool = (name, kind) => Object.freeze({
-  name,
-  description: `Search default ${kind === 'MUSIC' ? 'background-music' : 'sound-effect'} sources: the governed renderable registry, Freesound discovery when configured, and YouTube Audio Library assisted search. Call this before placement. Only results with renderable=true may be placed; authorization-required and assisted results require user action first.`,
-  parametersJsonSchema: {
-    type: 'object', additionalProperties: false,
-    required: ['query', 'minimumDurationMs', 'maximumDurationMs', 'maximumResults'],
-    properties: {
-      query: { type: 'string', minLength: 2, maxLength: 160 },
-      minimumDurationMs: { type: 'integer', minimum: 0, maximum: 3600000 },
-      maximumDurationMs: { type: 'integer', minimum: 1, maximum: 3600000 },
-      maximumResults: { type: 'integer', minimum: 1, maximum: 8 },
-    },
-  },
-  kind,
-});
-const SEARCH_SOUND_EFFECTS_TOOL = audioSearchTool('search_sound_effects', 'SOUND_EFFECT');
-const SEARCH_BACKGROUND_MUSIC_TOOL = audioSearchTool('search_background_music', 'MUSIC');
+
 
 const operationTool = (name, description, required, properties) => Object.freeze({
   name,
@@ -201,24 +185,7 @@ const PROPOSE_MUSIC_DUCKING_TOOL = operationTool(
   releaseMs: { type: 'integer', minimum: 0, maximum: 5000 },
 },
 );
-const PROPOSE_SOUND_EFFECT_TOOL = operationTool(
-  'propose_place_sound_effect',
-  'Propose a catalog sound effect only for explicit user intent and a grounded placement.',
-  ['sourceId', 'startMs', 'endMs', 'catalogId', 'gainDb', 'reason'], {
-  ...targetRangeProperties, catalogId: { type: 'string' },
-  gainDb: { type: 'number', minimum: -36, maximum: 0 },
-},
-);
-const PROPOSE_BACKGROUND_MUSIC_TOOL = operationTool(
-  'propose_place_background_music',
-  'Propose catalog background music only when requested, with a conservative speech-safe mix.',
-  ['sourceId', 'startMs', 'endMs', 'catalogId', 'gainDb', 'loop', 'fadeInMs', 'fadeOutMs', 'reason'], {
-  ...targetRangeProperties,
-  catalogId: { type: 'string' }, gainDb: { type: 'number', minimum: -40, maximum: -6 },
-  loop: { type: 'boolean' }, fadeInMs: { type: 'integer', minimum: 0, maximum: 10000 },
-  fadeOutMs: { type: 'integer', minimum: 0, maximum: 10000 },
-},
-);
+
 const PROPOSE_CAPTIONS_TOOL = operationTool(
   'propose_add_caption_cue',
   'Add one caption cue whose text is verbatim from the supplied timestamped transcript.',
@@ -307,10 +274,9 @@ const FINISH_WITHOUT_PROPOSAL_TOOL = Object.freeze({
 
 const AGENT_TOOLS = Object.freeze([
   INSPECT_VIDEO_RANGE_TOOL,
-  SEARCH_SOUND_EFFECTS_TOOL, SEARCH_BACKGROUND_MUSIC_TOOL,
   PROPOSE_REMOVE_RANGES_TOOL,
   PROPOSE_AUDIO_CLEANUP_TOOL, PROPOSE_DIALOGUE_LOUDNESS_TOOL, PROPOSE_MUSIC_DUCKING_TOOL,
-  PROPOSE_SOUND_EFFECT_TOOL, PROPOSE_BACKGROUND_MUSIC_TOOL, PROPOSE_CAPTIONS_TOOL, ...PROPOSE_COLOR_TOOLS,
+  PROPOSE_CAPTIONS_TOOL, ...PROPOSE_COLOR_TOOLS,
   ...PROPOSE_SEMANTIC_VISUAL_TOOLS, ASK_CLARIFICATION_TOOL, FINALIZE_EDIT_PROGRAM_TOOL,
   REMOVE_DRAFT_OPERATION_TOOL, FINISH_WITHOUT_PROPOSAL_TOOL,
 ]);

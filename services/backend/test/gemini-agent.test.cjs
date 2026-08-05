@@ -30,12 +30,10 @@ test('new agent path is pinned to Gemini 3.6 Flash and requests JSON', async () 
     request.config.responseJsonSchema.anyOf.map((variant) => variant.properties.type.enum[0]),
     ['edit_program', 'clarification', 'fallback'],
   );
-  assert.deepEqual(request.config.tools[0].functionDeclarations.map((tool) => tool.name), [
-    'inspect_video_range', 'search_sound_effects', 'search_background_music',
-    'propose_remove_ranges',
+  assert.deepStrictEqual(request.config.tools[0].functionDeclarations.map((decl) => decl.name), [
+    'inspect_video_range', 'propose_remove_ranges',
     'propose_reduce_background_noise', 'propose_set_dialogue_loudness', 'propose_set_music_ducking',
-    'propose_place_sound_effect', 'propose_place_background_music', 'propose_add_caption_cue',
-    'propose_adjust_exposure', 'propose_adjust_temperature', 'propose_adjust_contrast', 'propose_adjust_saturation',
+    'propose_add_caption_cue', 'propose_adjust_exposure', 'propose_adjust_temperature', 'propose_adjust_contrast', 'propose_adjust_saturation',
     'propose_adjust_highlights', 'propose_adjust_shadows', 'propose_adjust_skin_protection',
     'propose_add_visual_callout', 'propose_add_visual_spotlight', 'propose_reframe_subject',
     'ask_clarification', 'finalize_edit_program', 'remove_draft_operation', 'finish_without_proposal',

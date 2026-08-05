@@ -63,7 +63,6 @@ class AgentRuns {
         ...run.inventory,
         agentDraft: {
           operations: agentState.operations || [],
-          audioSearchResults: agentState.audioSearchResults || run.inventory.agentDraft?.audioSearchResults || [],
         },
         observations: [...(run.inventory.observations || []), ...(agentState.observations || [])],
       };

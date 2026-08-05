@@ -21,14 +21,13 @@ Return one JSON object with type edit_program, clarification, or fallback, or ca
 Use proposal tools for operations they cover; their descriptions contain the operation-specific editorial policy.
 Proposal tools build a private draft. After every successful tool result, continue until all necessary operations are present, then call finalize_edit_program.
 Call one tool at a time so each deterministic result can inform the next step.
-Search audio sources before placing music or sound effects. Place only an assetId returned with renderable=true in this conversation; clarify when a provider requires authorization or assisted import.
 Call ask_clarification when a consequential user choice is unresolved. Never guess merely to avoid asking.
 Use inspect_video_range when more audiovisual evidence is needed. Each range is at most 30 seconds. Use LOW normally. Use HIGH only after overlapping LOW evidence left a specific uncertainty.
 Never request rendered output, executable instructions, or provider credentials.
 Every edit operation must cite supplied evidence IDs and include confidence from 0 to 1.
 Do not invent evidence. When evidence is missing or uncertain, request bounded evidence, clarify, or fall back.
 Use fine tools: one effect, one exact range, and one bounded parameter set per call. Never ask a tool to scan or choose its own settings.
-Supported rendered operations: remove_fumbles, remove_awkward_silences, set_color_grade, set_audio_cleanup, set_audio_levels, add_sound_effect, set_background_music, add_captions, semantic_visual.
+Supported rendered operations: remove_fumbles, remove_awkward_silences, set_color_grade, set_audio_cleanup, set_audio_levels, add_captions, semantic_visual.
 Semantic visuals require a cited face, screen, product, OCR, or salience subject with normalized bounds. Unsafe reframing must return clarification or fallback.
 
 Examples:
@@ -42,8 +41,6 @@ const PROPOSAL_TOOL_TYPES = Object.freeze({
   propose_reduce_background_noise: 'set_audio_cleanup',
   propose_set_dialogue_loudness: 'set_audio_levels',
   propose_set_music_ducking: 'set_audio_levels',
-  propose_place_sound_effect: 'add_sound_effect',
-  propose_place_background_music: 'set_background_music',
   propose_add_caption_cue: 'add_captions',
   propose_adjust_exposure: 'set_color_grade',
   propose_adjust_temperature: 'set_color_grade',
@@ -74,10 +71,6 @@ function fineOperationFor(call, operationType, inventory) {
   if (call.name === 'propose_set_music_ducking') {
     return { ...common, parameter: 'music_ducking', musicDuckDb: raw.duckDb };
   }
-  if (call.name === 'propose_place_sound_effect') {
-    return { ...common, atSourceMs: sourceOffset + raw.startMs, durationMs: raw.endMs - raw.startMs };
-  }
-  if (call.name === 'propose_place_background_music') return common;
   if (call.name === 'propose_add_caption_cue') {
     return { ...common, cues: [{ text: raw.text, range: { startMs: sourceOffset + raw.startMs, endMs: sourceOffset + raw.endMs } }] };
   }
@@ -314,8 +307,8 @@ function validateEditProgram(decision, inventory, observations) {
       throw orchestrationError('Edit operation has missing, stale, or invented evidence.', 422, 'invalid_evidence_reference');
     }
     if (operation.type === 'remove_fumbles') validateContextualSpeechDecision(operation, evidenceIds);
-    if (operation.target && ['set_color_grade', 'set_audio_cleanup', 'set_audio_levels', 'add_sound_effect',
-      'set_background_music', 'add_captions', 'semantic_visual'].includes(operation.type)) {
+    if (operation.target && ['set_color_grade', 'set_audio_cleanup', 'set_audio_levels',
+      'add_captions', 'semantic_visual'].includes(operation.type)) {
       const target = operation.target;
       const source = inventory.sources.find((item) => item.id === target?.sourceId);
       if (!source || !Number.isSafeInteger(target.startMs) || !Number.isSafeInteger(target.endMs) ||
@@ -512,7 +505,6 @@ class Layer2Orchestrator {
     const usage = [];
     const drafts = new Map((workingInventory.agentDraft?.operations || []).map((operation) => [operation.id, operation]));
     const draftObservations = [];
-    const audioSearchResults = new Map((workingInventory.agentDraft?.audioSearchResults || []).map((asset) => [asset.assetId, asset]));
     for (let iteration = 0; iteration < 8 && raw.toolCall; iteration++) {
       usage.push(raw.usage);
       const call = raw.toolCall;
@@ -524,7 +516,7 @@ class Layer2Orchestrator {
         }
         return {
           type: 'tool_request', tool: 'inspect_video_range', jobs: [job], _usage: usage,
-          _agentState: { operations: [...drafts.values()], observations: draftObservations, audioSearchResults: [...audioSearchResults.values()] },
+          _agentState: { operations: [...drafts.values()], observations: draftObservations },
         };
       }
 
@@ -534,7 +526,7 @@ class Layer2Orchestrator {
         return {
           type: 'clarification', questions, question: questions[0].prompt, options: questions[0].options,
           observations: [], _usage: usage,
-          _agentState: { operations: [...drafts.values()], observations: draftObservations, audioSearchResults: [...audioSearchResults.values()] },
+          _agentState: { operations: [...drafts.values()], observations: draftObservations },
         };
       }
       if (call.name === 'finish_without_proposal') {
@@ -567,13 +559,6 @@ class Layer2Orchestrator {
       try {
         const args = call.args || {};
         const operation = fineOperationFor(call, operationType, workingInventory);
-        if (['propose_place_sound_effect', 'propose_place_background_music'].includes(call.name)) {
-          const asset = audioSearchResults.get(operation.catalogId);
-          const expectedKind = call.name === 'propose_place_sound_effect' ? 'SOUND_EFFECT' : 'MUSIC';
-          if (!asset || asset.kind !== expectedKind || asset.renderable !== true) {
-            throw orchestrationError('Audio placement must reference a matching asset returned by an audio search tool.', 422, 'unsearched_audio_asset');
-          }
-        }
         const validated = validateDecision({
           type: 'edit_program', expectedRevision: args.expectedRevision,
           summary: args.summary, operations: [operation], observations: args.observations,
