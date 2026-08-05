@@ -322,6 +322,14 @@ const server = http.createServer(async (request, response) => {
       return response.end();
     } catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message, code: error?.code, requestId }); }
   }
+  if (derivativeMatch && request.method === 'PUT' && !derivativeMatch[2]) {
+    try {
+      const job = await derivativeJobs.append(derivativeMatch[1], principal, request.headers['upload-offset'], request, derivativeContext(request));
+      return json(response, 200, { offset: job.offset, requestId });
+    } catch (error) {
+      return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message, code: error?.code, offset: error?.offset, requestId });
+    }
+  }
   if (derivativeMatch && request.method === 'DELETE' && !derivativeMatch[2]) {
     try { await derivativeJobs.delete(derivativeMatch[1], principal, derivativeContext(request)); response.writeHead(204); return response.end(); }
     catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message, code: error?.code, requestId }); }
