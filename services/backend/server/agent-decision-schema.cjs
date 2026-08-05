@@ -79,7 +79,7 @@ const AGENT_DECISION_SCHEMA = Object.freeze({
 const INSPECT_VIDEO_RANGE_TOOL = Object.freeze({
   name: 'inspect_video_range',
   description: 'Upload and inspect a source video range. Use LOW normally; use HIGH only when an overlapping LOW inspection left a specific uncertainty.',
-  parametersJsonSchema: {
+  parameters: {
     type: 'object', additionalProperties: false,
     required: ['sourceId', 'startMs', 'endMs', 'resolution', 'uncertainty'],
     properties: {
@@ -128,7 +128,7 @@ const targetRangeProperties = {
 const PROPOSE_REMOVE_RANGES_TOOL = Object.freeze({
   name: 'propose_remove_ranges',
   description: `Propose removal of specific time ranges (such as speech fumbles, awkward silences, retakes, or unneeded content). Every range must be supported by supplied evidence artifacts. This tool constructs a proposal draft only; it never edits the project directly.`,
-  parametersJsonSchema: proposalEnvelope({
+  parameters: proposalEnvelope({
     type: 'object', additionalProperties: false,
     required: ['id', 'enabled', 'confidence', 'evidenceIds', 'ranges', 'reason'],
     properties: {
@@ -149,7 +149,7 @@ const PROPOSE_REMOVE_RANGES_TOOL = Object.freeze({
 const operationTool = (name, description, required, properties) => Object.freeze({
   name,
   description: `${description} This tool constructs a draft operation only; it never edits the project.`,
-  parametersJsonSchema: proposalEnvelope({
+  parameters: proposalEnvelope({
     type: 'object', additionalProperties: false,
     required: ['id', 'enabled', 'confidence', 'evidenceIds', ...required],
     properties: {
@@ -229,7 +229,7 @@ const PROPOSE_SEMANTIC_VISUAL_TOOLS = [
 const ASK_CLARIFICATION_TOOL = Object.freeze({
   name: 'ask_clarification',
   description: 'Pause and ask one to three consequential questions. Prefer concrete options and recommend the safest useful default when possible.',
-  parametersJsonSchema: {
+  parameters: {
     type: 'object', additionalProperties: false, required: ['questions'], properties: {
       questions: {
         type: 'array', minItems: 1, maxItems: 3, items: {
@@ -251,7 +251,7 @@ const ASK_CLARIFICATION_TOOL = Object.freeze({
 const FINALIZE_EDIT_PROGRAM_TOOL = Object.freeze({
   name: 'finalize_edit_program',
   description: 'Finish with the complete set of already validated draft operation IDs. The backend constructs and validates the atomic proposal.',
-  parametersJsonSchema: {
+  parameters: {
     type: 'object', additionalProperties: false, required: ['expectedRevision', 'summary', 'operationIds'], properties: {
       expectedRevision: { type: 'integer', minimum: 0 }, summary: { type: 'string', maxLength: 2000 },
       operationIds: { type: 'array', items: { type: 'string' } },
@@ -261,7 +261,7 @@ const FINALIZE_EDIT_PROGRAM_TOOL = Object.freeze({
 const REMOVE_DRAFT_OPERATION_TOOL = Object.freeze({
   name: 'remove_draft_operation',
   description: 'Remove an operation from the private draft by its exact operation ID when revising the plan.',
-  parametersJsonSchema: {
+  parameters: {
     type: 'object', additionalProperties: false, required: ['operationId'], properties: {
       operationId: { type: 'string' },
     }
@@ -269,7 +269,7 @@ const REMOVE_DRAFT_OPERATION_TOOL = Object.freeze({
 });
 const FINISH_WITHOUT_PROPOSAL_TOOL = Object.freeze({
   name: 'finish_without_proposal', description: 'Finish safely when the request is unsupported or cannot be grounded.',
-  parametersJsonSchema: { type: 'object', additionalProperties: false, required: ['reason'], properties: { reason: { type: 'string', maxLength: 1000 } } },
+  parameters: { type: 'object', additionalProperties: false, required: ['reason'], properties: { reason: { type: 'string', maxLength: 1000 } } },
 });
 
 const AGENT_TOOLS = Object.freeze([
