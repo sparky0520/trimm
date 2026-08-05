@@ -179,4 +179,32 @@ test('the bounded agent loop returns tool results to Gemini before finalizing an
   assert.equal(result.operations[0].type, 'set_audio_cleanup');
 });
 
-
+test('orchestrator correctly awaits async derivativeJobs readCompletedBytes (PostgresDerivativeJobs)', async () => {
+  let passedEvidence = null;
+  const asyncDerivativeJobs = {
+    async read(id, principal, context) {
+      return { id, status: 'completed', timelineReferences: [{ sourceId: 'source-1', startMs: 0, endMs: 10_000 }] };
+    },
+    async readCompletedBytes(id, principal, context) {
+      return { job: { id }, bytes: Buffer.from('fake-mp4-bytes') };
+    },
+  };
+  const decide = async ({ evidence }) => {
+    passedEvidence = evidence;
+    return { type: 'fallback', reason: 'done', observations: [] };
+  };
+  const orchestrator = new Layer2Orchestrator({ derivativeJobs: asyncDerivativeJobs, decide });
+  await orchestrator.orchestrate({ id: 'user-1' }, {
+    projectId: 'project-1', deviceSessionId: 'device-1', projectRevision: 1,
+    intent: 'Analyze video',
+    sources: [{ id: 'source-1', fingerprint: 'a'.repeat(32), durationMs: 20_000, width: 1920, height: 1080, hasAudio: true }],
+    transcript: [], evidenceJobIds: ['11111111-2222-3333-4444-555555555555'], existingOperations: [],
+    observations: [],
+    budgets: {}, mediaConsent: { mode: 'video_analysis', grantedAt: new Date().toISOString(), disclosureVersion: 'v2' },
+    supportedContractVersions: { agentRuns: [2], activityEvents: [2], videoToolRequests: [2], editPrograms: [2] },
+  });
+  assert.ok(passedEvidence);
+  assert.equal(passedEvidence[0].id, '11111111-2222-3333-4444-555555555555');
+  assert.ok(Buffer.isBuffer(passedEvidence[0].bytes));
+  assert.equal(passedEvidence[0].bytes.toString(), 'fake-mp4-bytes');
+});

@@ -210,7 +210,7 @@ async function evidenceFor(inventory, principal, derivativeJobs) {
     if (job.status !== 'completed') {
       throw orchestrationError('Evidence is not ready.', 409, 'evidence_not_ready');
     }
-    const derivative = derivativeJobs.readCompletedBytes(jobId, principal, {
+    const derivative = await derivativeJobs.readCompletedBytes(jobId, principal, {
       projectId: inventory.projectId, deviceSessionId: inventory.deviceSessionId,
     });
     return {
