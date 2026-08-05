@@ -58,7 +58,8 @@ function createGeminiDecisionProvider({
       config: {
         systemInstruction: systemPolicy,
         responseMimeType: 'application/json',
-        ...(tools ? { tools: [{ functionDeclarations: AGENT_TOOLS }] } : {}),
+        ...(responseJsonSchema ? { responseSchema: JSON.parse(JSON.stringify(responseJsonSchema)) } : {}),
+        ...(tools ? { tools: [{ functionDeclarations: JSON.parse(JSON.stringify(AGENT_TOOLS)) }] } : {}),
         temperature,
         maxOutputTokens: 4096,
       },
