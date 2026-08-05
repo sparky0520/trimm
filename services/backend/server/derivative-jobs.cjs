@@ -154,7 +154,6 @@ class DerivativeJobs {
     this.accessFor = options.accessFor || (async () => ({ entitlements: ['cloud_planning'], quotas: { concurrentJobs: 4, transcriptionMinutesPerMonth: 30 } }));
     this.jobs = new Map();
     this.idempotency = new Map();
-    this.results = new Map();
     this.activity = new Map();
     this.monthlyUsage = new Map();
     this.activeWrites = new Set();
@@ -223,6 +222,9 @@ class DerivativeJobs {
     const usageKey = this.monthKey(principal.id);
     const usage = this.monthlyUsage.get(usageKey) || { transcriptionMinutes: 0, estimatedCostMicros: 0 };
     if (durationMinutes && usage.transcriptionMinutes + durationMinutes > access.quotas.transcriptionMinutesPerMonth) {
+    const usageKey = this.monthKey(principal.id);
+    const usage = this.monthlyUsage.get(usageKey) || { transcriptionMinutes: 0, estimatedCostMicros: 0 };
+    if (durationMinutes && usage.transcriptionMinutes + durationMinutes > access.quotas.transcriptionMinutesPerMonth) {
       throw jobError('Monthly derivative quota exceeded.', 429, 'quota_exceeded');
     }
     const costCeiling = Number.isSafeInteger(access.quotas.derivativeCostMicrosPerMonth)
@@ -236,7 +238,9 @@ class DerivativeJobs {
         if (existing.authorizationFingerprint !== authorizationFingerprint) {
           throw jobError('Idempotency key was already used for different derivative authorization.', 409, 'idempotency_conflict');
         }
-        return { job: existing, reused: true };
+        if (existing.status === 'completed' && fs.existsSync(this.mediaPath(existing.id))) {
+          return { job: existing, reused: true };
+        }
       }
     }
     const id = crypto.randomUUID();
@@ -315,6 +319,60 @@ class DerivativeJobs {
       throw jobError('Derivative exceeds its authorized duration.', 413, 'duration_limit_exceeded');
     }
     if (declaration.count != null && declaration.count > job.maximumCount) throw jobError('Derivative exceeds its authorized item count.', 413, 'count_limit_exceeded');
+    return { job, reused: false };
+  }
+
+  read(id, principal, context) {
+    requireAuthentication(principal);
+    const job = this.jobs.get(id);
+    if (!job) throw jobError('Derivative job not found.', 404, 'not_found');
+    requireOwner(principal, job.userId);
+    if (context && (context.projectId !== job.projectId || context.deviceSessionId !== job.deviceSessionId)) {
+      throw jobError('Derivative job not found.', 404, 'not_found');
+    }
+    if (job.expiresAt <= this.now() && !TERMINAL.has(job.status)) {
+      job.status = 'expired'; this.removeBytes(job); this.log(job, 'expired');
+      throw jobError('Derivative job expired.', 410, 'job_expired');
+    }
+    return job;
+  }
+
+  async append(id, principal, expectedOffset, input, context) {
+    const job = this.read(id, principal, context);
+    if (!['authorized', 'uploading'].includes(job.status)) throw jobError('Derivative upload is closed.', 409, 'job_closed');
+    if (Number(expectedOffset) !== job.offset) throw Object.assign(jobError('Upload offset does not match.', 409, 'offset_mismatch'), { offset: job.offset });
+    if (this.activeWrites.has(id)) throw jobError('Derivative is already being updated.', 409, 'concurrent_write');
+    this.activeWrites.add(id);
+    let received = 0;
+    const remaining = job.maximumBytes - job.offset;
+    const limiter = new Transform({ transform(chunk, _encoding, callback) {
+      received += chunk.length;
+      callback(received > remaining ? jobError('Derivative exceeds its authorized byte limit.', 413, 'byte_limit_exceeded') : null, chunk);
+    } });
+    try {
+      await new Promise((resolve, reject) => {
+        const output = fs.createWriteStream(this.mediaPath(id), { flags: 'r+', start: job.offset });
+        let settled = false;
+        const finish = (error) => { if (settled) return; settled = true; error ? reject(error) : resolve(); };
+        input.on('error', finish); limiter.on('error', finish); output.on('error', finish); output.on('finish', () => finish());
+        input.pipe(limiter).pipe(output);
+      });
+      job.offset += received; job.status = 'uploading';
+      return job;
+    } catch (error) {
+      try { fs.truncateSync(this.mediaPath(id), job.offset); } catch {}
+      throw error;
+    } finally { this.activeWrites.delete(id); }
+  }
+
+  complete(id, principal, declaration = {}, context) {
+    const job = this.read(id, principal, context);
+    if (!['authorized', 'uploading'].includes(job.status)) throw jobError('Derivative upload is closed.', 409, 'job_closed');
+    if (job.offset <= 0) throw jobError('Derivative upload is empty.', 409, 'empty_derivative');
+    if (declaration.durationMs != null && (!job.maximumDurationMs || declaration.durationMs > job.maximumDurationMs)) {
+      throw jobError('Derivative exceeds its authorized duration.', 413, 'duration_limit_exceeded');
+    }
+    if (declaration.count != null && declaration.count > job.maximumCount) throw jobError('Derivative exceeds its authorized item count.', 413, 'count_limit_exceeded');
     validateActualContent(this.mediaPath(id), job);
     const digest = crypto.createHash('sha256').update(fs.readFileSync(this.mediaPath(id))).digest('hex');
     job.contentKey = crypto.createHash('sha256').update([
@@ -326,7 +384,6 @@ class DerivativeJobs {
     if (cached) {
       job.result = cached.result;
       job.resultReused = true;
-      this.removeBytes(job);
       this.log(job, 'reused', { contentKey: job.contentKey });
       return { job, reused: true, result: cached.result };
     }
@@ -346,7 +403,6 @@ class DerivativeJobs {
     });
     job.result = record;
     this.results.set(job.contentKey, { result: record, createdAt: this.now() });
-    this.removeBytes(job);
     this.log(job, 'result_preserved', { contentKey: job.contentKey });
     return record;
   }

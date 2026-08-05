@@ -14,14 +14,13 @@ function payloadFor(engine) {
   return {
     jobs: cloneMap(engine.jobs),
     idempotency: cloneMap(engine.idempotency),
-    results: cloneMap(engine.results),
     activity: cloneMap(engine.activity),
     monthlyUsage: cloneMap(engine.monthlyUsage),
   };
 }
 
 function hydrate(engine, payload = {}) {
-  for (const name of ['jobs', 'idempotency', 'results', 'activity', 'monthlyUsage']) {
+  for (const name of ['jobs', 'idempotency', 'activity', 'monthlyUsage']) {
     engine[name] = new Map(Array.isArray(payload[name]) ? payload[name] : []);
   }
 }

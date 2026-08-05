@@ -307,6 +307,10 @@ const server = http.createServer(async (request, response) => {
       return json(response, authorized.reused ? 200 : 201, { ...derivativeView(authorized.job), reused: authorized.reused, chunkSize: 4 * 1024 * 1024, requestId });
     } catch (error) {
       return json(response, Number.isInteger(error?.status) ? error.status : 400, { error: error?.message || 'Could not authorize derivative.', code: error?.code, requestId });
+      const authorized = await derivativeJobs.authorize(principal, await collect(request, 16 * 1024));
+      return json(response, authorized.reused ? 200 : 201, { ...derivativeView(authorized.job), reused: authorized.reused, chunkSize: 4 * 1024 * 1024, requestId });
+    } catch (error) {
+      return json(response, Number.isInteger(error?.status) ? error.status : 400, { error: error?.message || 'Could not authorize derivative.', code: error?.code, requestId });
     }
   }
   if (request.method === 'GET' && requestUrl.pathname === '/v1/derivatives/activity') {
@@ -315,17 +319,12 @@ const server = http.createServer(async (request, response) => {
   if (derivativeMatch && request.method === 'HEAD' && !derivativeMatch[2]) {
     try {
       const job = await derivativeJobs.read(derivativeMatch[1], principal, derivativeContext(request));
-      response.writeHead(204, { 'upload-offset': job.offset, 'upload-expires': new Date(job.expiresAt).toISOString(), 'cache-control': 'no-store' });
+      const fileExists = fs.existsSync(derivativeJobs.mediaPath ? derivativeJobs.mediaPath(job.id) : '');
+      const isExpired = job.expiresAt <= Date.now() || (job.deleteAt && job.deleteAt <= Date.now());
+      const offset = (!fileExists || isExpired) ? 0 : job.offset;
+      response.writeHead(204, { 'upload-offset': offset, 'upload-expires': new Date(job.expiresAt).toISOString(), 'cache-control': 'no-store' });
       return response.end();
     } catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message, code: error?.code, requestId }); }
-  }
-  if (derivativeMatch && request.method === 'PUT' && !derivativeMatch[2]) {
-    try {
-      const job = await derivativeJobs.append(derivativeMatch[1], principal, request.headers['upload-offset'], request, derivativeContext(request));
-      return json(response, 200, { offset: job.offset, requestId });
-    } catch (error) {
-      return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message, code: error?.code, offset: error?.offset, requestId });
-    }
   }
   if (derivativeMatch && request.method === 'DELETE' && !derivativeMatch[2]) {
     try { await derivativeJobs.delete(derivativeMatch[1], principal, derivativeContext(request)); response.writeHead(204); return response.end(); }
