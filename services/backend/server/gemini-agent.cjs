@@ -18,8 +18,7 @@ function createGeminiDecisionProvider({
     }
     const cached = fileCache.get(item.id);
     if (cached && (!cached.expiresAt || cached.expiresAt > Date.now())) {
-      return { fileData: { fileUri: cached.uri, mimeType: 'video/mp4' },
-        mediaResolution: { level: item.resolution === 'HIGH' ? 'MEDIA_RESOLUTION_HIGH' : 'MEDIA_RESOLUTION_LOW' } };
+      return { fileData: { fileUri: cached.uri, mimeType: 'video/mp4' } };
     }
     if (ai?.files?.upload && item.bytes && item.bytes.length > 0) {
       try {
@@ -36,17 +35,17 @@ function createGeminiDecisionProvider({
           if (typeof item.persistProviderFile === 'function') {
             await item.persistProviderFile({ provider: 'google-gemini', uri: file.uri, name: file.name, expiresAt });
           }
-          return { fileData: { fileUri: file.uri, mimeType: file.mimeType || 'video/mp4' },
-            mediaResolution: { level: item.resolution === 'HIGH' ? 'MEDIA_RESOLUTION_HIGH' : 'MEDIA_RESOLUTION_LOW' } };
+          return { fileData: { fileUri: file.uri, mimeType: file.mimeType || 'video/mp4' } };
         }
-      } catch {}
+      } catch (error) {
+        throw Object.assign(new Error('Video upload failed: ' + (error.message || error.toString())), { status: 502, code: 'upload_failed' });
+      }
     }
     if (!item.bytes) {
       throw Object.assign(new Error('Video evidence media bytes are missing or expired.'), { status: 409, code: 'evidence_bytes_missing' });
     }
     const data = Buffer.isBuffer(item.bytes) ? item.bytes.toString('base64') : Buffer.from(item.bytes).toString('base64');
-    return { inlineData: { mimeType: 'video/mp4', data },
-      mediaResolution: { level: item.resolution === 'HIGH' ? 'MEDIA_RESOLUTION_HIGH' : 'MEDIA_RESOLUTION_LOW' } };
+    return { inlineData: { mimeType: 'video/mp4', data } };
   }
   async function generate({
     systemPolicy, contents, temperature, purpose = 'planning',
@@ -63,7 +62,6 @@ function createGeminiDecisionProvider({
         ...(tools ? { tools: [{ functionDeclarations: AGENT_TOOLS }] } : {}),
         temperature,
         maxOutputTokens: 4096,
-        thinkingConfig: { thinkingLevel: 'LOW' },
       },
     });
     const functionCall = response.functionCalls?.[0];
