@@ -71,7 +71,8 @@ object OperationValidator {
 
     private fun validateTarget(project: MobileProject, target: OperationTarget?) {
         if (target == null) return // Backward-compatible projects used whole-project effects.
-        val source = project.orderedSources.firstOrNull { it.fingerprint == target.sourceId }
+        val fingerprint = target.sourceId.substringBeforeLast("-")
+        val source = project.orderedSources.firstOrNull { it.fingerprint == fingerprint }
         require(source != null && target.endMs <= source.durationMs) { "Operation target is outside its source" }
     }
 }

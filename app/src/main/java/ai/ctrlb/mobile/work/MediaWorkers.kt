@@ -122,9 +122,9 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                         deviceSessionId = deviceSessionId,
                         projectRevision = analyzed.revision,
                         intent = initialPrompt,
-                        sources = project.orderedSources.map { source ->
+                        sources = project.orderedSources.mapIndexed { index, source ->
                             Layer2SourceInventory(
-                                source.fingerprint, source.fingerprint, source.durationMs,
+                                "${source.fingerprint}-$index", source.fingerprint, source.durationMs,
                                 source.width, source.height, source.hasAudio
                             )
                         },

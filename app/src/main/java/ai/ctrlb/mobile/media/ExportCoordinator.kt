@@ -42,7 +42,11 @@ object ExportCoordinator {
             ).distinct().sortedBy { it.startMs }
         val sourceOffsets = buildMap {
             var offset = 0L
-            project.orderedSources.forEach { source -> put(source.fingerprint, offset); offset += source.durationMs }
+            project.orderedSources.forEachIndexed { index, source -> 
+                put("${source.fingerprint}-$index", offset)
+                if (!containsKey(source.fingerprint)) put(source.fingerprint, offset)
+                offset += source.durationMs 
+            }
         }
         val fineTargets = project.operations.mapNotNull { operation ->
             val target = when (operation) {
@@ -51,7 +55,7 @@ object ExportCoordinator {
                 is SetColorGrade -> operation.target
                 else -> null
             } ?: return@mapNotNull null
-            val offset = sourceOffsets[target.sourceId] ?: return@mapNotNull null
+            val offset = sourceOffsets[target.sourceId] ?: sourceOffsets[target.sourceId.substringBeforeLast("-")] ?: return@mapNotNull null
             TimeRange(offset + target.startMs, offset + target.endMs)
         }
         val retained = splitAtBoundaries(
@@ -61,7 +65,7 @@ object ExportCoordinator {
         val timelineMapper = TimelineMapper(cuts)
         require(retained.isNotEmpty()) { "The edit removes the entire source." }
         var timelineStart = 0L
-        val clips = project.orderedSources.flatMap { source ->
+        val clips = project.orderedSources.flatMapIndexed { index, source ->
             val sourceStart = timelineStart
             val sourceEnd = sourceStart + source.durationMs
             timelineStart = sourceEnd
@@ -76,15 +80,15 @@ object ExportCoordinator {
                     ).build()
                     val globalRange = TimeRange(start, end)
                     val cleanup = project.operations.filterIsInstance<SetAudioCleanup>().lastOrNull {
-                        it.enabled && targets(it.target, source.fingerprint, localStart, localEnd)
+                        it.enabled && targets(it.target, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd)
                     }?.strength ?: 0f
                     val target = project.operations.filterIsInstance<SetAudioLevels>().lastOrNull {
-                        it.enabled && it.parameter != "music_ducking" && targets(it.target, source.fingerprint, localStart, localEnd)
+                        it.enabled && it.parameter != "music_ducking" && targets(it.target, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd)
                     }?.dialogueLufs ?: -20f
                     val audioEffects = if (cleanup > 0f || target != -20f) listOf(DialogueAudioProcessor(cleanup, target)) else emptyList()
                     val itemVideoEffects = mutableListOf<Effect>()
                     val colorOperations = project.operations.filterIsInstance<SetColorGrade>().filter {
-                        it.enabled && targets(it.target, source.fingerprint, localStart, localEnd)
+                        it.enabled && targets(it.target, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd)
                     }
                     FineColorEffect.create(colorOperations)?.let(itemVideoEffects::add)
                     EditedMediaItem.Builder(item).setDurationUs(globalRange.durationMs * 1_000)
@@ -163,8 +167,8 @@ object ExportCoordinator {
         return result
     }
 
-    private fun targets(target: OperationTarget?, sourceId: String, startMs: Long, endMs: Long): Boolean =
-        target == null || (target.sourceId == sourceId && target.startMs <= startMs && target.endMs >= endMs)
+    private fun targets(target: OperationTarget?, exactId: String, legacyId: String, startMs: Long, endMs: Long): Boolean =
+        target == null || ((target.sourceId == exactId || target.sourceId == legacyId) && target.startMs <= startMs && target.endMs >= endMs)
 
     private fun splitAtBoundaries(ranges: List<TimeRange>, boundaries: List<Long>): List<TimeRange> = ranges.flatMap { range ->
         val points = (listOf(range.startMs) + boundaries.filter { it > range.startMs && it < range.endMs } + range.endMs).sorted()

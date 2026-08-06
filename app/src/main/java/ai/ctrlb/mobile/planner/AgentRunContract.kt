@@ -110,11 +110,11 @@ data class AgentRunRequest(
 fun sourceTranscript(words: List<TranscriptWord>, sources: List<SourceMedia>): List<Layer2TranscriptWord> {
     var offset = 0L
     val result = mutableListOf<Layer2TranscriptWord>()
-    sources.forEach { source ->
+    sources.forEachIndexed { index, source ->
         val sourceEnd = offset + source.durationMs
-        words.filter { it.range.startMs in offset until sourceEnd }.forEach { word ->
+        words.filter { it.text.isNotBlank() && it.range.startMs in offset until sourceEnd }.forEach { word ->
             result += Layer2TranscriptWord(
-                source.fingerprint, word.text, word.range.startMs - offset, word.range.endMs.coerceAtMost(sourceEnd) - offset,
+                "${source.fingerprint}-$index", word.text, word.range.startMs - offset, word.range.endMs.coerceAtMost(sourceEnd) - offset,
                 word.confidence, word.speakerId
             )
         }

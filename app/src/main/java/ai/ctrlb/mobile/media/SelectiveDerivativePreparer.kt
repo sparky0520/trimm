@@ -63,8 +63,12 @@ class SelectiveDerivativePreparer(
         if (!expiry.isAfter(current)) throw DerivativePreparationException("Evidence request has expired.")
         if (job.type != "video" || job.purpose != "video-inspection") throw DerivativePreparationException("Only video inspection jobs are supported.")
         if (job.maximumBytes <= 0) throw DerivativePreparationException("Evidence byte budget must be positive.")
-        val source = sources.singleOrNull { it.fingerprint == job.sourceId }
-            ?: throw DerivativePreparationException("Evidence source is not selected.")
+        val index = job.sourceId.substringAfterLast('-').toIntOrNull()
+        val source = if (index != null && index in sources.indices && sources[index].fingerprint == job.sourceId.substringBeforeLast('-')) {
+            sources[index]
+        } else {
+            sources.singleOrNull { it.fingerprint == job.sourceId }
+        } ?: throw DerivativePreparationException("Evidence source is not selected.")
         val range = TimeRange(job.range.startMs, job.range.endMs)
         if (range.endMs > source.durationMs) throw DerivativePreparationException("Evidence range exceeds the source.")
         if (range.durationMs > 15_000 || job.maximumDurationMs == null || range.durationMs > job.maximumDurationMs) {
