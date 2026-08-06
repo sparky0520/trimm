@@ -106,7 +106,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
 @Serializable @SerialName("add_transition") data class AddTransition(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val atSourceMs: Long, val preset: String = "dip", val durationMs: Long = 280) : EditOperation
 @Serializable @SerialName("add_motion_preset") data class AddMotionPreset(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val range: TimeRange, val preset: String, val intensity: Float = .5f) : EditOperation
 
-@Serializable @SerialName("add_captions") data class AddCaptions(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val cues: List<CaptionCue>, val style: String = "bold-bottom") : EditOperation
+@Serializable @SerialName("add_captions") data class AddCaptions(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val cues: List<CaptionCue> = emptyList(), val style: String = "bold-bottom") : EditOperation
 @Serializable @SerialName("semantic_visual") data class ApplySemanticVisual(
     override val id: String = UUID.randomUUID().toString(),
     override val enabled: Boolean = true,

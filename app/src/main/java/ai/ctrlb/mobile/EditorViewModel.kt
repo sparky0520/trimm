@@ -516,7 +516,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val estimated = (project.durationMs / 1_000.0 * project.export.bitrate / 8).toLong()
         val manager = WorkManager.getInstance(getApplication()); val request = OneTimeWorkRequestBuilder<ExportWorker>().setInputData(Data.Builder().putString("projectId", project.id).putLong("estimatedBytes", estimated).build()).addTag("export:${project.id}").build()
         android.widget.Toast.makeText(getApplication(), "Export queued", android.widget.Toast.LENGTH_SHORT).show()
-        manager.enqueue(request); viewModelScope.launch { val info = awaitWork(manager, request.id); android.widget.Toast.makeText(getApplication(), if (info.state == WorkInfo.State.SUCCEEDED) "Export saved to Movies/ctrlB" else "Export failed: ${info.outputData.getString("error") ?: info.state}", android.widget.Toast.LENGTH_LONG).show() }
+        manager.enqueueUniqueWork("export:${project.id}", ExistingWorkPolicy.KEEP, request)
+        viewModelScope.launch { 
+            val info = awaitWork(manager, request.id)
+            if (info.state == WorkInfo.State.CANCELLED) return@launch
+            android.widget.Toast.makeText(getApplication(), if (info.state == WorkInfo.State.SUCCEEDED) "Export saved to Movies/ctrlB" else "Export failed: ${info.outputData.getString("error") ?: info.state}", android.widget.Toast.LENGTH_LONG).show() 
+        }
     } }
     private fun updateProject(project: MobileProject, preview: Boolean = false) { mutable.value = mutable.value.copy(project = project, creatorPreferences = project.creatorPreferences); viewModelScope.launch { store.save(project); if (preview) renderPreview(project) } }
     private fun renderPreview(project: MobileProject, simulatePendingProposal: Boolean = false) {

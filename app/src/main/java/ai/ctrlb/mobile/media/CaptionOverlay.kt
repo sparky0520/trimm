@@ -3,8 +3,10 @@ package ai.ctrlb.mobile.media
 import ai.ctrlb.mobile.domain.CaptionCue
 import android.graphics.Color
 import android.graphics.Typeface
+import android.text.Layout
 import android.text.SpannableString
 import android.text.Spanned
+import android.text.style.AlignmentSpan
 import android.text.style.BackgroundColorSpan
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
@@ -31,13 +33,14 @@ class CaptionOverlay(
             setSpan(ForegroundColorSpan(Color.WHITE), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             setSpan(BackgroundColorSpan(Color.argb(210, 12, 12, 14)), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             setSpan(StyleSpan(Typeface.BOLD), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            setSpan(AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
     }
 
     override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings = object : OverlaySettings {
         override fun getBackgroundFrameAnchor() = Pair(0f, -0.72f)
         override fun getOverlayFrameAnchor() = Pair(0f, -1f)
-        override fun getScale() = if (portrait) Pair(.48f, .48f) else Pair(.6f, .6f)
+        override fun getScale() = if (portrait) Pair(.7f, .7f) else Pair(.9f, .9f)
     }
 
     private fun wrap(text: String, maxCharacters: Int): String {

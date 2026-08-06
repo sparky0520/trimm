@@ -44,7 +44,12 @@ object OperationValidator {
         require(expectedRevision == project.revision) { "Stale edit proposal" }
         require(proposed.map { it.id }.distinct().size == proposed.size) { "Duplicate operation id" }
         require(proposed.all(::isPlannerAvailable)) { "Operation is unavailable without render support or frame evidence" }
-        proposed.forEach { op -> when (op) {
+        val resolved = proposed.map { op ->
+            if (op is AddCaptions && op.cues.isEmpty()) {
+                op.copy(cues = CaptionSegmenter.segment(project.analysis.words))
+            } else op
+        }
+        resolved.forEach { op -> when (op) {
             is RemoveRanges -> { require(op.confidence in 0f..1f); require(op.ranges.isNotEmpty()); op.ranges.forEach { require(it.endMs <= project.durationMs) } }
             is RemoveFumbles -> { require(op.confidence in 0f..1f); require(op.ranges.isNotEmpty()); op.ranges.forEach { require(it.endMs <= project.durationMs) } }
             is RemoveAwkwardSilences -> { require(op.confidence in 0f..1f); require(op.pacing in setOf("natural", "tight")); require(op.ranges.isNotEmpty()); op.ranges.forEach { require(it.endMs <= project.durationMs) } }
@@ -65,8 +70,8 @@ object OperationValidator {
             is AddCaptions -> { require(op.cues.isNotEmpty()); op.cues.forEach { require(it.range.endMs <= project.durationMs); require(it.text.isNotBlank() && it.text.length <= 120) } }
             is ApplySemanticVisual -> SemanticVisualPolicy.validate(op, project.durationMs)
         } }
-        SemanticVisualPolicy.validateDensity(proposed.filterIsInstance<ApplySemanticVisual>().filter { it.enabled })
-        return proposed
+        SemanticVisualPolicy.validateDensity(resolved.filterIsInstance<ApplySemanticVisual>().filter { it.enabled })
+        return resolved
     }
 
     private fun validateTarget(project: MobileProject, target: OperationTarget?) {
