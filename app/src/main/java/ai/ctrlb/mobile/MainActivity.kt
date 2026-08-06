@@ -320,6 +320,14 @@ class MainActivity : ComponentActivity() {
     Spacer(Modifier.height(20.dp))
 }
 
+private sealed interface ChatElement {
+    val timestamp: Long
+    data class InitialRequest(override val timestamp: Long, val request: String) : ChatElement
+    data class Findings(override val timestamp: Long, val read: ai.ctrlb.mobile.domain.EditorialRead) : ChatElement
+    data class Turn(override val timestamp: Long, val turn: ai.ctrlb.mobile.domain.EditorialConversationTurn) : ChatElement
+    data class Checkpoint(override val timestamp: Long, val checkpoint: ai.ctrlb.mobile.domain.AppliedEditCheckpoint) : ChatElement
+}
+
 @Composable private fun EditorScreen(
     state: EditorState,
     undo: () -> Unit,
@@ -376,62 +384,83 @@ class MainActivity : ComponentActivity() {
             contentPadding = PaddingValues(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            state.initialRequest
-                ?.takeIf { initial -> project.analysis.revisionConversation.none { it.request == initial } }
-                ?.let { initial ->
-                    item(key = "initial-request") { UserChatBubble(initial) }
+            val chatElements = buildList {
+                state.initialRequest
+                    ?.takeIf { initial -> project.analysis.revisionConversation.none { it.request == initial } }
+                    ?.let { initial -> add(ChatElement.InitialRequest(0L, initial)) }
+                
+                project.analysis.completedAtEpochMs?.let { time ->
+                    add(ChatElement.Findings(time, read))
                 }
-            items(project.analysis.revisionConversation, key = { it.id }) { turn ->
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    UserChatBubble(turn.request)
-                    AssistantChatBubble(accent = if (turn.isError) Color(0xFFFF6B6B) else Lavender) {
-                        when {
-                            turn.isPending -> {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Lavender)
-                                    Text(turn.response, color = CreamRaised, lineHeight = 20.sp)
-                                }
-                            }
-                            turn.isError -> {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(formatUserFacingError(turn.response), color = Color(0xFFFF8888), lineHeight = 20.sp, fontSize = 13.sp)
-                                    Button(
-                                        onClick = { retryTurn(turn.id) },
-                                        shape = RoundedCornerShape(8.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Raised, contentColor = Cream),
-                                        border = BorderStroke(1.dp, Border),
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            Text("↻", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Coral)
-                                            Text("Retry request", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+
+                project.analysis.revisionConversation.forEach { turn ->
+                    add(ChatElement.Turn(turn.createdAtEpochMs, turn))
+                }
+                
+                project.analysis.appliedEditCheckpoints.forEach { checkpoint ->
+                    add(ChatElement.Checkpoint(checkpoint.createdAtEpochMs, checkpoint))
+                }
+            }.sortedBy { it.timestamp }
+
+            items(chatElements, key = { it.hashCode() }) { element ->
+                when (element) {
+                    is ChatElement.InitialRequest -> {
+                        UserChatBubble(element.request)
+                    }
+                    is ChatElement.Findings -> {
+                        FindingsChatBubble(element.read)
+                    }
+                    is ChatElement.Turn -> {
+                        val turn = element.turn
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            UserChatBubble(turn.request)
+                            AssistantChatBubble(accent = if (turn.isError) Color(0xFFFF6B6B) else Lavender) {
+                                when {
+                                    turn.isPending -> {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Lavender)
+                                            Text(turn.response, color = CreamRaised, lineHeight = 20.sp)
                                         }
+                                    }
+                                    turn.isError -> {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Text(formatUserFacingError(turn.response), color = Color(0xFFFF8888), lineHeight = 20.sp, fontSize = 13.sp)
+                                            Button(
+                                                onClick = { retryTurn(turn.id) },
+                                                shape = RoundedCornerShape(8.dp),
+                                                colors = ButtonDefaults.buttonColors(containerColor = Raised, contentColor = Cream),
+                                                border = BorderStroke(1.dp, Border),
+                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                    Text("↻", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Coral)
+                                                    Text("Retry request", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                }
+                                            }
+                                        }
+                                    }
+                                    else -> {
+                                        Text(turn.response, color = CreamRaised, lineHeight = 20.sp)
                                     }
                                 }
                             }
-                            else -> {
-                                Text(turn.response, color = CreamRaised, lineHeight = 20.sp)
-                            }
                         }
                     }
-                }
-            }
-            items(project.analysis.appliedEditCheckpoints, key = { "checkpoint-${it.id}" }) { checkpoint ->
-                EditResultChatBubble(
-                    checkpoint = checkpoint,
-                    canUndo = project.analysis.appliedEditCheckpoints.lastOrNull()?.id == checkpoint.id,
-                    undo = { undoCheckpoint(checkpoint.id) }
-                )
-            }
-            project.analysis.agentRun?.let { run ->
-                items(run.events, key = { "agent-${run.runId}-${it.sequence}" }) { event ->
-                    AssistantChatBubble(accent = Lavender) {
-                        Text(event.message, color = CreamRaised, lineHeight = 20.sp)
+                    is ChatElement.Checkpoint -> {
+                        val checkpoint = element.checkpoint
+                        EditResultChatBubble(
+                            checkpoint = checkpoint,
+                            canUndo = project.analysis.appliedEditCheckpoints.lastOrNull()?.id == checkpoint.id,
+                            undo = { undoCheckpoint(checkpoint.id) }
+                        )
                     }
                 }
+            }
+
+            project.analysis.agentRun?.let { run ->
                 AgentDecisionMapper.clarification(run).takeIf { it.isNotEmpty() }?.let { questions ->
                     item(key = "clarification-${run.runId}-${run.events.size}") {
                         AgentClarificationCard(questions, reviseStory)
@@ -472,9 +501,6 @@ class MainActivity : ComponentActivity() {
                         AgentUsageChatBubble(run.usage)
                     }
                 }
-            }
-            if (project.analysis.completedAtEpochMs != null) {
-                item { FindingsChatBubble(read) }
             }
             if (review != null) {
                 item { ProposalChatBubble(review, applyProposal, rejectProposal) }
