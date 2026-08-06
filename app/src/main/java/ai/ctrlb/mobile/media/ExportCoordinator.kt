@@ -91,7 +91,7 @@ object ExportCoordinator {
                         it.enabled && targets(it.target, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd)
                     }
                     FineColorEffect.create(colorOperations)?.let(itemVideoEffects::add)
-                    EditedMediaItem.Builder(item).setDurationUs(globalRange.durationMs * 1_000)
+                    EditedMediaItem.Builder(item)
                         .setEffects(Effects(audioEffects, itemVideoEffects)).build()
                 }
             }
