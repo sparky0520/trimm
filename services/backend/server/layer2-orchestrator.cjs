@@ -24,6 +24,7 @@ Call one tool at a time so each deterministic result can inform the next step.
 Call ask_clarification when a consequential user choice is unresolved. Never guess merely to avoid asking.
 Use inspect_video_range when more audiovisual evidence is needed. Each range is at most 30 seconds. Use LOW normally. Use HIGH only after overlapping LOW evidence left a specific uncertainty.
 Never request rendered output, executable instructions, or provider credentials.
+If the transcript is empty, assume there is no speech in the video and focus exclusively on visual, structural, and background audio edits.
 Every edit operation must cite supplied evidence IDs and include confidence from 0 to 1.
 Do not invent evidence. When evidence is missing or uncertain, request bounded evidence, clarify, or fall back.
 Use fine tools: one effect, one exact range, and one bounded parameter set per call. Never ask a tool to scan or choose its own settings.
@@ -109,11 +110,14 @@ function boundedInteger(value, name, maximum, allowZero = false) {
   return value;
 }
 
-function rejectPrivateOrExecutable(value) {
+function rejectPrivateOrExecutable(value, isPlanner = false) {
   if (!value || typeof value !== 'object') return;
   for (const [key, child] of Object.entries(value)) {
-    if (FORBIDDEN_KEYS.has(key)) throw orchestrationError('Private or executable planner fields are forbidden.', 400, 'cloud_boundary_violation');
-    rejectPrivateOrExecutable(child);
+    if (FORBIDDEN_KEYS.has(key)) {
+      if (isPlanner) throw orchestrationError('Planner returned forbidden fields.', 502, 'invalid_planner_response');
+      else throw orchestrationError('Private or executable planner fields are forbidden.', 400, 'cloud_boundary_violation');
+    }
+    rejectPrivateOrExecutable(child, isPlanner);
   }
 }
 
@@ -436,7 +440,7 @@ function validateEditProgram(decision, inventory, observations) {
 
 function validateDecision(decision, inventory, evidence) {
   if (!decision || typeof decision !== 'object') throw orchestrationError('Planner returned no decision.', 502, 'invalid_planner_response');
-  rejectPrivateOrExecutable(decision);
+  rejectPrivateOrExecutable(decision, true);
   const added = validateObservations(decision.observations, inventory, evidence);
   const observations = [...inventory.observations, ...added];
   if (decision.type === 'edit_program') return { ...validateEditProgram(decision, inventory, observations), observations: added };
