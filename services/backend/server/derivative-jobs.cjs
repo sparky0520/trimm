@@ -207,7 +207,8 @@ class DerivativeJobs {
     const authorizationFingerprint = crypto.createHash('sha256').update(JSON.stringify({
       projectId, deviceSessionId, purpose, type, acceptedFormat, maximumBytes,
       maximumDurationMs, maximumCount, estimatedCostMicros, mediaMode: request.mediaMode,
-      consent, selectionReason, providerDisclosures: disclosures, sourceFingerprint,
+      consent: { mode: consent.mode, disclosureVersion: consent.disclosureVersion }, 
+      selectionReason, providerDisclosures: disclosures, sourceFingerprint,
       timelineReferences: mapping, retentionMs, resolution,
     })).digest('hex');
     if (maximumDurationMs == null || maximumDurationMs > 30_000) throw jobError('Video jobs require a duration no greater than 30 seconds.');
