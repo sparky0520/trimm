@@ -352,32 +352,30 @@ class MainActivity : ComponentActivity() {
             secondaryLabel = if (showVideo) "Hide Video" else "Show Video",
             onSecondary = { showVideo = !showVideo }
         )
+        if (showVideo) {
+            Column(Modifier.fillMaxWidth().padding(start = 12.dp, top = 12.dp, end = 12.dp).background(Workspace, RoundedCornerShape(18.dp)).border(1.dp, Border, RoundedCornerShape(18.dp))) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("YOUR VIDEO", color = Coral, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        Text(if (state.previewUri == null) "Original clips" else "Current edit", color = CreamRaised, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    }
+                    SmallAction("Expand") { fullscreen = true }
+                }
+                val ratio = project.export.width.toFloat() / project.export.height
+                Box(Modifier.fillMaxWidth().padding(10.dp).background(Ink, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                    CanonicalVideoPreview(project, Modifier.fillMaxWidth().aspectRatio(ratio))
+                }
+                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("00:00", color = Muted, fontSize = 10.sp)
+                    Text("${project.orderedSources.size} CLIPS  •  ${project.preferences.aspectRatio}", color = Muted, fontSize = 9.sp, letterSpacing = .6.sp)
+                }
+            }
+        }
         LazyColumn(
             Modifier.weight(1f),
             contentPadding = PaddingValues(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (showVideo) {
-                item(key = "video-preview-header") {
-                    Column(Modifier.fillMaxWidth().background(Workspace, RoundedCornerShape(18.dp)).border(1.dp, Border, RoundedCornerShape(18.dp))) {
-                        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text("YOUR VIDEO", color = Coral, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                                Text(if (state.previewUri == null) "Original clips" else "Current edit", color = CreamRaised, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                            }
-                            SmallAction("Expand") { fullscreen = true }
-                        }
-                        val ratio = project.export.width.toFloat() / project.export.height
-                        Box(Modifier.fillMaxWidth().padding(10.dp).background(Ink, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                            CanonicalVideoPreview(project, Modifier.fillMaxWidth().aspectRatio(ratio))
-                        }
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("00:00", color = Muted, fontSize = 10.sp)
-                            Text("${project.orderedSources.size} CLIPS  •  ${project.preferences.aspectRatio}", color = Muted, fontSize = 9.sp, letterSpacing = .6.sp)
-                        }
-                    }
-                }
-            }
             state.initialRequest
                 ?.takeIf { initial -> project.analysis.revisionConversation.none { it.request == initial } }
                 ?.let { initial ->
