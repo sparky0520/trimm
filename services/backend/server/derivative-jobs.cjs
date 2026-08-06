@@ -208,7 +208,7 @@ class DerivativeJobs {
       projectId, deviceSessionId, purpose, type, acceptedFormat, maximumBytes,
       maximumDurationMs, maximumCount, estimatedCostMicros, mediaMode: request.mediaMode,
       consent: { mode: consent.mode, disclosureVersion: consent.disclosureVersion }, 
-      selectionReason, providerDisclosures: disclosures, sourceFingerprint,
+      providerDisclosures: disclosures, sourceFingerprint,
       timelineReferences: mapping, retentionMs, resolution,
     })).digest('hex');
     if (maximumDurationMs == null || maximumDurationMs > 30_000) throw jobError('Video jobs require a duration no greater than 30 seconds.');
@@ -219,6 +219,17 @@ class DerivativeJobs {
       const existing = this.jobs.get(existingId);
       if (existing && existing.expiresAt > this.now()) {
         if (existing.authorizationFingerprint !== authorizationFingerprint) {
+          console.error('[DEBUG] Idempotency Conflict!', { 
+            existing: existing.authorizationFingerprint, 
+            new: authorizationFingerprint,
+            newJson: JSON.stringify({
+              projectId, deviceSessionId, purpose, type, acceptedFormat, maximumBytes,
+              maximumDurationMs, maximumCount, estimatedCostMicros, mediaMode: request.mediaMode,
+              consent: { mode: consent.mode, disclosureVersion: consent.disclosureVersion }, 
+              providerDisclosures: disclosures, sourceFingerprint,
+              timelineReferences: mapping, retentionMs, resolution,
+            })
+          });
           throw jobError('Idempotency key was already used for different derivative authorization.', 409, 'idempotency_conflict');
         }
         if (existing.status === 'completed' && fs.existsSync(this.mediaPath(existing.id))) {
