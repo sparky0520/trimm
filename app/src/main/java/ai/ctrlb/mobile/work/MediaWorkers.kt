@@ -46,7 +46,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
             return Result.failure(Data.Builder().putString("error", "Local analysis is no longer supported.").build())
         }
 
-        val client = TranscriptionClient(BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken)
+        val client = TranscriptionClient(BuildConfig.TRANSCRIPTION_URL, AuthTokenProvider::currentToken)
         var offset = 0L
 
         project.orderedSources.forEachIndexed { index, source ->
