@@ -44,9 +44,26 @@ object OperationValidator {
         require(expectedRevision == project.revision) { "Stale edit proposal" }
         require(proposed.map { it.id }.distinct().size == proposed.size) { "Duplicate operation id" }
         require(proposed.all(::isPlannerAvailable)) { "Operation is unavailable without render support or frame evidence" }
+        val sourceOffsets = buildMap {
+            var offset = 0L
+            project.orderedSources.forEachIndexed { index, source -> 
+                put("${source.fingerprint}-$index", offset)
+                if (!containsKey(source.fingerprint)) put(source.fingerprint, offset)
+                offset += source.durationMs 
+            }
+        }
         val resolved = proposed.map { op ->
             if (op is AddCaptions && op.cues.isEmpty()) {
-                op.copy(cues = CaptionSegmenter.segment(project.analysis.words))
+                val words = project.analysis.words.filter { word ->
+                    val matchesSpeaker = op.speakerId == null || word.speakerId == op.speakerId
+                    val matchesTarget = op.target == null || (
+                        sourceOffsets[op.target.sourceId]?.let { offset ->
+                            word.range.startMs >= offset + op.target.startMs && word.range.endMs <= offset + op.target.endMs
+                        } ?: false
+                    )
+                    matchesSpeaker && matchesTarget
+                }
+                op.copy(cues = CaptionSegmenter.segment(words))
             } else op
         }
         resolved.forEach { op -> when (op) {
