@@ -35,45 +35,37 @@ const operationSchema = {
 const observations = { type: 'array', maxItems: 100, items: observationSchema };
 
 const AGENT_DECISION_SCHEMA = Object.freeze({
-  anyOf: [
-    {
-      type: 'object', additionalProperties: false,
-      required: ['type', 'expectedRevision', 'summary', 'operations', 'observations'],
-      properties: {
-        type: { type: 'string', enum: ['edit_program'] },
-        expectedRevision: { type: 'integer', minimum: 0 },
-        summary: { type: 'string' },
-        operations: { type: 'array', items: operationSchema }, observations,
-      },
-    },
-    {
-      type: 'object', additionalProperties: false,
-      required: ['type', 'questions', 'observations'],
-      properties: {
-        type: { type: 'string', enum: ['clarification'] },
-        questions: {
-          type: 'array', minItems: 1, maxItems: 3, items: {
-            type: 'object', additionalProperties: false, required: ['id', 'prompt', 'options', 'recommendedOptionId'],
-            properties: {
-              id: { type: 'string' }, prompt: { type: 'string' }, recommendedOptionId: { type: 'string' },
-              options: {
-                type: 'array', minItems: 2, maxItems: 4, items: {
-                  type: 'object', additionalProperties: false, required: ['id', 'label', 'description'],
-                  properties: { id: { type: 'string' }, label: { type: 'string' }, description: { type: 'string' } },
-                }
-              },
-            },
-          }
+  type: 'object',
+  additionalProperties: false,
+  required: ['type', 'observations'],
+  properties: {
+    type: { type: 'string', enum: ['edit_program', 'clarification', 'fallback'] },
+    observations,
+    
+    // edit_program fields
+    expectedRevision: { type: 'integer', minimum: 0 },
+    summary: { type: 'string' },
+    operations: { type: 'array', items: operationSchema },
+    
+    // clarification fields
+    questions: {
+      type: 'array', minItems: 1, maxItems: 3, items: {
+        type: 'object', additionalProperties: false, required: ['id', 'prompt', 'options', 'recommendedOptionId'],
+        properties: {
+          id: { type: 'string' }, prompt: { type: 'string' }, recommendedOptionId: { type: 'string' },
+          options: {
+            type: 'array', minItems: 2, maxItems: 4, items: {
+              type: 'object', additionalProperties: false, required: ['id', 'label', 'description'],
+              properties: { id: { type: 'string' }, label: { type: 'string' }, description: { type: 'string' } },
+            }
+          },
         },
-        observations,
-      },
+      }
     },
-    {
-      type: 'object', additionalProperties: false,
-      required: ['type', 'reason', 'observations'],
-      properties: { type: { type: 'string', enum: ['fallback'] }, reason: { type: 'string' }, observations },
-    },
-  ],
+    
+    // fallback fields
+    reason: { type: 'string' },
+  },
 });
 
 const INSPECT_VIDEO_RANGE_TOOL = Object.freeze({
