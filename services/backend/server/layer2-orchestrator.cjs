@@ -42,7 +42,7 @@ const PROPOSAL_TOOL_TYPES = Object.freeze({
   propose_reduce_background_noise: 'set_audio_cleanup',
   propose_set_dialogue_loudness: 'set_audio_levels',
   propose_set_music_ducking: 'set_audio_levels',
-  propose_add_caption_cue: 'add_captions',
+  propose_add_captions: 'add_captions',
   propose_adjust_exposure: 'set_color_grade',
   propose_adjust_temperature: 'set_color_grade',
   propose_adjust_contrast: 'set_color_grade',
@@ -72,8 +72,8 @@ function fineOperationFor(call, operationType, inventory) {
   if (call.name === 'propose_set_music_ducking') {
     return { ...common, parameter: 'music_ducking', musicDuckDb: raw.duckDb };
   }
-  if (call.name === 'propose_add_caption_cue') {
-    return { ...common, cues: [{ text: raw.text, range: { startMs: sourceOffset + raw.startMs, endMs: sourceOffset + raw.endMs } }] };
+  if (call.name === 'propose_add_captions') {
+    return { ...common, cues: [] };
   }
   if (call.name.startsWith('propose_adjust_')) {
     const parameter = call.name.slice('propose_adjust_'.length).replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
@@ -395,7 +395,7 @@ function validateEditProgram(decision, inventory, observations) {
       throw orchestrationError('Background music parameters are invalid.', 422, 'invalid_edit_program');
     }
     if (operation.type === 'add_captions') {
-      if (!Array.isArray(operation.cues) || !operation.cues.length || operation.style !== 'bold-bottom' ||
+      if (!Array.isArray(operation.cues) || operation.style !== 'bold-bottom' ||
         operation.cues.some((cue) => typeof cue?.text !== 'string' || !cue.text.trim() || cue.text.length > 120 ||
           !Number.isSafeInteger(cue.range?.startMs) || !Number.isSafeInteger(cue.range?.endMs) ||
           cue.range.startMs < 0 || cue.range.endMs <= cue.range.startMs ||

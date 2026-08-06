@@ -177,10 +177,9 @@ const PROPOSE_MUSIC_DUCKING_TOOL = operationTool(
 );
 
 const PROPOSE_CAPTIONS_TOOL = operationTool(
-  'propose_add_caption_cue',
-  'Add one caption cue whose text is verbatim from the supplied timestamped transcript.',
-  ['sourceId', 'startMs', 'endMs', 'text', 'style', 'reason'], {
-  ...targetRangeProperties, text: { type: 'string' },
+  'propose_add_captions',
+  'Enable captions for the entire video. The timing and text will be automatically extracted from the transcript. Do not use for partial captions.',
+  ['style', 'reason'], {
   style: { type: 'string', enum: ['bold-bottom'] },
 },
 );
