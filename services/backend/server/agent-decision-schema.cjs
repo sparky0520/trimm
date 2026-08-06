@@ -178,8 +178,10 @@ const PROPOSE_MUSIC_DUCKING_TOOL = operationTool(
 
 const PROPOSE_CAPTIONS_TOOL = operationTool(
   'propose_add_captions',
-  'Enable captions for the entire video. The timing and text will be automatically extracted from the transcript. Do not use for partial captions.',
+  'Enable captions. You can optionally specify a source interval or a specific speakerId. The timing and text will be automatically extracted from the transcript.',
   ['style', 'reason'], {
+  ...targetRangeProperties,
+  speakerId: { type: 'string' },
   style: { type: 'string', enum: ['bold-bottom'] },
 },
 );

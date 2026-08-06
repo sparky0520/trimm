@@ -73,7 +73,14 @@ function fineOperationFor(call, operationType, inventory) {
     return { ...common, parameter: 'music_ducking', musicDuckDb: raw.duckDb };
   }
   if (call.name === 'propose_add_captions') {
-    return { ...common, cues: [] };
+    const operation = { ...common, cues: [] };
+    if (raw.sourceId) {
+      operation.target = { sourceId: raw.sourceId, startMs: raw.startMs, endMs: raw.endMs };
+    }
+    if (raw.speakerId) {
+      operation.speakerId = raw.speakerId;
+    }
+    return operation;
   }
   if (call.name.startsWith('propose_adjust_')) {
     const parameter = call.name.slice('propose_adjust_'.length).replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());

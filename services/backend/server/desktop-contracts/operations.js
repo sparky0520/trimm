@@ -96,6 +96,8 @@ const caption = z.object({
 export const AddCaptionsOperationSchema = operation('add_captions', {
   sourceId: id,
   captions: z.array(caption).min(0),
+  target: z.object({ sourceId: id, startMs: seconds, endMs: seconds }).optional(),
+  speakerId: id.optional(),
 });
 
 const itemPatch = z.object({
