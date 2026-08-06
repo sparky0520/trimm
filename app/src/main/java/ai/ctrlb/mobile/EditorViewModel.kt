@@ -513,11 +513,17 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         mutable.value = mutable.value.copy(jobMessage = "Edit checkpoint undone")
     }
     fun export() { mutable.value.project?.let { project ->
-        val estimated = (project.durationMs / 1_000.0 * project.export.bitrate / 8).toLong()
-        val manager = WorkManager.getInstance(getApplication()); val request = OneTimeWorkRequestBuilder<ExportWorker>().setInputData(Data.Builder().putString("projectId", project.id).putLong("estimatedBytes", estimated).build()).addTag("export:${project.id}").build()
-        android.widget.Toast.makeText(getApplication(), "Export queued", android.widget.Toast.LENGTH_SHORT).show()
-        manager.enqueueUniqueWork("export:${project.id}", ExistingWorkPolicy.KEEP, request)
+        val manager = WorkManager.getInstance(getApplication())
         viewModelScope.launch { 
+            val existing = withContext(Dispatchers.IO) { manager.getWorkInfosForUniqueWork("export:${project.id}").get() }
+            if (existing != null && existing.any { !it.state.isFinished }) {
+                return@launch
+            }
+            val estimated = (project.durationMs / 1_000.0 * project.export.bitrate / 8).toLong()
+            val request = OneTimeWorkRequestBuilder<ExportWorker>().setInputData(Data.Builder().putString("projectId", project.id).putLong("estimatedBytes", estimated).build()).addTag("export:${project.id}").build()
+            android.widget.Toast.makeText(getApplication(), "Export queued", android.widget.Toast.LENGTH_SHORT).show()
+            manager.enqueueUniqueWork("export:${project.id}", ExistingWorkPolicy.KEEP, request)
+            
             val info = awaitWork(manager, request.id)
             if (info.state == WorkInfo.State.CANCELLED) return@launch
             android.widget.Toast.makeText(getApplication(), if (info.state == WorkInfo.State.SUCCEEDED) "Export saved to Movies/ctrlB" else "Export failed: ${info.outputData.getString("error") ?: info.state}", android.widget.Toast.LENGTH_LONG).show() 
