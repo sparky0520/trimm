@@ -52,7 +52,7 @@ function createGeminiDecisionProvider({
     responseJsonSchema = AGENT_DECISION_SCHEMA, tools = true, usageMedia,
   }) {
     if (!ai) throw Object.assign(new Error('GEMINI_API_KEY is not configured'), { status: 503, code: 'gemini_unconfigured' });
-    const response = await ai.models.generateContent({
+    const requestPayload = {
       model,
       contents,
       config: {
@@ -63,7 +63,28 @@ function createGeminiDecisionProvider({
         temperature,
         maxOutputTokens: 4096,
       },
-    });
+    };
+
+    const logPayload = JSON.parse(JSON.stringify(requestPayload));
+    if (Array.isArray(logPayload.contents)) {
+      logPayload.contents.forEach(c => {
+        if (Array.isArray(c.parts)) {
+          c.parts.forEach(p => {
+            if (p.inlineData && p.inlineData.data) p.inlineData.data = '[REDACTED_BASE64]';
+          });
+        }
+      });
+    }
+    console.log('[DEBUG] Gemini Request:', JSON.stringify(logPayload, null, 2));
+
+    let response;
+    try {
+      response = await ai.models.generateContent(requestPayload);
+      console.log('[DEBUG] Gemini Response:', JSON.stringify(response, null, 2));
+    } catch (err) {
+      console.error('[DEBUG] Gemini API Error:', err, JSON.stringify(err.details || err));
+      throw err;
+    }
     const functionCall = response.functionCalls?.[0];
     if (!response.text && !functionCall) throw Object.assign(new Error('Gemini returned no decision.'), { status: 502, code: 'empty_gemini_response' });
     return {
