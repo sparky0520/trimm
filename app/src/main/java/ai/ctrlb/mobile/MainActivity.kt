@@ -465,7 +465,7 @@ private sealed interface ChatElement {
             project.analysis.agentRun?.let { run ->
                 AgentDecisionMapper.clarification(run).takeIf { it.isNotEmpty() }?.let { questions ->
                     item(key = "clarification-${run.runId}-${run.events.size}") {
-                        AgentClarificationCard(questions, reviseStory)
+                        AgentClarificationCard(questions, state.isProcessing, reviseStory)
                     }
                 }
                 run.recovery?.let { recovery ->
@@ -567,7 +567,7 @@ private sealed interface ChatElement {
                             request = ""
                             reviseStory(promptToSend)
                         },
-                        enabled = request.isNotBlank(),
+                        enabled = request.isNotBlank() && !state.isProcessing,
                         modifier = Modifier.height(56.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText)
@@ -957,6 +957,7 @@ private fun reviewPercent(value: Float) = "${(value * 100).toInt()}%"
 
 @Composable private fun AgentClarificationCard(
     questions: List<ClarificationQuestion>,
+    isProcessing: Boolean,
     submit: (String) -> Unit
 ) {
     var selected by rememberSaveable(questions) { mutableStateOf<Map<String, String>>(emptyMap()) }
@@ -1006,7 +1007,7 @@ private fun reviewPercent(value: Float) = "${(value * 100).toInt()}%"
                 }
                 submit(answer)
             },
-            enabled = complete,
+            enabled = complete && !isProcessing,
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
         ) { Text("Send answers") }
     }

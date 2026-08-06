@@ -245,7 +245,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun reviseStory(request: String) {
         val text = request.trim()
-        if (text.isBlank()) return
+        if (text.isBlank() || mutable.value.isProcessing) return
         val currentProject = mutable.value.project ?: return
         val turnId = java.util.UUID.randomUUID().toString()
         val pendingTurn = EditorialConversationTurn(
