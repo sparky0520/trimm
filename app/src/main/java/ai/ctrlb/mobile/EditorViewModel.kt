@@ -352,9 +352,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 projectRevision = previous.projectRevision,
                 intent = project.analysis.revisionConversation.firstOrNull()?.request
                     ?: "Make this video publishable",
-                sources = project.orderedSources.map { source ->
+                sources = project.orderedSources.mapIndexed { index, source ->
                     Layer2SourceInventory(
-                        source.fingerprint, source.fingerprint, source.durationMs,
+                        "${source.fingerprint}-$index", source.fingerprint, source.durationMs,
                         source.width, source.height, source.hasAudio
                     )
                 },
@@ -408,8 +408,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             val request = AgentRunRequest(
                 projectId = project.id, deviceSessionId = deviceSessionId, projectRevision = project.revision,
                 intent = message,
-                sources = project.orderedSources.map { source -> Layer2SourceInventory(
-                    source.fingerprint, source.fingerprint, source.durationMs, source.width, source.height, source.hasAudio
+                sources = project.orderedSources.mapIndexed { index, source -> Layer2SourceInventory(
+                    "${source.fingerprint}-$index", source.fingerprint, source.durationMs, source.width, source.height, source.hasAudio
                 ) },
                 transcript = sourceTranscript(project.analysis.words, project.orderedSources)
             )
