@@ -36,56 +36,67 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
             ?: "Create a polished, conservative first cut using the supplied evidence and preferences."
         val store = ProjectStore(applicationContext)
         val project = store.load(projectId)
+        
         val words = mutableListOf<TranscriptWord>()
-        val evidenceGraphs = mutableListOf<EvidenceGraph>()
-        val evidenceReferences = mutableListOf<EvidenceGraphReference>()
         val analysisWarnings = mutableListOf<String>()
-        val cloudConversationEnabled = BuildConfig.AGENT_RUNS_URL.isNotBlank()
         var transcriptionFailed = false
-        val evidenceCache = EvidenceCache(java.io.File(applicationContext.filesDir, "evidence"))
+        val cloudConversationEnabled = BuildConfig.AGENT_RUNS_URL.isNotBlank()
+        
+        if (!cloudConversationEnabled) {
+            return Result.failure(Data.Builder().putString("error", "Local analysis is no longer supported.").build())
+        }
+
+        val client = TranscriptionClient(BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken)
         var offset = 0L
+
         project.orderedSources.forEachIndexed { index, source ->
             if (isStopped) return Result.failure()
             progress("transcript-${index + 1}-of-${project.orderedSources.size}", 10 + index * 45 / project.orderedSources.size)
-            if (!cloudConversationEnabled) {
-                val graph = EvidencePipeline(evidenceCache, listOf(
-                    LocalVisualAnalyzer(applicationContext)
-                ) + unsupportedAnalyzers()).analyze(source)
-                evidenceGraphs += graph
-                evidenceReferences += graph.reference()
+            
+            val transcription = runCatching {
+                val transcriptionRoot = java.io.File(applicationContext.cacheDir, "transcription").apply { mkdirs() }
+                val audio = java.io.File(transcriptionRoot, "${source.fingerprint}.mp4")
+                audio.delete()
+                try {
+                    AndroidDerivativeWriter(applicationContext).write(
+                        SelectiveDerivativeType.AUDIO,
+                        source,
+                        TimeRange(0, source.durationMs),
+                        null,
+                        "audio/mp4",
+                        audio
+                    )
+                    client.transcribe(audio) { uploaded, total ->
+                        val sourceShare = ((uploaded * 45L / total) / project.orderedSources.size).toInt()
+                        progress("upload-${index + 1}-of-${project.orderedSources.size}", 10 + index * 45 / project.orderedSources.size + sourceShare)
+                    }
+                } finally {
+                    audio.delete()
+                    transcriptionRoot.takeIf { it.listFiles().isNullOrEmpty() }?.delete()
+                }
+            }
+
+            val localWords = transcription.getOrElse { error ->
+                transcriptionFailed = true
+                analysisWarnings += "Speech analyzer (${source.fingerprint.take(8)}): ${error.message ?: "failed"}"
+                emptyList()
+            }
+            words += localWords.map { word ->
+                word.copy(range = TimeRange(word.range.startMs + offset, word.range.endMs + offset))
             }
             offset += source.durationMs
         }
-        val editorialProfile = if (cloudConversationEnabled) null else EditorialProfileDeriver.derive(evidenceGraphs, project.preferences)
-        progress("speech-hints", 65)
-        val candidates = if (cloudConversationEnabled) emptyList() else FumbleDetector.detect(words, project.durationMs, project.preferences.pace, editorialProfile!!)
-        val retained = if (cloudConversationEnabled) project.operations.filter(OperationValidator::isRendered).toMutableList() else project.operations.filter {
-            it !is RemoveFumbles && it !is AddCaptions && OperationValidator.isPlannerAvailable(it)
-        }.toMutableList()
-        val captions = CaptionSegmenter.segment(words)
-        val takeGroups = if (cloudConversationEnabled) emptyList() else TakeRanker(profile = editorialProfile!!).detectAndRank(
-            TakeCandidateGenerator.fromEvidence(evidenceGraphs),
-            TakeConstraints(mustKeepWording = listOf(project.preferences.mustKeep).filter(String::isNotBlank))
-        )
-        val storyGraph = if (cloudConversationEnabled) null else StoryGraphDeriver.derive(evidenceGraphs, takeGroups, project.preferences.mustKeep)
-        val mediaIndex = if (cloudConversationEnabled) null else RequestShapedMediaIndexBuilder.build(
-            evidenceGraphs,
-            MediaIndexRequestPlanner.plan(
-                initialPrompt,
-                evidenceGraphs.map { it.sourceFingerprint to it.sourceDurationMs }
-            )
-        )
-        if (!cloudConversationEnabled && project.preferences.captions && captions.isNotEmpty()) retained += AddCaptions(cues = captions)
+
         progress("persist", 90)
         var analyzed = project.copy(
             analysis = Analysis(
                 words = words,
-                captions = captions,
-                speechHints = candidates,
-                takeGroups = takeGroups,
-                editorialProfile = editorialProfile,
-                storyGraph = storyGraph,
-                mediaIndex = mediaIndex,
+                captions = emptyList(),
+                speechHints = emptyList(),
+                takeGroups = emptyList(),
+                editorialProfile = null,
+                storyGraph = null,
+                mediaIndex = null,
                 revisionConversation = listOf(EditorialConversationTurn(
                     request = initialPrompt,
                     response = "I analyzed the clips and prepared an evidence-backed first cut."
@@ -93,12 +104,12 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                 warnings = analysisWarnings,
                 completedAtEpochMs = System.currentTimeMillis()
             ),
-            evidenceGraphs = evidenceReferences,
-            operations = retained,
+            operations = project.operations.filter(OperationValidator::isRendered).toMutableList(),
             revision = project.revision + 1
         )
         store.save(analyzed)
-        if (BuildConfig.AGENT_RUNS_URL.isNotBlank() && !transcriptionFailed) {
+        
+        if (!transcriptionFailed) {
             progress("agent-run", 94)
             val deviceSessionId = "android-${project.id}"
             val uploadClient = DerivativeUploadClient(
@@ -122,9 +133,9 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                         deviceSessionId = deviceSessionId,
                         projectRevision = analyzed.revision,
                         intent = initialPrompt,
-                        sources = project.orderedSources.mapIndexed { index, source ->
+                        sources = project.orderedSources.map { source ->
                             Layer2SourceInventory(
-                                "${source.fingerprint}-$index", source.fingerprint, source.durationMs,
+                                source.fingerprint, source.fingerprint, source.durationMs,
                                 source.width, source.height, source.hasAudio
                             )
                         },
@@ -163,20 +174,6 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
         Result.failure(Data.Builder().putString("error", error.message).build())
     }
 }
-
-private fun EvidenceGraph.reference() = EvidenceGraphReference(
-    sourceFingerprint = sourceFingerprint,
-    schemaVersion = schemaVersion,
-    relativeCachePath = "$sourceFingerprint/graph-v$schemaVersion.json",
-    analyzerVersions = analyzerRuns.associate { it.analyzer.name to it.analyzer.version },
-    partial = analyzerRuns.any { it.status == AnalyzerStatus.FAILED || it.status == AnalyzerStatus.UNSUPPORTED }
-)
-
-private fun unsupportedAnalyzers(): List<EvidenceAnalyzer> = listOf(
-    UnsupportedEvidenceAnalyzer(AnalyzerIdentity("on-device face detector", "not-installed", ExecutionLocation.LOCAL_DEVICE), "Face detector is not bundled in this build."),
-    UnsupportedEvidenceAnalyzer(AnalyzerIdentity("on-device OCR and screen detector", "not-installed", ExecutionLocation.LOCAL_DEVICE), "OCR and screen/UI detector is not bundled in this build."),
-    UnsupportedEvidenceAnalyzer(AnalyzerIdentity("on-device music classifier", "not-installed", ExecutionLocation.LOCAL_DEVICE), "A truthful music classifier is not bundled in this build.")
-)
 
 class ExportWorker(context: Context, params: WorkerParameters) : ProgressWorker(context, params) {
     override suspend fun doWork(): Result = runCatching {

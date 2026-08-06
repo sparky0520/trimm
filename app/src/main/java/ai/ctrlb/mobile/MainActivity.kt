@@ -323,6 +323,7 @@ class MainActivity : ComponentActivity() {
 private sealed interface ChatElement {
     val timestamp: Long
     data class InitialRequest(override val timestamp: Long, val request: String) : ChatElement
+    data class Findings(override val timestamp: Long, val read: ai.ctrlb.mobile.domain.EditorialRead) : ChatElement
     data class Turn(override val timestamp: Long, val turn: ai.ctrlb.mobile.domain.EditorialConversationTurn) : ChatElement
     data class Checkpoint(override val timestamp: Long, val checkpoint: ai.ctrlb.mobile.domain.AppliedEditCheckpoint) : ChatElement
 }
@@ -388,6 +389,12 @@ private sealed interface ChatElement {
                     ?.takeIf { initial -> project.analysis.revisionConversation.none { it.request == initial } }
                     ?.let { initial -> add(ChatElement.InitialRequest(0L, initial)) }
 
+                project.analysis.completedAtEpochMs?.let { time ->
+                    if (read.technicalProblems.isNotEmpty()) {
+                        add(ChatElement.Findings(time, read))
+                    }
+                }
+
                 project.analysis.revisionConversation.forEach { turn ->
                     add(ChatElement.Turn(turn.createdAtEpochMs, turn))
                 }
@@ -401,6 +408,9 @@ private sealed interface ChatElement {
                 when (element) {
                     is ChatElement.InitialRequest -> {
                         UserChatBubble(element.request)
+                    }
+                    is ChatElement.Findings -> {
+                        FindingsChatBubble(element.read)
                     }
                     is ChatElement.Turn -> {
                         val turn = element.turn
@@ -656,7 +666,16 @@ private fun formatUserFacingError(raw: String): String {
     }
 }
 
+@Composable private fun FindingsChatBubble(read: ai.ctrlb.mobile.domain.EditorialRead) {
+    AssistantChatBubble {
+        ChatFinding("Things to fix", read.technicalProblems)
+    }
+}
 
+@Composable private fun ChatFinding(label: String, lines: List<String>) {
+    Text(label, color = Green, fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
+    lines.forEach { Text("• $it", color = Muted, fontSize = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 3.dp)) }
+}
 
 @Composable private fun ProposalChatBubble(review: ProposalReview, apply: () -> Unit, reject: () -> Unit) {
     AssistantChatBubble(accent = Coral) {
