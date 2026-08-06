@@ -4,12 +4,12 @@ const observationSchema = {
   type: 'object', additionalProperties: false,
   required: ['id', 'sourceId', 'startMs', 'endMs', 'description', 'confidence', 'resolution'],
   properties: {
-    id: { type: 'string', pattern: '^[A-Za-z0-9._:-]{1,200}$' },
+    id: { type: 'string' },
     sourceId: { type: 'string' },
-    startMs: { type: 'integer', minimum: 0 },
-    endMs: { type: 'integer', minimum: 1 },
-    description: { type: 'string', maxLength: 500 },
-    confidence: { type: 'number', minimum: 0, maximum: 1 },
+    startMs: { type: 'integer' },
+    endMs: { type: 'integer' },
+    description: { type: 'string' },
+    confidence: { type: 'number' },
     resolution: { type: 'string', enum: ['LOW', 'HIGH'] },
   },
 };
@@ -26,13 +26,11 @@ const operationSchema = {
       ]
     },
     enabled: { type: 'boolean' },
-    confidence: { type: 'number', minimum: 0, maximum: 1 },
-    evidenceIds: { type: 'array', minItems: 1, items: { type: 'string' } },
-  },
-  additionalProperties: true,
-};
+    confidence: { type: 'number' },
+    evidenceIds: { type: 'array', items: { type: 'string' } },
+  },};
 
-const observations = { type: 'array', maxItems: 100, items: observationSchema };
+const observations = { type: 'array', items: observationSchema };
 
 const AGENT_DECISION_SCHEMA = Object.freeze({
   type: 'object',
@@ -43,18 +41,18 @@ const AGENT_DECISION_SCHEMA = Object.freeze({
     observations,
     
     // edit_program fields
-    expectedRevision: { type: 'integer', minimum: 0 },
+    expectedRevision: { type: 'integer' },
     summary: { type: 'string' },
     operations: { type: 'array', items: operationSchema },
     
     // clarification fields
     questions: {
-      type: 'array', minItems: 1, maxItems: 3, items: {
+      type: 'array', items: {
         type: 'object', additionalProperties: false, required: ['id', 'prompt', 'options', 'recommendedOptionId'],
         properties: {
           id: { type: 'string' }, prompt: { type: 'string' }, recommendedOptionId: { type: 'string' },
           options: {
-            type: 'array', minItems: 2, maxItems: 4, items: {
+            type: 'array', items: {
               type: 'object', additionalProperties: false, required: ['id', 'label', 'description'],
               properties: { id: { type: 'string' }, label: { type: 'string' }, description: { type: 'string' } },
             }
@@ -75,9 +73,9 @@ const INSPECT_VIDEO_RANGE_TOOL = Object.freeze({
     type: 'object', additionalProperties: false,
     required: ['sourceId', 'startMs', 'endMs', 'resolution', 'uncertainty'],
     properties: {
-      sourceId: { type: 'string' }, startMs: { type: 'integer', minimum: 0 },
-      endMs: { type: 'integer', minimum: 1 }, resolution: { type: 'string', enum: ['LOW', 'HIGH'] },
-      uncertainty: { type: 'string', maxLength: 500 },
+      sourceId: { type: 'string' }, startMs: { type: 'integer' },
+      endMs: { type: 'integer' }, resolution: { type: 'string', enum: ['LOW', 'HIGH'] },
+      uncertainty: { type: 'string' },
     },
   },
 });
@@ -92,10 +90,10 @@ const proposalEnvelope = (operation) => ({
   type: 'object', additionalProperties: false,
   required: ['expectedRevision', 'summary', 'operation', 'observations'],
   properties: {
-    expectedRevision: { type: 'integer', minimum: 0 },
-    summary: { type: 'string', maxLength: 2000 },
+    expectedRevision: { type: 'integer' },
+    summary: { type: 'string' },
     operation,
-    observations: { type: 'array', maxItems: 100, items: proposedObservation },
+    observations: { type: 'array', items: proposedObservation },
   },
 });
 
@@ -104,17 +102,17 @@ const range = {
   required: ['sourceId', 'startMs', 'endMs', 'evidenceIds'],
   properties: {
     sourceId: { type: 'string' },
-    startMs: { type: 'integer', minimum: 0 },
-    endMs: { type: 'integer', minimum: 1 },
-    evidenceIds: { type: 'array', minItems: 1, items: { type: 'string' } },
+    startMs: { type: 'integer' },
+    endMs: { type: 'integer' },
+    evidenceIds: { type: 'array', items: { type: 'string' } },
   },
 };
 
 const targetRangeProperties = {
   sourceId: { type: 'string' },
-  startMs: { type: 'integer', minimum: 0 },
-  endMs: { type: 'integer', minimum: 1 },
-  reason: { type: 'string', minLength: 1, maxLength: 500 },
+  startMs: { type: 'integer' },
+  endMs: { type: 'integer' },
+  reason: { type: 'string' },
 };
 
 const PROPOSE_REMOVE_RANGES_TOOL = Object.freeze({
@@ -125,10 +123,10 @@ const PROPOSE_REMOVE_RANGES_TOOL = Object.freeze({
     required: ['id', 'enabled', 'confidence', 'evidenceIds', 'ranges', 'reason'],
     properties: {
       id: { type: 'string' }, enabled: { type: 'boolean' },
-      confidence: { type: 'number', minimum: 0, maximum: 1 },
-      evidenceIds: { type: 'array', minItems: 1, items: { type: 'string' } },
-      ranges: { type: 'array', minItems: 1, items: range },
-      reason: { type: 'string', minLength: 1, maxLength: 1000 },
+      confidence: { type: 'number' },
+      evidenceIds: { type: 'array', items: { type: 'string' } },
+      ranges: { type: 'array', items: range },
+      reason: { type: 'string' },
       pacing: { type: 'string' },
     },
   }),
@@ -146,8 +144,8 @@ const operationTool = (name, description, required, properties) => Object.freeze
     required: ['id', 'enabled', 'confidence', 'evidenceIds', ...required],
     properties: {
       id: { type: 'string' }, enabled: { type: 'boolean' },
-      confidence: { type: 'number', minimum: 0, maximum: 1 },
-      evidenceIds: { type: 'array', minItems: 1, items: { type: 'string' } },
+      confidence: { type: 'number' },
+      evidenceIds: { type: 'array', items: { type: 'string' } },
       ...properties,
     },
   }),
@@ -157,14 +155,14 @@ const PROPOSE_AUDIO_CLEANUP_TOOL = operationTool(
   'propose_reduce_background_noise',
   'Reduce audible background noise in one exact source interval. Do not choose the interval or strength automatically.',
   ['sourceId', 'startMs', 'endMs', 'strength', 'reason'], {
-  ...targetRangeProperties, strength: { type: 'number', minimum: 0, maximum: 1 },
+  ...targetRangeProperties, strength: { type: 'number' },
 },
 );
 const PROPOSE_DIALOGUE_LOUDNESS_TOOL = operationTool(
   'propose_set_dialogue_loudness',
   'Set the dialogue loudness target for one exact source interval.',
   ['sourceId', 'startMs', 'endMs', 'targetLufs', 'reason'], {
-  ...targetRangeProperties, targetLufs: { type: 'number', minimum: -24, maximum: -12 },
+  ...targetRangeProperties, targetLufs: { type: 'number' },
 },
 );
 const PROPOSE_MUSIC_DUCKING_TOOL = operationTool(
@@ -172,9 +170,9 @@ const PROPOSE_MUSIC_DUCKING_TOOL = operationTool(
   'Duck background music by an exact amount during one exact project interval.',
   ['sourceId', 'startMs', 'endMs', 'duckDb', 'attackMs', 'releaseMs', 'reason'], {
   ...targetRangeProperties,
-  duckDb: { type: 'number', minimum: -18, maximum: -3 },
-  attackMs: { type: 'integer', minimum: 0, maximum: 2000 },
-  releaseMs: { type: 'integer', minimum: 0, maximum: 5000 },
+  duckDb: { type: 'number' },
+  attackMs: { type: 'integer' },
+  releaseMs: { type: 'integer' },
 },
 );
 
@@ -182,7 +180,7 @@ const PROPOSE_CAPTIONS_TOOL = operationTool(
   'propose_add_caption_cue',
   'Add one caption cue whose text is verbatim from the supplied timestamped transcript.',
   ['sourceId', 'startMs', 'endMs', 'text', 'style', 'reason'], {
-  ...targetRangeProperties, text: { type: 'string', minLength: 1, maxLength: 120 },
+  ...targetRangeProperties, text: { type: 'string' },
   style: { type: 'string', enum: ['bold-bottom'] },
 },
 );
@@ -205,11 +203,11 @@ const semanticVisualTool = (name, description) => operationTool(
   intent: { type: 'string', enum: ['INTRODUCE', 'POINT_OUT', 'TRANSITION', 'REVEAL', 'EMPHASIZE', 'RECAP'] },
   range: {
     type: 'object', additionalProperties: false, required: ['sourceId', 'startMs', 'endMs'], properties: {
-      sourceId: { type: 'string' }, startMs: { type: 'integer', minimum: 0 }, endMs: { type: 'integer', minimum: 1 },
+      sourceId: { type: 'string' }, startMs: { type: 'integer' }, endMs: { type: 'integer' },
     }
   },
   subject: { type: 'object' }, framing: { type: 'object' }, motion: { type: 'object' },
-  reason: { type: 'string', minLength: 1, maxLength: 500 },
+  reason: { type: 'string' },
 },
 );
 const PROPOSE_SEMANTIC_VISUAL_TOOLS = [
@@ -224,12 +222,12 @@ const ASK_CLARIFICATION_TOOL = Object.freeze({
   parameters: {
     type: 'object', additionalProperties: false, required: ['questions'], properties: {
       questions: {
-        type: 'array', minItems: 1, maxItems: 3, items: {
+        type: 'array', items: {
           type: 'object', additionalProperties: false, required: ['id', 'prompt', 'options', 'recommendedOptionId'],
           properties: {
-            id: { type: 'string' }, prompt: { type: 'string', maxLength: 500 },
+            id: { type: 'string' }, prompt: { type: 'string' },
             options: {
-              type: 'array', minItems: 2, maxItems: 4, items: {
+              type: 'array', items: {
                 type: 'object', additionalProperties: false, required: ['id', 'label', 'description'],
                 properties: { id: { type: 'string' }, label: { type: 'string' }, description: { type: 'string' } },
               }
@@ -245,7 +243,7 @@ const FINALIZE_EDIT_PROGRAM_TOOL = Object.freeze({
   description: 'Finish with the complete set of already validated draft operation IDs. The backend constructs and validates the atomic proposal.',
   parameters: {
     type: 'object', additionalProperties: false, required: ['expectedRevision', 'summary', 'operationIds'], properties: {
-      expectedRevision: { type: 'integer', minimum: 0 }, summary: { type: 'string', maxLength: 2000 },
+      expectedRevision: { type: 'integer' }, summary: { type: 'string' },
       operationIds: { type: 'array', items: { type: 'string' } },
     }
   },
@@ -261,7 +259,7 @@ const REMOVE_DRAFT_OPERATION_TOOL = Object.freeze({
 });
 const FINISH_WITHOUT_PROPOSAL_TOOL = Object.freeze({
   name: 'finish_without_proposal', description: 'Finish safely when the request is unsupported or cannot be grounded.',
-  parameters: { type: 'object', additionalProperties: false, required: ['reason'], properties: { reason: { type: 'string', maxLength: 1000 } } },
+  parameters: { type: 'object', additionalProperties: false, required: ['reason'], properties: { reason: { type: 'string' } } },
 });
 
 const AGENT_TOOLS = Object.freeze([
