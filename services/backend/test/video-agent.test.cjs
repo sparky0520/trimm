@@ -23,6 +23,7 @@ test('Gemini receives video directly and exposes evidence and focused proposal t
   }] });
   assert.equal(result.toolCall.name, 'inspect_video_range');
   assert.equal(request.contents[0].parts[0].inlineData.mimeType, 'video/mp4');
+  assert.deepEqual(request.config.tools[0].functionDeclarations.map((item) => item.name), [
     'inspect_video_range', 'propose_remove_ranges',
     'propose_set_dialogue_loudness', 'propose_set_music_ducking',
     'propose_add_captions', 'propose_adjust_exposure', 'propose_adjust_temperature', 'propose_adjust_contrast', 'propose_adjust_saturation',
