@@ -44,21 +44,7 @@ object ConversationalRevisionEngine {
                 answerWhy(project, text)
             "other take" in normalized ->
                 useOtherTake(project, text)
-            "open faster" in normalized || "faster opening" in normalized ->
-                scopedRevision(project, text, EditorialConstraintKind.OPENING_PACE, "faster") { operations ->
-                    operations.filterNot { it is ApplySemanticVisual && it.range.startMs < 5_000 }
-                }
-            "keep privacy" in normalized || "preserve privacy" in normalized ->
-                scopedRevision(project, text, EditorialConstraintKind.PRIVACY, "preserve") { operations ->
-                    operations.filterNot { it is ApplySemanticVisual && it.subject.kind.name == "FACE" }
-                }
-            "fewer effects" in normalized || "less effects" in normalized ->
-                scopedRevision(project, text, EditorialConstraintKind.EFFECT_DENSITY, "fewer") { operations ->
-                    val effects = operations.filterIsInstance<ApplySemanticVisual>()
-                    val keepIds = effects.sortedWith(compareByDescending<ApplySemanticVisual> { it.subject.confidence }
-                        .thenBy { it.range.startMs }).take((effects.size + 1) / 2).map { it.id }.toSet()
-                    operations.filterNot { it is ApplySemanticVisual && it.id !in keepIds }
-                }
+
             else -> clarification(project, text, "What part of the current story should I revise?")
         }
     }
@@ -108,9 +94,9 @@ object ConversationalRevisionEngine {
             group.candidates.filter { it.id !in selected }.map { it.range }
         }
         val operations = current.operations.map { operation ->
-            if (operation is RemoveFumbles) operation.copy(
+            if (operation is RemoveRanges) operation.copy(
                 ranges = (operation.ranges + alternateRanges).distinct().sortedBy { it.startMs },
-                reasons = List((operation.ranges + alternateRanges).distinct().size) { "Superseded alternate take" }
+                reason = "Superseded alternate take"
             ) else operation
         }
         val constraint = SettledEditorialConstraint(

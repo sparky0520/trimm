@@ -92,10 +92,6 @@ object CreatorPreferenceLearner {
         proposal.operations.filterIsInstance<AddCaptions>().forEach {
             learned = learned.record(CreatorPreferenceKind.CAPTION_RULE, it.style, it.id)
         }
-        proposal.operations.filterIsInstance<ApplySemanticVisual>().takeIf { it.isNotEmpty() }?.let { effects ->
-            val value = if (effects.all { it.motion.reducedMotion || it.motion.intensity <= .25f }) "restrained" else "standard"
-            learned = learned.record(CreatorPreferenceKind.MOTION_TOLERANCE, value, effects.joinToString("+") { it.id })
-        }
         return learned
     }
 }

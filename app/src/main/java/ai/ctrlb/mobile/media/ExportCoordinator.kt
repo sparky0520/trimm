@@ -36,9 +36,7 @@ import kotlin.math.pow
 object ExportCoordinator {
     fun composition(context: Context, project: MobileProject): Composition {
         val cuts = (
-            project.operations.filterIsInstance<RemoveRanges>().filter { it.enabled }.flatMap { it.ranges } +
-                project.operations.filterIsInstance<RemoveFumbles>().filter { it.enabled }.flatMap { it.ranges } +
-                project.operations.filterIsInstance<RemoveAwkwardSilences>().filter { it.enabled }.flatMap { it.ranges }
+            project.operations.filterIsInstance<RemoveRanges>().filter { it.enabled }.flatMap { it.ranges }
             ).distinct().sortedBy { it.startMs }
         val sourceOffsets = buildMap {
             var offset = 0L
@@ -50,7 +48,6 @@ object ExportCoordinator {
         }
         val fineTargets = project.operations.mapNotNull { operation ->
             val target = when (operation) {
-                is SetAudioCleanup -> operation.target
                 is SetAudioLevels -> operation.target
                 is SetColorGrade -> operation.target
                 else -> null
@@ -79,13 +76,10 @@ object ExportCoordinator {
                         MediaItem.ClippingConfiguration.Builder().setStartPositionMs(localStart).setEndPositionMs(localEnd).build()
                     ).build()
                     val globalRange = TimeRange(start, end)
-                    val cleanup = project.operations.filterIsInstance<SetAudioCleanup>().lastOrNull {
-                        it.enabled && targets(it.target, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd)
-                    }?.strength ?: 0f
                     val target = project.operations.filterIsInstance<SetAudioLevels>().lastOrNull {
                         it.enabled && it.parameter != "music_ducking" && targets(it.target, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd)
                     }?.dialogueLufs ?: -20f
-                    val audioEffects = if (cleanup > 0f || target != -20f) listOf(DialogueAudioProcessor(cleanup, target)) else emptyList()
+                    val audioEffects = if (target != -20f) listOf(DialogueAudioProcessor(0f, target)) else emptyList()
                     val itemVideoEffects = mutableListOf<Effect>()
                     val colorOperations = project.operations.filterIsInstance<SetColorGrade>().filter {
                         it.enabled && targets(it.target, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd)
@@ -99,14 +93,6 @@ object ExportCoordinator {
         val sequence = if (project.orderedSources.all { it.hasAudio }) EditedMediaItemSequence.withAudioAndVideoFrom(clips) else EditedMediaItemSequence.withVideoFrom(clips)
         val videoEffects = mutableListOf<Effect>(
         )
-        val semanticOperations = project.operations.filterIsInstance<ApplySemanticVisual>().filter { it.enabled }.mapNotNull { operation ->
-            val start = timelineMapper.sourceToOutput(operation.range.startMs)
-            val end = timelineMapper.sourceToOutput(operation.range.endMs)
-            if (end > start) operation.copy(range = TimeRange(start, end)) else null
-        }
-        if (semanticOperations.any { it.treatment == SemanticTreatment.REFRAME }) {
-            videoEffects += SemanticReframeTransformation(semanticOperations)
-        }
         videoEffects += Presentation.createForWidthAndHeight(
                 project.export.width,
                 project.export.height,
@@ -131,8 +117,6 @@ object ExportCoordinator {
                 videoEffects += OverlayEffect(listOf(CaptionOverlay(mapped, project.export.height > project.export.width)))
             }
         }
-        val overlays = semanticOperations.filter { it.treatment != SemanticTreatment.REFRAME }
-        if (overlays.isNotEmpty()) videoEffects += OverlayEffect(listOf(SemanticVisualOverlay(overlays)))
         val sequences = mutableListOf(sequence)
 
         return Composition.Builder(sequences).setEffects(Effects(emptyList(), videoEffects)).build()

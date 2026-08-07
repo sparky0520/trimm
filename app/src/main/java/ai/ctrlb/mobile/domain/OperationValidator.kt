@@ -15,28 +15,20 @@ object OperationValidator {
         operations.filter { it.enabled && isRendered(it) }.map { operation ->
             when (operation) {
                 is RemoveRanges -> "timeline-range:${operation.ranges}"
-                is RemoveFumbles -> "timeline:${operation.ranges}"
-                is RemoveAwkwardSilences -> "timeline-silence:${operation.ranges}:${operation.pacing}"
                 is SetColorGrade -> "video-color:${operation.grade}:${operation.target}:${operation.parameter}:${operation.value}"
-                is SetAudioCleanup -> "dialogue-cleanup:${operation.strength}:${operation.target}"
                 is SetAudioLevels -> "dialogue-levels:${operation.dialogueLufs}:${operation.musicDuckDb}"
 
                 is AddCaptions -> "video-captions:${operation.cues}:${operation.style}"
-                is ApplySemanticVisual -> "semantic-visual:${operation.intent}:${operation.treatment}:${operation.range}:${operation.subject}:${operation.motion}:${operation.framing}"
                 is AddTransition, is AddMotionPreset -> error("Unrendered operation reached render contract")
             }
         }
 
     fun basis(operation: EditOperation): String = when (operation) {
         is RemoveRanges -> "Transcript evidence • ${operation.reason.ifBlank { "Range removal" }}"
-        is RemoveFumbles -> "Transcript evidence • ${operation.reasons.joinToString()}"
-        is RemoveAwkwardSilences -> "Audiovisual pause evidence • ${operation.pacing} pacing"
         is SetColorGrade -> "Frame evidence"
-        is SetAudioCleanup -> "Default • speech-safe local processing"
         is SetAudioLevels -> "Default • ${operation.dialogueLufs.toInt()} LUFS dialogue target"
 
         is AddCaptions -> "Transcript evidence • ${operation.cues.size} timed cues"
-        is ApplySemanticVisual -> "Visual evidence • ${operation.subject.kind.name.lowercase()} ${operation.subject.evidenceId}"
         is AddTransition, is AddMotionPreset -> "Unavailable • not rendered"
     }
 
@@ -68,13 +60,10 @@ object OperationValidator {
         }
         resolved.forEach { op -> when (op) {
             is RemoveRanges -> { require(op.confidence in 0f..1f); require(op.ranges.isNotEmpty()); op.ranges.forEach { require(it.endMs <= project.durationMs) } }
-            is RemoveFumbles -> { require(op.confidence in 0f..1f); require(op.ranges.isNotEmpty()); op.ranges.forEach { require(it.endMs <= project.durationMs) } }
-            is RemoveAwkwardSilences -> { require(op.confidence in 0f..1f); require(op.pacing in setOf("natural", "tight")); require(op.ranges.isNotEmpty()); op.ranges.forEach { require(it.endMs <= project.durationMs) } }
             is SetColorGrade -> {
                 require(op.grade != null || (op.parameter in setOf("exposure", "temperature", "contrast", "saturation", "highlights", "shadows", "skinProtection") && op.value != null))
                 validateTarget(project, op.target)
             }
-            is SetAudioCleanup -> { require(op.strength in 0f..1f); validateTarget(project, op.target) }
             is SetAudioLevels -> {
                 if (op.parameter == "dialogue_loudness") require(op.dialogueLufs in -24f..-12f)
                 else if (op.parameter == "music_ducking") require(op.musicDuckDb in -18f..-3f)
@@ -85,9 +74,7 @@ object OperationValidator {
             is AddMotionPreset -> { require(op.range.endMs <= project.durationMs); require(op.intensity in 0f..1f) }
 
             is AddCaptions -> { require(op.cues.isNotEmpty()); op.cues.forEach { require(it.range.endMs <= project.durationMs); require(it.text.isNotBlank() && it.text.length <= 120) } }
-            is ApplySemanticVisual -> SemanticVisualPolicy.validate(op, project.durationMs)
         } }
-        SemanticVisualPolicy.validateDensity(resolved.filterIsInstance<ApplySemanticVisual>().filter { it.enabled })
         return resolved
     }
 

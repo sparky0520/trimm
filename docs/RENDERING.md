@@ -18,7 +18,7 @@ It does not contain rendered video.
 
 `ExportCoordinator` converts the project into one canonical Media3 `Composition`:
 
-1. `RemoveFumbles` becomes retained source ranges.
+1. `RemoveRanges` becomes retained source ranges.
 2. Each retained range becomes a clipped `MediaItem`.
 3. `EditedMediaItemSequence` joins clips in story order.
 4. Audio processors apply cleanup, leveling, music, ducking, and sound effects.

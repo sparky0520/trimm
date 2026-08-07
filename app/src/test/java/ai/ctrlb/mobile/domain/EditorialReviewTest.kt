@@ -16,7 +16,7 @@ class EditorialReviewTest {
             operationPlans = emptyList()
         )
         val proposal = PendingEditorialProposal(0, "Tight opening", plan,
-            listOf(RemoveFumbles(ranges = listOf(TimeRange(2_000, 3_000), TimeRange(2_500, 4_000)), confidence = .95f, reasons = listOf("Repeated start"))),
+            listOf(RemoveRanges(ranges = listOf(TimeRange(2_000, 3_000), TimeRange(2_500, 4_000)), confidence = .95f, reason = "Repeated start")),
             listOf("sentence-1", "visual-1"))
         val project = MobileProject(title = "Review", source = source, analysis = Analysis(
             storyGraph = StoryGraph(evidenceFingerprint = "v1", beats = listOf(beat), constraints = emptyList(), missingMaterial = emptyList(), editorialRead = emptyList()),
@@ -35,7 +35,7 @@ class EditorialReviewTest {
 
     @Test fun `rejection can clear review without mutating timeline or revision`() {
         val plan = StagedEditorialPlan(emptyList(), emptyList(), emptyList())
-        val project = MobileProject(title = "Review", source = source, operations = listOf(SetAudioCleanup()),
+        val project = MobileProject(title = "Review", source = source, operations = listOf(SetAudioLevels()),
             analysis = Analysis(pendingProposal = PendingEditorialProposal(0, "Cut", plan, emptyList(), emptyList())))
         val rejected = project.copy(analysis = project.analysis.copy(pendingProposal = null))
         assertEquals(project.operations, rejected.operations)
@@ -43,23 +43,9 @@ class EditorialReviewTest {
         assertEquals(project.undo, rejected.undo)
     }
 
-    @Test fun `awkward silence removals are validated and included in review duration`() {
-        val operation = RemoveAwkwardSilences(
-            id = "silence-1", ranges = listOf(TimeRange(3_000, 4_500)), confidence = .9f, pacing = "natural"
-        )
-        val proposal = PendingEditorialProposal(
-            0, "Natural pacing", StagedEditorialPlan(emptyList(), emptyList(), emptyList()),
-            listOf(operation), listOf("pause-observation")
-        )
-        val project = MobileProject(title = "Review", source = source, analysis = Analysis(pendingProposal = proposal))
-        assertEquals(listOf(operation), OperationValidator.validate(project, listOf(operation), 0))
-        val review = requireNotNull(EditorialReviewBuilder.proposal(project))
-        assertEquals(8_500, review.afterDurationMs)
-        assertTrue(review.removals.single().contains("Awkward pause"))
-    }
 
     @Test fun `atomic apply creates one checkpoint and undo restores exact operations`() {
-        val before = listOf<EditOperation>(SetAudioCleanup(id = "before"))
+        val before = listOf<EditOperation>(SetAudioLevels(id = "before"))
         val after = listOf<EditOperation>(SetAudioLevels(id = "after"))
         val plan = StagedEditorialPlan(emptyList(), emptyList(), emptyList())
         val pending = PendingEditorialProposal(0, "Cut", plan, after, emptyList())

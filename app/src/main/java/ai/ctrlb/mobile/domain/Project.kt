@@ -98,25 +98,13 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     init { require(sourceId.isNotBlank() && startMs >= 0 && endMs > startMs) }
 }
 @Serializable @SerialName("remove_ranges") data class RemoveRanges(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val ranges: List<TimeRange>, val confidence: Float, val reason: String = "", val pacing: String = "natural") : EditOperation
-@Serializable @SerialName("remove_fumbles") data class RemoveFumbles(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val ranges: List<TimeRange>, val confidence: Float, val reasons: List<String> = emptyList()) : EditOperation
-@Serializable @SerialName("remove_awkward_silences") data class RemoveAwkwardSilences(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val ranges: List<TimeRange>, val confidence: Float, val pacing: String = "natural") : EditOperation
 @Serializable @SerialName("set_color_grade") data class SetColorGrade(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val grade: ColorGrade? = null, val target: OperationTarget? = null, val parameter: String? = null, val value: Float? = null) : EditOperation
-@Serializable @SerialName("set_audio_cleanup") data class SetAudioCleanup(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val strength: Float = .55f, val target: OperationTarget? = null) : EditOperation
 @Serializable @SerialName("set_audio_levels") data class SetAudioLevels(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val parameter: String? = null, val dialogueLufs: Float = -16f, val musicDuckDb: Float = -9f, val attackMs: Long = 120, val releaseMs: Long = 450, val target: OperationTarget? = null) : EditOperation
 @Serializable @SerialName("add_transition") data class AddTransition(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val atSourceMs: Long, val preset: String = "dip", val durationMs: Long = 280) : EditOperation
 @Serializable @SerialName("add_motion_preset") data class AddMotionPreset(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val range: TimeRange, val preset: String, val intensity: Float = .5f) : EditOperation
 
 @Serializable @SerialName("add_captions") data class AddCaptions(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val cues: List<CaptionCue> = emptyList(), val target: OperationTarget? = null, val speakerId: String? = null, val style: String = "bold-bottom") : EditOperation
-@Serializable @SerialName("semantic_visual") data class ApplySemanticVisual(
-    override val id: String = UUID.randomUUID().toString(),
-    override val enabled: Boolean = true,
-    val intent: SemanticIntent,
-    val treatment: SemanticTreatment,
-    val range: TimeRange,
-    val subject: GroundedVisualSubject,
-    val motion: SemanticMotion = SemanticMotion(),
-    val framing: SemanticFraming? = null
-) : EditOperation
+
 
 @Serializable data class ColorGrade(val exposure: Float = 0f, val temperature: Float = 0f, val contrast: Float = 1f, val saturation: Float = 1f, val highlights: Float = 0f, val shadows: Float = 0f, val skinProtection: Float = .8f) {
     init { require(exposure in -1f..1f && temperature in -1f..1f && contrast in .75f..1.35f && saturation in .7f..1.3f && highlights in -1f..1f && shadows in -1f..1f && skinProtection in 0f..1f) }

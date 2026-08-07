@@ -1,7 +1,7 @@
 package ai.ctrlb.mobile.layer1
 
 import ai.ctrlb.mobile.domain.MobileProject
-import ai.ctrlb.mobile.domain.RemoveFumbles
+import ai.ctrlb.mobile.domain.RemoveRanges
 import ai.ctrlb.mobile.domain.TimeRange
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -279,11 +279,11 @@ object Layer1ProgramApplier {
         val removals = program.commands.filterIsInstance<RemoveTimelineRanges>()
         if (removals.isEmpty()) return project.markLayer1ProgramApplied(program.programId)
         val operations = project.operations + removals.map { command ->
-            RemoveFumbles(
+            RemoveRanges(
                 id = "layer1:${command.id}",
                 ranges = command.ranges,
                 confidence = 1f,
-                reasons = command.evidenceIds.ifEmpty { listOf("Layer 1 edit program") }
+                reason = command.evidenceIds.firstOrNull() ?: "Layer 1 edit program"
             )
         }
         return project.applyLayer1Program(program.programId, operations)

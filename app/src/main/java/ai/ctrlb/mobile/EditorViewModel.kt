@@ -129,7 +129,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val durationMs = sources.sumOf { it.durationMs }
         val candidates = FumbleDetector.detect(words, durationMs, preferences.pace)
         val operations = buildList<EditOperation> {
-            if (source.hasAudio) { add(SetAudioCleanup()); add(SetAudioLevels()) }
+            if (source.hasAudio) { add(SetAudioLevels()) }
         }
         // Export may preserve or reduce source resolution, never invent extra detail by upscaling.
         val sourceCeiling = sources.renderSizeWithin(3840, 2160)
@@ -545,8 +545,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
     private fun toggle(op: EditOperation): EditOperation = when (op) {
-        is RemoveRanges -> op.copy(enabled = !op.enabled); is RemoveFumbles -> op.copy(enabled = !op.enabled); is RemoveAwkwardSilences -> op.copy(enabled = !op.enabled); is SetColorGrade -> op.copy(enabled = !op.enabled); is SetAudioCleanup -> op.copy(enabled = !op.enabled); is SetAudioLevels -> op.copy(enabled = !op.enabled)
-        is AddTransition -> op.copy(enabled = !op.enabled); is AddMotionPreset -> op.copy(enabled = !op.enabled); is AddCaptions -> op.copy(enabled = !op.enabled); is ApplySemanticVisual -> op.copy(enabled = !op.enabled)
+        is RemoveRanges -> op.copy(enabled = !op.enabled); is SetColorGrade -> op.copy(enabled = !op.enabled); is SetAudioLevels -> op.copy(enabled = !op.enabled)
+        is AddTransition -> op.copy(enabled = !op.enabled); is AddMotionPreset -> op.copy(enabled = !op.enabled); is AddCaptions -> op.copy(enabled = !op.enabled)
     }
     private fun processingMessage(stage: String?, percent: Int): String = when {
         stage?.startsWith("transcript-") == true -> "Preparing speech analysis…"
@@ -567,15 +567,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
     private fun EditOperation.editResultLabel(): String = when (this) {
         is RemoveRanges -> "Cut ${ranges.size} range${if (ranges.size == 1) "" else "s"}"
-        is RemoveFumbles -> "Tightened ${ranges.size} speech range${if (ranges.size == 1) "" else "s"}"
-        is RemoveAwkwardSilences -> "Removed ${ranges.size} awkward pause${if (ranges.size == 1) "" else "s"}"
         is SetColorGrade -> "Updated color grade"
-        is SetAudioCleanup -> "Updated dialogue cleanup"
         is SetAudioLevels -> "Updated audio levels"
         is AddTransition -> "Updated transition"
         is AddMotionPreset -> "Updated motion"
         is AddCaptions -> "Updated ${cues.size} caption cue${if (cues.size == 1) "" else "s"}"
-        is ApplySemanticVisual -> "Updated ${treatment.name.lowercase().replace('_', ' ')}"
     }
 
     private suspend fun awaitWork(

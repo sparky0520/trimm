@@ -21,12 +21,10 @@ class AgentRunContractTest {
             put("summary", "Clean up the dialogue")
             putJsonArray("operations") {
                 add(buildJsonObject {
-                    put("type", "set_audio_cleanup")
-                    put("id", "cleanup-1")
+                    put("type", "set_audio_levels")
+                    put("id", "levels-1")
                     put("enabled", true)
-                    put("strength", .55)
-                    put("confidence", .9)
-                    putJsonArray("evidenceIds") { add("evidence-1") }
+                    put("dialogueLufs", -16.0)
                 })
             }
         }
@@ -39,7 +37,7 @@ class AgentRunContractTest {
 
         assertEquals("Clean up the dialogue", proposal.summary)
         assertEquals(4, proposal.expectedRevision)
-        assertEquals(listOf("evidence-1"), proposal.evidenceIds)
+        assertEquals(0, proposal.evidenceIds.size)
         assertEquals(1, proposal.operations.size)
     }
     @Test
