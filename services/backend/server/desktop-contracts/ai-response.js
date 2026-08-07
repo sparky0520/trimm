@@ -79,14 +79,7 @@ export function parseAiResponse(input) {
           if (value === null) delete operation.changes[key];
         }
       }
-      if (operation?.type === 'set_audio_cleanup') {
-        // These fields are produced by the local FFmpeg job after planning.
-        // Structured Outputs represents optional properties as required,
-        // nullable placeholders, so discard only the planner-side nulls.
-        for (const key of ['sourceFingerprint', 'artifactKey', 'measurements', 'warnings']) {
-          if (operation[key] === null) delete operation[key];
-        }
-      }
+
     }
   }
   return AiResponseSchema.parse(input);

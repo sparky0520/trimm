@@ -21,8 +21,8 @@ const operationSchema = {
     id: { type: 'string' },
     type: {
       type: 'string', enum: [
-        'remove_ranges', 'remove_fumbles', 'remove_awkward_silences', 'set_color_grade', 'set_audio_cleanup', 'set_audio_levels',
-        'add_captions', 'semantic_visual',
+        'remove_ranges', 'set_color_grade', 'set_audio_levels',
+        'add_captions',
       ]
     },
     enabled: { type: 'boolean' },
@@ -151,13 +151,7 @@ const operationTool = (name, description, required, properties) => Object.freeze
   }),
 });
 
-const PROPOSE_AUDIO_CLEANUP_TOOL = operationTool(
-  'propose_reduce_background_noise',
-  'Reduce audible background noise in one exact source interval. Do not choose the interval or strength automatically.',
-  ['sourceId', 'startMs', 'endMs', 'strength', 'reason'], {
-  ...targetRangeProperties, strength: { type: 'number' },
-},
-);
+
 const PROPOSE_DIALOGUE_LOUDNESS_TOOL = operationTool(
   'propose_set_dialogue_loudness',
   'Set the dialogue loudness target for one exact source interval.',
@@ -198,24 +192,7 @@ const PROPOSE_COLOR_TOOLS = [
   colorAdjustmentTool('highlights', -1, 1), colorAdjustmentTool('shadows', -1, 1),
   colorAdjustmentTool('skinProtection', 0, 1),
 ];
-const semanticVisualTool = (name, description) => operationTool(
-  name, description,
-  ['intent', 'range', 'subject', 'reason'], {
-  intent: { type: 'string', enum: ['INTRODUCE', 'POINT_OUT', 'TRANSITION', 'REVEAL', 'EMPHASIZE', 'RECAP'] },
-  range: {
-    type: 'object', additionalProperties: false, required: ['sourceId', 'startMs', 'endMs'], properties: {
-      sourceId: { type: 'string' }, startMs: { type: 'integer' }, endMs: { type: 'integer' },
-    }
-  },
-  subject: { type: 'object' }, framing: { type: 'object' }, motion: { type: 'object' },
-  reason: { type: 'string' },
-},
-);
-const PROPOSE_SEMANTIC_VISUAL_TOOLS = [
-  semanticVisualTool('propose_add_visual_callout', 'Add one grounded callout around an observed subject.'),
-  semanticVisualTool('propose_add_visual_spotlight', 'Add one grounded spotlight over an observed subject.'),
-  semanticVisualTool('propose_reframe_subject', 'Reframe one grounded subject while preserving subjects and text.'),
-];
+
 
 const ASK_CLARIFICATION_TOOL = Object.freeze({
   name: 'ask_clarification',
@@ -266,9 +243,9 @@ const FINISH_WITHOUT_PROPOSAL_TOOL = Object.freeze({
 const AGENT_TOOLS = Object.freeze([
   INSPECT_VIDEO_RANGE_TOOL,
   PROPOSE_REMOVE_RANGES_TOOL,
-  PROPOSE_AUDIO_CLEANUP_TOOL, PROPOSE_DIALOGUE_LOUDNESS_TOOL, PROPOSE_MUSIC_DUCKING_TOOL,
+  PROPOSE_DIALOGUE_LOUDNESS_TOOL, PROPOSE_MUSIC_DUCKING_TOOL,
   PROPOSE_CAPTIONS_TOOL, ...PROPOSE_COLOR_TOOLS,
-  ...PROPOSE_SEMANTIC_VISUAL_TOOLS, ASK_CLARIFICATION_TOOL, FINALIZE_EDIT_PROGRAM_TOOL,
+  ASK_CLARIFICATION_TOOL, FINALIZE_EDIT_PROGRAM_TOOL,
   REMOVE_DRAFT_OPERATION_TOOL, FINISH_WITHOUT_PROPOSAL_TOOL,
 ]);
 

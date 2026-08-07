@@ -13,7 +13,7 @@
         "required": ["id", "type", "enabled", "confidence", "evidenceIds"],
         "properties": {
           "id": { "type": "string" },
-          "type": { "enum": ["remove_fumbles", "remove_awkward_silences", "set_color_grade", "set_audio_cleanup", "set_audio_levels", "add_sound_effect", "set_background_music", "add_captions", "semantic_visual"] },
+          "type": { "enum": ["remove_ranges", "set_color_grade", "set_audio_levels", "add_sound_effect", "set_background_music", "add_captions"] },
           "enabled": { "type": "boolean" },
           "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
           "evidenceIds": { "type": "array", "minItems": 1, "items": { "type": "string" } }

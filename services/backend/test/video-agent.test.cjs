@@ -23,12 +23,10 @@ test('Gemini receives video directly and exposes evidence and focused proposal t
   }] });
   assert.equal(result.toolCall.name, 'inspect_video_range');
   assert.equal(request.contents[0].parts[0].inlineData.mimeType, 'video/mp4');
-  assert.deepEqual(request.config.tools[0].functionDeclarations.map((item) => item.name), [
     'inspect_video_range', 'propose_remove_ranges',
-    'propose_reduce_background_noise', 'propose_set_dialogue_loudness', 'propose_set_music_ducking',
+    'propose_set_dialogue_loudness', 'propose_set_music_ducking',
     'propose_add_captions', 'propose_adjust_exposure', 'propose_adjust_temperature', 'propose_adjust_contrast', 'propose_adjust_saturation',
     'propose_adjust_highlights', 'propose_adjust_shadows', 'propose_adjust_skin_protection',
-    'propose_add_visual_callout', 'propose_add_visual_spotlight', 'propose_reframe_subject',
     'ask_clarification', 'finalize_edit_program', 'remove_draft_operation', 'finish_without_proposal',
   ]);
 });
@@ -69,7 +67,7 @@ test('video ranges are at most 30 seconds and HIGH requires overlapping LOW evid
   } }, inventory, [{ sourceId: 'source-1', startMs: 0, endMs: 30_000, resolution: 'LOW' }]).resolution, 'HIGH');
 });
 
-test('awkward-silence proposals require source-bounded ranges covered by cited evidence', () => {
+test('removal proposals require source-bounded ranges covered by cited evidence', () => {
   const decisionInventory = {
     projectRevision: 3,
     sources: [{ id: 'source-1', durationMs: 120_000 }],
@@ -81,16 +79,16 @@ test('awkward-silence proposals require source-bounded ranges covered by cited e
   const valid = validateDecision({
     type: 'edit_program', expectedRevision: 3, summary: 'Tighten one awkward pause.', observations: [],
     operations: [{
-      id: 'silence-op-1', type: 'remove_awkward_silences', enabled: true, confidence: 0.9,
+      id: 'silence-op-1', type: 'remove_ranges', enabled: true, confidence: 0.9,
       evidenceIds: ['silence-1'], pacing: 'natural',
       ranges: [{ sourceId: 'source-1', startMs: 10_500, endMs: 13_500, evidenceIds: ['silence-1'] }],
     }],
   }, decisionInventory, []);
-  assert.equal(valid.operations[0].type, 'remove_awkward_silences');
+  assert.equal(valid.operations[0].type, 'remove_ranges');
   assert.throws(() => validateDecision({
     type: 'edit_program', expectedRevision: 3, summary: 'Invalid range.', observations: [],
     operations: [{
-      id: 'silence-op-2', type: 'remove_awkward_silences', enabled: true, confidence: 0.9,
+      id: 'silence-op-2', type: 'remove_ranges', enabled: true, confidence: 0.9,
       evidenceIds: ['silence-1'], pacing: 'natural',
       ranges: [{ sourceId: 'source-1', startMs: 9_000, endMs: 15_000, evidenceIds: ['silence-1'] }],
     }],
@@ -101,11 +99,11 @@ test('fine operations require an exact source interval covered by their cited ev
   const decisionInventory = {
     projectRevision: 2, sources: [{ id: 'source-1', durationMs: 20_000 }],
     transcript: [], observations: [{ id: 'noise-1', sourceId: 'source-1', startMs: 2_000, endMs: 8_000,
-      description: 'Steady fan noise.', confidence: .9, resolution: 'LOW' }],
+      description: 'Dialogue is too quiet.', confidence: .9, resolution: 'LOW' }],
   };
-  const operation = { id: 'noise-op', type: 'set_audio_cleanup', enabled: true, confidence: .9,
+  const operation = { id: 'noise-op', type: 'set_audio_levels', enabled: true, confidence: .9,
     evidenceIds: ['noise-1'], target: { sourceId: 'source-1', startMs: 3_000, endMs: 7_000 },
-    sourceId: 'source-1', startMs: 3_000, endMs: 7_000, strength: .45, reason: 'Fan noise is audible.' };
+    parameter: 'dialogue_loudness', dialogueLufs: -16, reason: 'Dialogue is too quiet.' };
   assert.equal(validateDecision({ type: 'edit_program', expectedRevision: 2, summary: 'Clean one interval.',
     operations: [operation], observations: [] }, decisionInventory, []).operations[0].target.startMs, 3_000);
   assert.throws(() => validateDecision({ type: 'edit_program', expectedRevision: 2, summary: 'Too broad.',
@@ -151,10 +149,10 @@ test('a follow-up message continues the same LangGraph-backed conversation', asy
 test('the bounded agent loop returns tool results to Gemini before finalizing an atomic proposal', async () => {
   const calls = [];
   const decide = async () => ({
-    toolCall: { name: 'propose_reduce_background_noise', args: {
+    toolCall: { name: 'propose_set_dialogue_loudness', args: {
       expectedRevision: 4, summary: 'Clean the dialogue.', observations: [],
       operation: { id: 'cleanup-1', enabled: true, confidence: .9, evidenceIds: ['obs-1'],
-        sourceId: 'source-1', startMs: 0, endMs: 20_000, strength: .5, reason: 'Steady background noise.' },
+        sourceId: 'source-1', startMs: 0, endMs: 20_000, targetLufs: -16, reason: 'Too quiet.' },
     } }, history: [], usage: { callId: 'call-1' },
   });
   decide.toolResult = async ({ result }) => {
@@ -169,13 +167,13 @@ test('the bounded agent loop returns tool results to Gemini before finalizing an
     intent: 'Clean up the dialogue',
     sources: [{ id: 'source-1', fingerprint: 'a'.repeat(32), durationMs: 20_000, width: 1920, height: 1080, hasAudio: true }],
     transcript: [], evidenceJobIds: [], existingOperations: [],
-    observations: [{ id: 'obs-1', sourceId: 'source-1', startMs: 0, endMs: 20_000, description: 'Audible steady background noise.', confidence: .9, resolution: 'LOW' }],
+    observations: [{ id: 'obs-1', sourceId: 'source-1', startMs: 0, endMs: 20_000, description: 'Dialogue is too quiet.', confidence: .9, resolution: 'LOW' }],
     budgets: {}, mediaConsent: { mode: 'video_analysis', grantedAt: new Date().toISOString(), disclosureVersion: 'v2' },
     supportedContractVersions: { agentRuns: [2], activityEvents: [2], videoToolRequests: [2], editPrograms: [2] },
   });
   assert.equal(calls[0].ok, true);
   assert.equal(result.type, 'edit_program');
-  assert.equal(result.operations[0].type, 'set_audio_cleanup');
+  assert.equal(result.operations[0].type, 'set_audio_levels');
 });
 
 test('orchestrator correctly awaits async derivativeJobs readCompletedBytes (PostgresDerivativeJobs)', async () => {

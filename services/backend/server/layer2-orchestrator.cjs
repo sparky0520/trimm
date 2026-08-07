@@ -2,8 +2,8 @@
 
 const { validateContextualSpeechDecision } = require('./contextual-speech.cjs');
 const ALLOWED_OPERATIONS = new Set([
-  'remove_ranges', 'remove_fumbles', 'remove_awkward_silences', 'set_color_grade', 'set_audio_cleanup', 'set_audio_levels',
-  'add_sound_effect', 'set_background_music', 'add_captions', 'semantic_visual',
+  'remove_ranges', 'set_color_grade', 'set_audio_levels',
+  'add_sound_effect', 'set_background_music', 'add_captions',
 ]);
 const MAX_VIDEO_RANGE_MS = 30_000;
 const FORBIDDEN_KEYS = new Set([
@@ -28,8 +28,7 @@ If the transcript is empty, assume there is no speech in the video and focus exc
 Every edit operation must cite supplied evidence IDs and include confidence from 0 to 1.
 Do not invent evidence. When evidence is missing or uncertain, request bounded evidence, clarify, or fall back.
 Use fine tools: one effect, one exact range, and one bounded parameter set per call. Never ask a tool to scan or choose its own settings.
-Supported rendered operations: remove_fumbles, remove_awkward_silences, set_color_grade, set_audio_cleanup, set_audio_levels, add_captions, semantic_visual.
-Semantic visuals require a cited face, screen, product, OCR, or salience subject with normalized bounds. Unsafe reframing must return clarification or fallback.
+Supported rendered operations: remove_ranges, set_color_grade, set_audio_levels, add_captions.
 
 Examples:
 User asks to remove a pause but no covering video is attached -> call inspect_video_range.
@@ -39,7 +38,6 @@ A tool rejects an invented evidence ID -> correct the call using only supplied I
 
 const PROPOSAL_TOOL_TYPES = Object.freeze({
   propose_remove_ranges: 'remove_ranges',
-  propose_reduce_background_noise: 'set_audio_cleanup',
   propose_set_dialogue_loudness: 'set_audio_levels',
   propose_set_music_ducking: 'set_audio_levels',
   propose_add_captions: 'add_captions',
@@ -50,9 +48,6 @@ const PROPOSAL_TOOL_TYPES = Object.freeze({
   propose_adjust_highlights: 'set_color_grade',
   propose_adjust_shadows: 'set_color_grade',
   propose_adjust_skin_protection: 'set_color_grade',
-  propose_add_visual_callout: 'semantic_visual',
-  propose_add_visual_spotlight: 'semantic_visual',
-  propose_reframe_subject: 'semantic_visual',
 });
 
 function fineOperationFor(call, operationType, inventory) {
@@ -65,7 +60,7 @@ function fineOperationFor(call, operationType, inventory) {
   const sourceIndex = inventory.sources.findIndex((source) => source.id === raw.sourceId);
   const sourceOffset = sourceIndex < 0 ? 0 : inventory.sources.slice(0, sourceIndex)
     .reduce((total, source) => total + source.durationMs, 0);
-  if (call.name === 'propose_reduce_background_noise') return common;
+
   if (call.name === 'propose_set_dialogue_loudness') {
     return { ...common, parameter: 'dialogue_loudness', dialogueLufs: raw.targetLufs };
   }
@@ -86,18 +81,7 @@ function fineOperationFor(call, operationType, inventory) {
     const parameter = call.name.slice('propose_adjust_'.length).replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
     return { ...common, parameter, value: raw.value };
   }
-  if (['propose_add_visual_callout', 'propose_add_visual_spotlight', 'propose_reframe_subject'].includes(call.name)) {
-    const visualSourceIndex = inventory.sources.findIndex((source) => source.id === raw.range?.sourceId);
-    const offset = inventory.sources.slice(0, visualSourceIndex).reduce((total, source) => total + source.durationMs, 0);
-    const treatment = {
-      propose_add_visual_callout: 'CALLOUT', propose_add_visual_spotlight: 'SPOTLIGHT',
-      propose_reframe_subject: 'REFRAME'
-    }[call.name];
-    return {
-      ...common, treatment, range: { startMs: offset + raw.range.startMs, endMs: offset + raw.range.endMs },
-      target: raw.range
-    };
-  }
+
   return common;
 }
 
@@ -316,9 +300,9 @@ function validateEditProgram(decision, inventory, observations) {
       operation.evidenceIds.some((id) => !evidenceIds.has(id))) {
       throw orchestrationError('Edit operation has missing, stale, or invented evidence.', 422, 'invalid_evidence_reference');
     }
-    if (operation.type === 'remove_fumbles') validateContextualSpeechDecision(operation, evidenceIds);
-    if (operation.target && ['set_color_grade', 'set_audio_cleanup', 'set_audio_levels',
-      'add_captions', 'semantic_visual'].includes(operation.type)) {
+
+    if (operation.target && ['set_color_grade', 'set_audio_levels',
+      'add_captions'].includes(operation.type)) {
       const target = operation.target;
       const source = inventory.sources.find((item) => item.id === target?.sourceId);
       if (!source || !Number.isSafeInteger(target.startMs) || !Number.isSafeInteger(target.endMs) ||
@@ -332,7 +316,7 @@ function validateEditProgram(decision, inventory, observations) {
         throw orchestrationError('Fine edit requires a reason.', 422, 'invalid_edit_program');
       }
     }
-    if (['remove_ranges', 'remove_fumbles', 'remove_awkward_silences'].includes(operation.type)) {
+    if (['remove_ranges'].includes(operation.type)) {
       const sources = new Map(inventory.sources.map((source) => [source.id, source]));
       if (!Array.isArray(operation.ranges) || !operation.ranges.length) {
         throw orchestrationError('Speech and silence removals require bounded ranges.', 422, 'invalid_edit_program');
@@ -367,10 +351,7 @@ function validateEditProgram(decision, inventory, observations) {
         throw orchestrationError('Color adjustment is outside renderer-safe bounds.', 422, 'invalid_edit_program');
       }
     }
-    if (operation.type === 'set_audio_cleanup' &&
-      (typeof operation.strength !== 'number' || operation.strength < 0 || operation.strength > 1)) {
-      throw orchestrationError('Audio cleanup strength is invalid.', 422, 'invalid_edit_program');
-    }
+
     if (operation.type === 'set_audio_levels') {
       const validDialogue = operation.parameter === 'dialogue_loudness' && typeof operation.dialogueLufs === 'number' &&
         operation.dialogueLufs >= -24 && operation.dialogueLufs <= -12;
@@ -411,25 +392,7 @@ function validateEditProgram(decision, inventory, observations) {
         throw orchestrationError('Captions must be bounded and grounded in the supplied transcript.', 422, 'invalid_edit_program');
       }
     }
-    if (operation.type === 'semantic_visual') {
-      const subject = operation.subject;
-      const bounds = subject?.bounds;
-      const values = bounds && [bounds.left, bounds.top, bounds.right, bounds.bottom];
-      const range = operation.range;
-      if (!['INTRODUCE', 'POINT_OUT', 'TRANSITION', 'REVEAL', 'EMPHASIZE', 'RECAP'].includes(operation.intent) ||
-        !['CALLOUT', 'SPOTLIGHT', 'REFRAME'].includes(operation.treatment) ||
-        !range || !Number.isSafeInteger(range.startMs) || !Number.isSafeInteger(range.endMs) ||
-        range.startMs < 0 || range.endMs - range.startMs < 300 || range.endMs - range.startMs > 8000 ||
-        !subject || !evidenceIds.has(subject.evidenceId) ||
-        !['FACE', 'SCREEN_UI', 'PRODUCT', 'OCR_TEXT', 'SALIENCE'].includes(subject.kind) ||
-        typeof subject.confidence !== 'number' || subject.confidence < .55 || subject.confidence > 1 ||
-        !values || values.some((value) => typeof value !== 'number' || value < 0 || value > 1) ||
-        bounds.right <= bounds.left || bounds.bottom <= bounds.top ||
-        operation.treatment === 'REFRAME' && (!operation.framing ||
-          operation.framing.preservesSubject !== true || operation.framing.preservesText !== true)) {
-        throw orchestrationError('Semantic visual is unsafe or ungrounded.', 422, 'invalid_edit_program');
-      }
-    }
+
   }
   for (const operation of decision.operations.filter((item) => item.type === 'set_color_grade' && item.parameter === 'skinProtection')) {
     const companion = decision.operations.some((item) => item.type === 'set_color_grade' && item.id !== operation.id &&

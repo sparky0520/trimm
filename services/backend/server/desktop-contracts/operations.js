@@ -146,21 +146,7 @@ export const MoveItemOperationSchema = operation('move_item', {
   itemId: id, timelineRange: range, ripple: z.enum(['none', 'insert']),
 });
 
-const cleanupMeasurements = z.object({
-  inputPeakDb: finiteNumber, outputPeakDb: finiteNumber,
-  inputNoiseDb: finiteNumber, outputNoiseDb: finiteNumber,
-}).strict();
 
-export const SetAudioCleanupOperationSchema = operation('set_audio_cleanup', {
-  assetId: id,
-  strength: z.enum(['light', 'medium', 'strong']),
-  sourceFingerprint: id.optional(),
-  artifactKey: z.string().regex(/^audio-cleanup\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+\.(mp4|mov|mkv|webm|m4a|wav)$/).optional(),
-  measurements: cleanupMeasurements.optional(),
-  warnings: z.array(z.enum(['non-stationary-noise', 'speech-artifact-risk', 'low-snr'])).optional(),
-});
-
-export const ClearAudioCleanupOperationSchema = operation('clear_audio_cleanup', { assetId: id });
 
 const speechRange = range;
 const audioAdjustment = z.object({
@@ -216,8 +202,7 @@ export const EditOperationSchema = z.discriminatedUnion('type', [
   ReplaceVisualOperationSchema,
   TrimItemOperationSchema,
   MoveItemOperationSchema,
-  SetAudioCleanupOperationSchema,
-  ClearAudioCleanupOperationSchema,
+
   SetAudioLevelsOperationSchema,
   ClearAudioLevelsOperationSchema,
   SetMusicEditOperationSchema,
