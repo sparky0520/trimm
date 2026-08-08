@@ -22,7 +22,7 @@ const operationSchema = {
     type: {
       type: 'string', enum: [
         'remove_ranges', 'set_color_grade', 'set_audio_levels',
-        'add_captions',
+        'add_captions', 'add_vfx'
       ]
     },
     enabled: { type: 'boolean' },
@@ -179,6 +179,19 @@ const PROPOSE_CAPTIONS_TOOL = operationTool(
   style: { type: 'string', enum: ['bold-bottom'] },
 },
 );
+
+const PROPOSE_VFX_TOOL = operationTool(
+  'propose_vfx',
+  'Generate a custom visual effect (e.g. filter, stylistic effect) or transition using AI-generated GLSL. Send previousCode and compileError to fix compilation issues.',
+  ['sourceId', 'startMs', 'endMs', 'vfxType', 'description', 'reason'], {
+  ...targetRangeProperties,
+  vfxType: { type: 'string', enum: ['SINGLE_CLIP', 'DUAL_CLIP'] },
+  description: { type: 'string' },
+  previousCode: { type: 'string' },
+  compileError: { type: 'string' }
+},
+);
+
 const colorAdjustmentTool = (parameter, minimum, maximum) => operationTool(
   `propose_adjust_${parameter.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)}`,
   `Adjust only ${parameter} in one exact source interval, based on cited visual evidence.`,
@@ -244,7 +257,7 @@ const AGENT_TOOLS = Object.freeze([
   INSPECT_VIDEO_RANGE_TOOL,
   PROPOSE_REMOVE_RANGES_TOOL,
   PROPOSE_DIALOGUE_LOUDNESS_TOOL, PROPOSE_MUSIC_DUCKING_TOOL,
-  PROPOSE_CAPTIONS_TOOL, ...PROPOSE_COLOR_TOOLS,
+  PROPOSE_CAPTIONS_TOOL, PROPOSE_VFX_TOOL, ...PROPOSE_COLOR_TOOLS,
   ASK_CLARIFICATION_TOOL, FINALIZE_EDIT_PROGRAM_TOOL,
   REMOVE_DRAFT_OPERATION_TOOL, FINISH_WITHOUT_PROPOSAL_TOOL,
 ]);
