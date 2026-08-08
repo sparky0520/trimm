@@ -100,7 +100,15 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
 @Serializable @SerialName("remove_ranges") data class RemoveRanges(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val ranges: List<TimeRange>, val confidence: Float, val reason: String = "", val pacing: String = "natural") : EditOperation
 @Serializable @SerialName("set_color_grade") data class SetColorGrade(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val grade: ColorGrade? = null, val target: OperationTarget? = null, val parameter: String? = null, val value: Float? = null) : EditOperation
 @Serializable @SerialName("set_audio_levels") data class SetAudioLevels(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val parameter: String? = null, val dialogueLufs: Float = -16f, val musicDuckDb: Float = -9f, val attackMs: Long = 120, val releaseMs: Long = 450, val target: OperationTarget? = null) : EditOperation
-@Serializable @SerialName("add_transition") data class AddTransition(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val atSourceMs: Long, val preset: String = "dip", val durationMs: Long = 280) : EditOperation
+@Serializable enum class VfxType { SINGLE_CLIP, DUAL_CLIP }
+@Serializable @SerialName("add_vfx") data class AddVfx(
+    override val id: String = UUID.randomUUID().toString(),
+    override val enabled: Boolean = true,
+    val kind: VfxType,
+    val range: TimeRange,
+    val fragmentShader: String,
+    val uniforms: Map<String, Float> = emptyMap()
+) : EditOperation
 @Serializable @SerialName("add_motion_preset") data class AddMotionPreset(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val range: TimeRange, val preset: String, val intensity: Float = .5f) : EditOperation
 
 @Serializable @SerialName("add_captions") data class AddCaptions(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val cues: List<CaptionCue> = emptyList(), val target: OperationTarget? = null, val speakerId: String? = null, val style: String = "bold-bottom") : EditOperation
