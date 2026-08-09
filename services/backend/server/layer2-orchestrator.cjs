@@ -554,14 +554,14 @@ class Layer2Orchestrator {
         
         if (call.name === 'propose_vfx') {
            if (typeof this.decide.generateGlsl !== 'function') throw orchestrationError('GLSL subagent is not available.', 501, 'unsupported_tool_call');
+           const rawOp = args.operation || {};
            const glslResult = await this.decide.generateGlsl({
-             description: args.description,
-             vfxType: args.vfxType,
-             previousCode: args.previousCode,
-             compileError: args.compileError
+             description: rawOp.description,
+             vfxType: rawOp.vfxType,
+             previousCode: rawOp.previousCode,
+             compileError: rawOp.compileError
            });
-           args.fragmentShader = glslResult.fragmentShader;
-           args.uniforms = glslResult.uniforms;
+           args.operation = { ...rawOp, fragmentShader: glslResult.fragmentShader, uniforms: glslResult.uniforms };
         }
 
         const operation = fineOperationFor(call, operationType, workingInventory);
