@@ -498,44 +498,92 @@ class Layer2Orchestrator {
     const usage = [];
     const drafts = new Map((workingInventory.agentDraft?.operations || []).map((operation) => [operation.id, operation]));
     const draftObservations = [];
-    for (let iteration = 0; iteration < 8 && raw.toolCall; iteration++) {
+    for (let iteration = 0; iteration < 8; iteration++) {
       usage.push(raw.usage);
       const call = raw.toolCall;
-      if (call.name === 'inspect_video_range') {
-        const request = validateVideoToolCall(call, workingInventory, evidence);
-        const job = await this.authorizeVideo(principal, workingInventory, request);
-        if (job.reused && workingInventory.evidenceJobIds.includes(job.id)) {
-          return { type: 'fallback', reason: 'The requested video range is already attached.', observations: [], _usage: usage };
+
+      if (!call) {
+        let decision;
+        try {
+          try {
+            decision = JSON.parse(raw.rawText);
+          } catch (e) {
+            decision = raw;
+          }
+          const validated = validateDecision(decision, workingInventory, evidence);
+          return { ...validated, ...(usage.length ? { _usage: usage } : {}) };
+        } catch (error) {
+          if (typeof this.decide !== 'function') throw error;
+          raw = await this.decide({
+            systemPolicy: SYSTEM_POLICY, inventory: workingInventory, evidence,
+            history: [...(raw.history || []), { role: 'user', parts: [{ text: `Agent run failure: ${error.message || 'invalid planner response'}` }] }]
+          });
+          continue;
         }
-        return {
-          type: 'tool_request', tool: 'inspect_video_range', jobs: [job], _usage: usage,
-          _agentState: { operations: [...drafts.values()], observations: draftObservations },
-        };
+      }
+
+      if (call.name === 'inspect_video_range') {
+        try {
+          const request = validateVideoToolCall(call, workingInventory, evidence);
+          const job = await this.authorizeVideo(principal, workingInventory, request);
+          if (job.reused && workingInventory.evidenceJobIds.includes(job.id)) {
+            return { type: 'fallback', reason: 'The requested video range is already attached.', observations: [], _usage: usage };
+          }
+          return {
+            type: 'tool_request', tool: 'inspect_video_range', jobs: [job], _usage: usage,
+            _agentState: { operations: [...drafts.values()], observations: draftObservations },
+          };
+        } catch (error) {
+          raw = await this.decide.toolResult({
+            systemPolicy: SYSTEM_POLICY, inventory: workingInventory, evidence, history: raw.history, toolCall: call,
+            result: { ok: false, code: error.code || 'invalid_tool_arguments', message: String(error.message).slice(0, 300) }
+          });
+          continue;
+        }
       }
 
       if (call.name === 'ask_clarification') {
-        const questions = Array.isArray(call.args?.questions) ? call.args.questions.slice(0, 3) : [];
-        if (!questions.length) throw orchestrationError('Clarification questions are required.', 422, 'invalid_clarification');
-        return {
-          type: 'clarification', questions, question: questions[0].prompt, options: questions[0].options,
-          observations: [], _usage: usage,
-          _agentState: { operations: [...drafts.values()], observations: draftObservations },
-        };
+        try {
+          const questions = Array.isArray(call.args?.questions) ? call.args.questions.slice(0, 3) : [];
+          if (!questions.length) throw orchestrationError('Clarification questions are required.', 422, 'invalid_clarification');
+          return {
+            type: 'clarification', questions, question: questions[0].prompt, options: questions[0].options,
+            observations: [], _usage: usage,
+            _agentState: { operations: [...drafts.values()], observations: draftObservations },
+          };
+        } catch (error) {
+          raw = await this.decide.toolResult({
+            systemPolicy: SYSTEM_POLICY, inventory: workingInventory, evidence, history: raw.history, toolCall: call,
+            result: { ok: false, code: error.code || 'invalid_tool_arguments', message: String(error.message).slice(0, 300) }
+          });
+          continue;
+        }
       }
+
       if (call.name === 'finish_without_proposal') {
         return { type: 'fallback', reason: String(call.args?.reason || 'The edit could not be grounded.').slice(0, 1000), observations: [], _usage: usage };
       }
+
       if (call.name === 'finalize_edit_program') {
-        const ids = Array.isArray(call.args?.operationIds) ? call.args.operationIds : [];
-        if (ids.some((id) => !drafts.has(id)) || new Set(ids).size !== ids.length) {
-          throw orchestrationError('Finalization referenced an unknown draft operation.', 422, 'invalid_edit_program');
+        try {
+          const ids = Array.isArray(call.args?.operationIds) ? call.args.operationIds : [];
+          if (ids.some((id) => !drafts.has(id)) || new Set(ids).size !== ids.length) {
+            throw orchestrationError('Finalization referenced an unknown draft operation.', 422, 'invalid_edit_program');
+          }
+          const decision = validateDecision({
+            type: 'edit_program', expectedRevision: call.args.expectedRevision,
+            summary: call.args.summary, operations: ids.map((id) => drafts.get(id)), observations: [],
+          }, workingInventory, evidence);
+          return { ...decision, _usage: usage };
+        } catch (error) {
+          raw = await this.decide.toolResult({
+            systemPolicy: SYSTEM_POLICY, inventory: workingInventory, evidence, history: raw.history, toolCall: call,
+            result: { ok: false, code: error.code || 'invalid_tool_arguments', message: String(error.message).slice(0, 300) }
+          });
+          continue;
         }
-        const decision = validateDecision({
-          type: 'edit_program', expectedRevision: call.args.expectedRevision,
-          summary: call.args.summary, operations: ids.map((id) => drafts.get(id)), observations: [],
-        }, workingInventory, evidence);
-        return { ...decision, _usage: usage };
       }
+
       if (call.name === 'remove_draft_operation') {
         const operationId = call.args?.operationId;
         const removed = typeof operationId === 'string' && drafts.delete(operationId);
@@ -546,8 +594,16 @@ class Layer2Orchestrator {
         });
         continue;
       }
+
       const operationType = PROPOSAL_TOOL_TYPES[call.name];
-      if (!operationType) throw orchestrationError('Planner requested an unsupported tool.', 422, 'unsupported_tool_call');
+      if (!operationType) {
+        raw = await this.decide.toolResult({
+          systemPolicy: SYSTEM_POLICY, inventory: workingInventory, evidence, history: raw.history, toolCall: call,
+          result: { ok: false, code: 'unsupported_tool_call', message: 'Planner requested an unsupported tool.' }
+        });
+        continue;
+      }
+
       let result;
       try {
         const args = call.args || {};
@@ -588,12 +644,7 @@ class Layer2Orchestrator {
         history: raw.history, toolCall: call, result,
       });
     }
-    if (raw.toolCall) return { type: 'fallback', reason: 'The bounded editing loop reached its iteration limit.', observations: [], _usage: usage };
-    const decision = validateDecision(raw, workingInventory, evidence);
-    return {
-      ...decision,
-      ...(usage.length ? { _usage: usage } : {}),
-    };
+    return { type: 'fallback', reason: 'The bounded editing loop reached its iteration limit.', observations: [], _usage: usage };
   }
 }
 
