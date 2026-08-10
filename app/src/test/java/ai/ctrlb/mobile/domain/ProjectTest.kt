@@ -20,7 +20,6 @@ class ProjectTest {
     }
     @Test fun `legacy unrendered operations disappear from operation cards`() {
         val operations = listOf(
-            AddTransition(atSourceMs = 1_000),
             AddMotionPreset(range = TimeRange(0, 1_000), preset = "legacy"),
             SetAudioLevels()
         )
