@@ -120,8 +120,8 @@ object ExportCoordinator {
         
         // Add Dynamic Shaders (VFX)
         project.operations.filterIsInstance<AddVfx>().filter { it.enabled }.forEach { vfx ->
-            val outputStart = timelineMapper.sourceToOutput(vfx.range.startMs)
-            val outputEnd = timelineMapper.sourceToOutput(vfx.range.endMs)
+            val outputStart = timelineMapper.sourceToOutput(vfx.range!!.startMs)
+            val outputEnd = timelineMapper.sourceToOutput(vfx.range!!.endMs)
             if (outputEnd > outputStart) {
                 videoEffects += DynamicShaderEffect(
                     vfx.id, 

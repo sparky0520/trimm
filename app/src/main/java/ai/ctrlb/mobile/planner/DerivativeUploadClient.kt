@@ -17,8 +17,7 @@ class DerivativeUploadClient(
 
     suspend fun upload(derivative: PreparedDerivative): String = withContext(Dispatchers.IO) {
         val endpoint = derivativeRoot.resolve(derivative.jobId)
-        val token = accessToken()
-        var offset = runCatching { head(endpoint, token) }.getOrDefault(0L)
+        var offset = runCatching { head(endpoint, accessToken()) }.getOrDefault(0L)
         val file = java.io.File(derivative.localPath)
         if (offset >= file.length()) {
             offset = 0L
@@ -29,12 +28,12 @@ class DerivativeUploadClient(
             while (offset < file.length()) {
                 val count = input.read(buffer)
                 check(count > 0) { "Derivative upload ended early." }
-                offset = put(endpoint, token, offset, buffer, count)
+                offset = put(endpoint, accessToken(), offset, buffer, count)
             }
         }
         complete(
             endpoint,
-            token,
+            accessToken(),
             derivative.sourceRange.durationMs.takeIf { derivative.type == SelectiveDerivativeType.AUDIO }
         )
         derivative.jobId

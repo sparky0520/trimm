@@ -104,12 +104,12 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
 @Serializable @SerialName("add_vfx") data class AddVfx(
     override val id: String = UUID.randomUUID().toString(),
     override val enabled: Boolean = true,
-    val kind: VfxType,
-    val range: TimeRange,
+    val kind: VfxType = VfxType.SINGLE_CLIP,
+    val range: TimeRange? = null,
     val fragmentShader: String,
     val uniforms: Map<String, Float> = emptyMap()
 ) : EditOperation
-@Serializable @SerialName("add_motion_preset") data class AddMotionPreset(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val range: TimeRange, val preset: String, val intensity: Float = .5f) : EditOperation
+@Serializable @SerialName("add_motion_preset") data class AddMotionPreset(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val range: TimeRange? = null, val preset: String, val intensity: Float = .5f) : EditOperation
 
 @Serializable @SerialName("add_captions") data class AddCaptions(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val cues: List<CaptionCue> = emptyList(), val target: OperationTarget? = null, val speakerId: String? = null, val style: String = "bold-bottom") : EditOperation
 

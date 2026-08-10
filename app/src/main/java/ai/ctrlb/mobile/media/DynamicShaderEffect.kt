@@ -75,6 +75,7 @@ class DynamicShaderProgram(
             try { glProgram.setFloatUniform("uProgress", progress) } catch (_: Exception) {}
 
             glProgram.setSamplerTexIdUniform("uTexSampler", inputTexId, 0)
+            glProgram.setBufferAttribute("aFramePosition", floatArrayOf(-1f, -1f, 0f, 1f, 1f, -1f, 0f, 1f, -1f, 1f, 0f, 1f, 1f, 1f, 0f, 1f), 4)
             glProgram.bindAttributesAndUniforms()
             
             GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
@@ -126,6 +127,7 @@ class FallbackShaderProgram(
         try {
             glProgram.use()
             glProgram.setSamplerTexIdUniform("uTexSampler", inputTexId, 0)
+            glProgram.setBufferAttribute("aFramePosition", floatArrayOf(-1f, -1f, 0f, 1f, 1f, -1f, 0f, 1f, -1f, 1f, 0f, 1f, 1f, 1f, 0f, 1f), 4)
             glProgram.bindAttributesAndUniforms()
             GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
         } catch (e: Exception) {

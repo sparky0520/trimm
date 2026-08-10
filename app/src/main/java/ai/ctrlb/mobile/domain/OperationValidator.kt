@@ -2,7 +2,7 @@ package ai.ctrlb.mobile.domain
 
 object OperationValidator {
     fun isRendered(operation: EditOperation): Boolean = when (operation) {
-        is AddVfx, is AddMotionPreset -> false
+        is AddMotionPreset -> false
         else -> true
     }
 
@@ -19,7 +19,8 @@ object OperationValidator {
                 is SetAudioLevels -> "dialogue-levels:${operation.dialogueLufs}:${operation.musicDuckDb}"
 
                 is AddCaptions -> "video-captions:${operation.cues}:${operation.style}"
-                is AddVfx, is AddMotionPreset -> error("Unrendered operation reached render contract")
+                is AddVfx -> "video-vfx:${operation.id}:${operation.kind}:${operation.range}"
+                is AddMotionPreset -> error("Unrendered operation reached render contract")
             }
         }
 
@@ -29,7 +30,8 @@ object OperationValidator {
         is SetAudioLevels -> "Default • ${operation.dialogueLufs.toInt()} LUFS dialogue target"
 
         is AddCaptions -> "Transcript evidence • ${operation.cues.size} timed cues"
-        is AddVfx, is AddMotionPreset -> "Unavailable • not rendered"
+        is AddVfx -> "Custom Shader VFX"
+        is AddMotionPreset -> "Unavailable • not rendered"
     }
 
     fun validate(project: MobileProject, proposed: List<EditOperation>, expectedRevision: Long = project.revision): List<EditOperation> {
@@ -56,6 +58,10 @@ object OperationValidator {
                     matchesSpeaker && matchesTarget
                 }
                 op.copy(cues = CaptionSegmenter.segment(words))
+            } else if (op is AddVfx && op.range == null) {
+                op.copy(range = TimeRange(0, project.durationMs))
+            } else if (op is AddMotionPreset && op.range == null) {
+                op.copy(range = TimeRange(0, project.durationMs))
             } else op
         }
         resolved.forEach { op -> when (op) {
@@ -70,8 +76,8 @@ object OperationValidator {
                 else { require(op.dialogueLufs in -24f..-12f); require(op.musicDuckDb in -18f..-3f) }
                 require(op.attackMs in 0..2_000 && op.releaseMs in 0..5_000); validateTarget(project, op.target)
             }
-            is AddVfx -> { require(op.range.endMs <= project.durationMs); require(op.range.durationMs > 0); require(op.fragmentShader.isNotBlank()) }
-            is AddMotionPreset -> { require(op.range.endMs <= project.durationMs); require(op.intensity in 0f..1f) }
+            is AddVfx -> { require(op.range != null && op.range.endMs <= project.durationMs); require(op.range.durationMs > 0); require(op.fragmentShader.isNotBlank()) }
+            is AddMotionPreset -> { require(op.range != null && op.range.endMs <= project.durationMs); require(op.intensity in 0f..1f) }
 
             is AddCaptions -> { require(op.cues.isNotEmpty()); op.cues.forEach { require(it.range.endMs <= project.durationMs); require(it.text.isNotBlank() && it.text.length <= 120) } }
         } }
