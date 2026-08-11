@@ -22,7 +22,7 @@ const operationSchema = {
     type: {
       type: 'string', enum: [
         'remove_ranges', 'set_color_grade', 'set_audio_levels',
-        'add_captions', 'add_vfx'
+        'add_captions', 'add_vfx', 'add_text_overlay'
       ]
     },
     enabled: { type: 'boolean' },
@@ -192,6 +192,16 @@ const PROPOSE_VFX_TOOL = operationTool(
 },
 );
 
+const PROPOSE_TEXT_OVERLAY_TOOL = operationTool(
+  'propose_add_text_overlay',
+  'Generate a native text overlay with dynamic graphics (like a comic book "BANG", title cards, or floating text). Describe the desired effect and text in the description.',
+  ['sourceId', 'startMs', 'endMs', 'text', 'description', 'reason'], {
+  ...targetRangeProperties,
+  text: { type: 'string' },
+  description: { type: 'string' },
+},
+);
+
 const colorAdjustmentTool = (parameter, minimum, maximum) => operationTool(
   `propose_adjust_${parameter.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)}`,
   `Adjust only ${parameter} in one exact source interval, based on cited visual evidence.`,
@@ -257,7 +267,7 @@ const AGENT_TOOLS = Object.freeze([
   INSPECT_VIDEO_RANGE_TOOL,
   PROPOSE_REMOVE_RANGES_TOOL,
   PROPOSE_DIALOGUE_LOUDNESS_TOOL, PROPOSE_MUSIC_DUCKING_TOOL,
-  PROPOSE_CAPTIONS_TOOL, PROPOSE_VFX_TOOL, ...PROPOSE_COLOR_TOOLS,
+  PROPOSE_CAPTIONS_TOOL, PROPOSE_VFX_TOOL, PROPOSE_TEXT_OVERLAY_TOOL, ...PROPOSE_COLOR_TOOLS,
   ASK_CLARIFICATION_TOOL, FINALIZE_EDIT_PROGRAM_TOOL,
   REMOVE_DRAFT_OPERATION_TOOL, FINISH_WITHOUT_PROPOSAL_TOOL,
 ]);

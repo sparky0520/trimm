@@ -3,7 +3,7 @@
 const { validateContextualSpeechDecision } = require('./contextual-speech.cjs');
 const ALLOWED_OPERATIONS = new Set([
   'remove_ranges', 'set_color_grade', 'set_audio_levels',
-  'add_sound_effect', 'set_background_music', 'add_captions', 'add_vfx'
+  'add_sound_effect', 'set_background_music', 'add_captions', 'add_vfx', 'add_text_overlay'
 ]);
 const MAX_VIDEO_RANGE_MS = 30_000;
 const FORBIDDEN_KEYS = new Set([
@@ -28,7 +28,9 @@ If the transcript is empty, assume there is no speech in the video and focus exc
 Every edit operation must cite supplied evidence IDs and include confidence from 0 to 1.
 Do not invent evidence. When evidence is missing or uncertain, request bounded evidence, clarify, or fall back.
 Use fine tools: one effect, one exact range, and one bounded parameter set per call. Never ask a tool to scan or choose its own settings.
-Supported rendered operations: remove_ranges, set_color_grade, set_audio_levels, add_captions, add_vfx.
+Supported rendered operations: remove_ranges, set_color_grade, set_audio_levels, add_captions, add_vfx, add_text_overlay.
+
+When the user asks for a native text overlay, title card, or animated graphics containing text (e.g. "comic book BANG effect"), use the propose_add_text_overlay tool.
 
 When the user asks for a visual effect, filter, or transition, use the propose_vfx tool. The tool will delegate to a specialized shader subagent to write GLSL.
 - If the user asks for a "filter", "after effect", or visual style applied to a single clip, use vfxType="SINGLE_CLIP".
@@ -56,6 +58,7 @@ const PROPOSAL_TOOL_TYPES = Object.freeze({
   propose_adjust_shadows: 'set_color_grade',
   propose_adjust_skin_protection: 'set_color_grade',
   propose_vfx: 'add_vfx',
+  propose_add_text_overlay: 'add_text_overlay',
 });
 
 function fineOperationFor(call, operationType, inventory) {
@@ -91,6 +94,14 @@ function fineOperationFor(call, operationType, inventory) {
   }
   if (call.name === 'propose_vfx') {
     return { ...common, vfxType: raw.vfxType, description: raw.description, fragmentShader: raw.fragmentShader || '', uniforms: raw.uniforms || {} };
+  }
+  if (call.name === 'propose_add_text_overlay') {
+    return { 
+      ...common, 
+      text: raw.text, 
+      description: raw.description, 
+      designBlueprint: raw.designBlueprint
+    };
   }
 
   return common;
@@ -412,6 +423,14 @@ function validateEditProgram(decision, inventory, observations) {
         throw orchestrationError('VFX fragment shader is required.', 422, 'invalid_edit_program');
       }
     }
+    if (operation.type === 'add_text_overlay') {
+      if (typeof operation.text !== 'string' || !operation.text.trim()) {
+        throw orchestrationError('Text overlay requires text.', 422, 'invalid_edit_program');
+      }
+      if (typeof operation.designBlueprint !== 'string' || !operation.designBlueprint.trim()) {
+        throw orchestrationError('Text overlay requires a designBlueprint.', 422, 'invalid_edit_program');
+      }
+    }
 
   }
   for (const operation of decision.operations.filter((item) => item.type === 'set_color_grade' && item.parameter === 'skinProtection')) {
@@ -618,6 +637,19 @@ class Layer2Orchestrator {
              compileError: rawOp.compileError
            });
            args.operation = { ...rawOp, fragmentShader: glslResult.fragmentShader, uniforms: glslResult.uniforms };
+        }
+        
+        if (call.name === 'propose_add_text_overlay') {
+           if (typeof this.decide.generateTextOverlayConfig !== 'function') throw orchestrationError('Text overlay subagent is not available.', 501, 'unsupported_tool_call');
+           const rawOp = args.operation || {};
+           const configResult = await this.decide.generateTextOverlayConfig({
+             description: rawOp.description,
+             text: rawOp.text
+           });
+           args.operation = { 
+             ...rawOp, 
+             designBlueprint: JSON.stringify(configResult)
+           };
         }
 
         const operation = fineOperationFor(call, operationType, workingInventory);

@@ -180,6 +180,88 @@ Return a JSON object with:
     }
   };
 
+  decide.generateTextOverlayConfig = async ({ description, text }) => {
+    const prompt = `You are an AI video editor designing a native text overlay with vector graphics.
+Your goal is to parse the user's description and generate a JSON blueprint (Generative Canvas DSL).
+This blueprint defines the background shapes (rectangles, circles, starbursts), text styling, and layout.
+
+Target text to display: "${text}"
+Effect description: ${description}
+
+Examples of descriptions to blueprints:
+
+Description: "comic book BANG effect in the top left"
+Output: {
+  "backgroundShapes": [
+    { "type": "starburst", "color": "#FFFF00", "strokeColor": "#FF0000", "strokeWidth": 20, "points": 16, "innerRadius": 250, "outerRadius": 450, "width": 0, "height": 0, "cornerRadius": 0 }
+  ],
+  "textStyle": { "color": "#000000", "strokeColor": "#FFFFFF", "strokeWidth": 12, "shadowRadius": 0, "shadowColor": "" },
+  "layout": { "posX": -0.8, "posY": -0.8, "scale": 1.5, "rotation": -15.0 }
+}
+
+Description: "elegant title card floating at the bottom"
+Output: {
+  "backgroundShapes": [
+    { "type": "rectangle", "color": "#80000000", "strokeColor": "", "strokeWidth": 0, "points": 0, "innerRadius": 0, "outerRadius": 0, "width": 800, "height": 200, "cornerRadius": 20 }
+  ],
+  "textStyle": { "color": "#FFFFFF", "strokeColor": "", "strokeWidth": 0, "shadowRadius": 10, "shadowColor": "#000000" },
+  "layout": { "posX": 0.0, "posY": 0.7, "scale": 1.0, "rotation": 0.0 }
+}
+
+Return ONLY a JSON blueprint matching the schema.`;
+
+    const response = await generate({
+      systemPolicy: "You are a Generative Canvas DSL design agent.",
+      contents: prompt,
+      temperature: 0.4,
+      purpose: 'text_overlay_generation',
+      tools: false,
+      responseJsonSchema: {
+        type: 'object', properties: {
+          backgroundShapes: {
+            type: 'array', items: {
+              type: 'object', properties: {
+                type: { type: 'string', description: 'rectangle, circle, or starburst' },
+                color: { type: 'string', description: 'Hex color, e.g. #FFFF00 or #80000000' },
+                strokeColor: { type: 'string' },
+                strokeWidth: { type: 'number' },
+                points: { type: 'integer' },
+                innerRadius: { type: 'number' },
+                outerRadius: { type: 'number' },
+                width: { type: 'number' },
+                height: { type: 'number' },
+                cornerRadius: { type: 'number' }
+              }, required: ['type', 'color', 'strokeColor', 'strokeWidth', 'points', 'innerRadius', 'outerRadius', 'width', 'height', 'cornerRadius']
+            }
+          },
+          textStyle: {
+            type: 'object', properties: {
+              color: { type: 'string' },
+              strokeColor: { type: 'string' },
+              strokeWidth: { type: 'number' },
+              shadowRadius: { type: 'number' },
+              shadowColor: { type: 'string' }
+            }, required: ['color', 'strokeColor', 'strokeWidth', 'shadowRadius', 'shadowColor']
+          },
+          layout: {
+            type: 'object', properties: {
+              posX: { type: 'number' },
+              posY: { type: 'number' },
+              scale: { type: 'number' },
+              rotation: { type: 'number' }
+            }, required: ['posX', 'posY', 'scale', 'rotation']
+          }
+        }, required: ['backgroundShapes', 'textStyle', 'layout']
+      }
+    });
+
+    try {
+      return JSON.parse(response.rawText);
+    } catch (e) {
+      throw Object.assign(new Error("Failed to parse text overlay subagent response"), { code: 'text_overlay_subagent_error' });
+    }
+  };
+
   return decide;
 }
 
