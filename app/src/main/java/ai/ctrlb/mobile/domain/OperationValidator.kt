@@ -20,6 +20,7 @@ object OperationValidator {
 
                 is AddCaptions -> "video-captions:${operation.cues}:${operation.style}"
                 is AddVfx -> "video-vfx:${operation.id}:${operation.kind}:${operation.range}"
+                is AddTextOverlay -> "video-text-overlay:${operation.id}:${operation.text}"
                 is AddMotionPreset -> error("Unrendered operation reached render contract")
             }
         }
@@ -31,6 +32,7 @@ object OperationValidator {
 
         is AddCaptions -> "Transcript evidence • ${operation.cues.size} timed cues"
         is AddVfx -> "Custom Shader VFX"
+        is AddTextOverlay -> "Custom Text Overlay Graphics"
         is AddMotionPreset -> "Unavailable • not rendered"
     }
 
@@ -80,6 +82,7 @@ object OperationValidator {
             is AddMotionPreset -> { require(op.range != null && op.range.endMs <= project.durationMs); require(op.intensity in 0f..1f) }
 
             is AddCaptions -> { require(op.cues.isNotEmpty()); op.cues.forEach { require(it.range.endMs <= project.durationMs); require(it.text.isNotBlank() && it.text.length <= 120) } }
+            is AddTextOverlay -> { require(op.text.isNotBlank()); validateTarget(project, op.target) }
         } }
         return resolved
     }

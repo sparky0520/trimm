@@ -135,6 +135,27 @@ object ExportCoordinator {
                 }
             }
         }
+
+        // Add Native Text Overlays
+        project.operations.filterIsInstance<AddTextOverlay>().filter { it.enabled }.forEach { textOverlay ->
+            val range = textOverlay.target?.let { TimeRange(it.startMs, it.endMs) }
+            if (range != null) {
+                val outputStart = timelineMapper.sourceToOutput(range.startMs)
+                val outputEnd = timelineMapper.sourceToOutput(range.endMs)
+                if (outputEnd > outputStart) {
+                    videoEffects += OverlayEffect(
+                        listOf(
+                            TextGraphicOverlay(
+                                text = textOverlay.text,
+                                blueprintJson = textOverlay.designBlueprint,
+                                startMs = outputStart,
+                                endMs = outputEnd
+                            )
+                        )
+                    )
+                }
+            }
+        }
         val sequences = mutableListOf(sequence)
 
         return Composition.Builder(sequences).setEffects(Effects(emptyList(), videoEffects)).build()
