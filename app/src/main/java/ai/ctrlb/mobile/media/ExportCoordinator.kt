@@ -146,6 +146,7 @@ object ExportCoordinator {
                     videoEffects += OverlayEffect(
                         listOf(
                             TextGraphicOverlay(
+                                context = context,
                                 text = textOverlay.text,
                                 blueprintJson = textOverlay.designBlueprint,
                                 startMs = outputStart,

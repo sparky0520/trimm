@@ -7,15 +7,19 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Typeface
 import android.util.Pair
+import android.content.Context
+import androidx.core.content.res.ResourcesCompat
 import androidx.media3.common.OverlaySettings
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.BitmapOverlay
 import org.json.JSONObject
+import ai.ctrlb.mobile.R
 import kotlin.math.cos
 import kotlin.math.sin
 
 @UnstableApi
 class TextGraphicOverlay(
+    private val context: Context,
     private val text: String,
     private val blueprintJson: String,
     private val startMs: Long,
@@ -139,11 +143,20 @@ class TextGraphicOverlay(
             val tStrokeWidth = textStyle?.optDouble("strokeWidth", 0.0)?.toFloat() ?: 0f
             val tShadowRadius = textStyle?.optDouble("shadowRadius", 0.0)?.toFloat() ?: 0f
             val tShadowColor = parseColor(textStyle?.optString("shadowColor"), Color.TRANSPARENT)
+            val fontFamily = textStyle?.optString("fontFamily") ?: "plain"
+
+            val tf = when (fontFamily) {
+                "comic" -> ResourcesCompat.getFont(context, R.font.bangers)
+                "neon" -> ResourcesCompat.getFont(context, R.font.orbitron)
+                "typewriter" -> ResourcesCompat.getFont(context, R.font.special_elite)
+                "elegant" -> ResourcesCompat.getFont(context, R.font.pacifico)
+                else -> ResourcesCompat.getFont(context, R.font.roboto)
+            } ?: Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
 
             paint.style = Paint.Style.FILL
             paint.color = tColor
             paint.textSize = 120f
-            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.typeface = tf
             paint.textAlign = Paint.Align.CENTER
             
             if (tShadowRadius > 0 && tShadowColor != Color.TRANSPARENT) {
@@ -161,7 +174,7 @@ class TextGraphicOverlay(
                 outlinePaint.strokeWidth = tStrokeWidth
                 outlinePaint.color = tStrokeColor
                 outlinePaint.textSize = 120f
-                outlinePaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                outlinePaint.typeface = tf
                 outlinePaint.textAlign = Paint.Align.CENTER
                 canvas.drawText(text, cx, textY, outlinePaint)
             }
