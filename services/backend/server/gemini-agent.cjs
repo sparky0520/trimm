@@ -195,7 +195,7 @@ Output: {
   "backgroundShapes": [
     { "type": "starburst", "color": "#FFFF00", "strokeColor": "#FF0000", "strokeWidth": 20, "points": 16, "innerRadius": 250, "outerRadius": 450, "width": 0, "height": 0, "cornerRadius": 0 }
   ],
-  "textStyle": { "color": "#000000", "strokeColor": "#FFFFFF", "strokeWidth": 12, "shadowRadius": 0, "shadowColor": "" },
+  "textStyle": { "color": "#000000", "strokeColor": "#FFFFFF", "strokeWidth": 12, "shadowRadius": 0, "shadowColor": "", "fontFamily": "comic" },
   "layout": { "posX": -0.8, "posY": -0.8, "scale": 1.5, "rotation": -15.0 }
 }
 
@@ -204,7 +204,7 @@ Output: {
   "backgroundShapes": [
     { "type": "rectangle", "color": "#80000000", "strokeColor": "", "strokeWidth": 0, "points": 0, "innerRadius": 0, "outerRadius": 0, "width": 800, "height": 200, "cornerRadius": 20 }
   ],
-  "textStyle": { "color": "#FFFFFF", "strokeColor": "", "strokeWidth": 0, "shadowRadius": 10, "shadowColor": "#000000" },
+  "textStyle": { "color": "#FFFFFF", "strokeColor": "", "strokeWidth": 0, "shadowRadius": 10, "shadowColor": "#000000", "fontFamily": "elegant" },
   "layout": { "posX": 0.0, "posY": 0.7, "scale": 1.0, "rotation": 0.0 }
 }
 
@@ -240,8 +240,9 @@ Return ONLY a JSON blueprint matching the schema.`;
               strokeColor: { type: 'string' },
               strokeWidth: { type: 'number' },
               shadowRadius: { type: 'number' },
-              shadowColor: { type: 'string' }
-            }, required: ['color', 'strokeColor', 'strokeWidth', 'shadowRadius', 'shadowColor']
+              shadowColor: { type: 'string' },
+              fontFamily: { type: 'string', description: 'Choose from: comic, neon, typewriter, elegant, plain' }
+            }, required: ['color', 'strokeColor', 'strokeWidth', 'shadowRadius', 'shadowColor', 'fontFamily']
           },
           layout: {
             type: 'object', properties: {
