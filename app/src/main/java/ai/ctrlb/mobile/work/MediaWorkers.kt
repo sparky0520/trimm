@@ -204,9 +204,9 @@ class ExportWorker(context: Context, params: WorkerParameters) : ProgressWorker(
         val output = java.io.File(applicationContext.filesDir, "exports/${project.id}.mp4")
         ExportCoordinator.export(applicationContext, renderProject, output)
         val values = ContentValues().apply {
-            put(MediaStore.Video.Media.DISPLAY_NAME, "ctrlb-${project.id.take(8)}.mp4")
+            put(MediaStore.Video.Media.DISPLAY_NAME, "trimm-${project.id.take(8)}.mp4")
             put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-            put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/ctrlB")
+            put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/Trimm")
             put(MediaStore.Video.Media.IS_PENDING, 1)
         }
         val published = requireNotNull(applicationContext.contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values))

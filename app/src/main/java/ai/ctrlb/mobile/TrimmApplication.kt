@@ -3,7 +3,7 @@ package ai.ctrlb.mobile
 import android.app.Application
 import com.clerk.api.Clerk
 
-class CtrlBApplication : Application() {
+class TrimmApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         if (BuildConfig.CLERK_PUBLISHABLE_KEY.isNotBlank()) {

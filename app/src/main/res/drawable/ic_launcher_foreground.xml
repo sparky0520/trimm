@@ -6,7 +6,7 @@
     <group android:pivotX="32" android:pivotY="32" android:scaleX="1.13" android:scaleY="1.13">
         <path
             android:pathData="M18,9 L36,9 C46,9 51,14 51,22 C51,27 48,31 44,32 C50,34 53,38 53,44 C53,52 47,56 36,56 L18,56 Z M27,18 L27,28 L35,28 C40,28 42,26 42,23 C42,20 40,18 35,18 Z M27,37 L27,48 L36,48 C41,48 44,46 44,42.5 C44,39 41,37 36,37 Z"
-            android:fillColor="#D8FF55"
+            android:fillColor="#FAFAFA"
             android:fillType="evenOdd"/>
     </group>
 </vector>

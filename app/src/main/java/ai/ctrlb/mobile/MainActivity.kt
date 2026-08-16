@@ -36,12 +36,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -67,17 +64,18 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-private val Ink = Color(0xFF0B0B0D)
-private val Workspace = Color(0xFF141418)
-private val Raised = Color(0xFF1E1E23)
-private val Border = Color(0xFF29282F)
-private val Cream = Color(0xFFF6F5F2)
-private val CreamRaised = Color(0xFFF6F5F2)
-private val DarkText = Color(0xFF111111)
-private val Muted = Color(0xFF9D9CA4)
-private val Coral = Color(0xFFD8FF55)
-private val Lavender = Color(0xFFD8FF55)
-private val Green = Color(0xFF6FD49A)
+// Trimm's deliberately restrained, shadcn-inspired dark palette.
+private val Ink = Color(0xFF09090B)
+private val Workspace = Color(0xFF18181B)
+private val Raised = Color(0xFF27272A)
+private val Border = Color(0xFF3F3F46)
+private val Cream = Color(0xFFFAFAFA)
+private val CreamRaised = Color(0xFFF4F4F5)
+private val DarkText = Color(0xFF09090B)
+private val Muted = Color(0xFFA1A1AA)
+private val Coral = Color(0xFFFAFAFA)
+private val Lavender = Color(0xFFD4D4D8)
+private val Green = Color(0xFFE4E4E7)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -98,7 +96,7 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch { Clerk.auth.handle(intent.data) }
         }
         enableEdgeToEdge()
-        setContent { CtrlBTheme { Surface(Modifier.fillMaxSize(), color = Ink) { CtrlBApp() } } }
+        setContent { TrimmTheme { Surface(Modifier.fillMaxSize(), color = Ink) { TrimmApp() } } }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -110,7 +108,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable private fun CtrlBApp(vm: EditorViewModel = viewModel()) {
+@Composable private fun TrimmApp(vm: EditorViewModel = viewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     when {
         state.source == null -> ImportScreen(vm::import)
@@ -140,13 +138,12 @@ class MainActivity : ComponentActivity() {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
-            buildAnnotatedString {
-                withStyle(SpanStyle(color = Cream, fontWeight = FontWeight.Bold)) { append("ctrl") }
-                withStyle(SpanStyle(color = Coral, fontWeight = FontWeight.ExtraBold)) { append("B") }
-            },
+            "Trimm",
+            color = Cream,
             fontFamily = FontFamily.SansSerif,
             fontSize = 24.sp,
-            letterSpacing = (-1.2).sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = (-1).sp,
             maxLines = 1,
         )
         Spacer(Modifier.weight(1f))
@@ -187,15 +184,15 @@ class MainActivity : ComponentActivity() {
         Dialog(onDismissRequest = { showSignIn = false }) {
             Surface(
                 Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                color = CreamRaised,
+                shape = RoundedCornerShape(12.dp),
+                color = Workspace,
             ) {
                 Box(Modifier.padding(12.dp)) {
                     AuthView()
                     TextButton(
                         onClick = { showSignIn = false },
                         modifier = Modifier.align(Alignment.TopEnd),
-                    ) { Text("Close", color = DarkText) }
+                    ) { Text("Close", color = Cream) }
                 }
             }
         }
@@ -206,14 +203,13 @@ class MainActivity : ComponentActivity() {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { if (it.isNotEmpty()) onImport(it) }
     Column(Modifier.fillMaxSize().background(Ink)) {
         BrandBar()
-        Box(Modifier.fillMaxSize().padding(12.dp).background(Workspace, RoundedCornerShape(20.dp)).border(1.dp, Border, RoundedCornerShape(20.dp))) {
+        Box(Modifier.fillMaxSize().padding(12.dp).background(Workspace, RoundedCornerShape(12.dp)).border(1.dp, Border, RoundedCornerShape(12.dp))) {
             Column(Modifier.align(Alignment.Center).padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(82.dp).background(Lavender, RoundedCornerShape(24.dp)), contentAlignment = Alignment.Center) {
-                    Text("▶", color = Ink, fontSize = 27.sp)
-                    Box(Modifier.size(10.dp).align(Alignment.TopEnd).offset(12.dp, (-10).dp).background(Coral))
+                Box(Modifier.size(72.dp).background(Raised, RoundedCornerShape(12.dp)).border(1.dp, Border, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                    Text("T", color = Cream, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
                 }
                 Spacer(Modifier.height(30.dp))
-                Text("YOUR NEXT STORY STARTS HERE", color = Coral, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
+                Text("START A NEW EDIT", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
                 Spacer(Modifier.height(10.dp))
                 Text("Turn a rough recording\ninto something worth sharing.", color = CreamRaised, fontSize = 27.sp,
                     lineHeight = 32.sp, fontWeight = FontWeight.Bold)
@@ -222,10 +218,10 @@ class MainActivity : ComponentActivity() {
                 Spacer(Modifier.height(28.dp))
                 Button(onClick = { launcher.launch(arrayOf("video/*")) }, modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText)) {
-                    Text("Import your clips  →", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 5.dp))
+                    Text("Import clips", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 5.dp))
                 }
                 Spacer(Modifier.height(12.dp))
-                Text("MP4  •  MOV  •  WEBM    |    ON-DEVICE WORKSPACE", color = Muted, fontSize = 9.sp, letterSpacing = .8.sp)
+                Text("MP4 · MOV · WEBM  |  ON-DEVICE WORKSPACE", color = Muted, fontSize = 9.sp, letterSpacing = .8.sp)
             }
         }
     }
@@ -258,7 +254,7 @@ class MainActivity : ComponentActivity() {
                 Column(
                     Modifier.fillMaxWidth(.88f).background(Raised, RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp)).padding(14.dp)
                 ) {
-                    Text("ctrlB", color = Lavender, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    Text("Trimm", color = Lavender, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                     Spacer(Modifier.height(4.dp))
                     Text(
                         "I have ${state.sources.size} clip${if (state.sources.size == 1) "" else "s"}. What should the finished video feel like? Mention the audience, length, format, captions, music, or anything that must stay.",
@@ -416,7 +412,7 @@ private sealed interface ChatElement {
                         val turn = element.turn
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             UserChatBubble(turn.request)
-                            AssistantChatBubble(accent = if (turn.isError) Color(0xFFFF6B6B) else Lavender) {
+                            AssistantChatBubble(accent = if (turn.isError) Color(0xFFE4E4E7) else Lavender) {
                                 when {
                                     turn.isPending -> {
                                         Row(
@@ -429,7 +425,7 @@ private sealed interface ChatElement {
                                     }
                                     turn.isError -> {
                                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Text(formatUserFacingError(turn.response), color = Color(0xFFFF8888), lineHeight = 20.sp, fontSize = 13.sp)
+                                            Text(formatUserFacingError(turn.response), color = CreamRaised, lineHeight = 20.sp, fontSize = 13.sp)
                                             Button(
                                                 onClick = { retryTurn(turn.id) },
                                                 shape = RoundedCornerShape(8.dp),
@@ -553,7 +549,7 @@ private sealed interface ChatElement {
                         value = request,
                         onValueChange = { request = it.take(2_000) },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("Ask ctrlB for changes or edits…") },
+                        placeholder = { Text("Ask Trimm for changes or edits…") },
                         maxLines = 5,
                         shape = RoundedCornerShape(16.dp),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -637,9 +633,9 @@ private fun formatUserFacingError(raw: String): String {
 @Composable private fun UserChatBubble(text: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         Surface(
-            color = Color(0xFF2E2E38),
-            shape = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp),
-            border = BorderStroke(1.dp, Color(0xFF3E3E4C)),
+            color = Raised,
+            shape = RoundedCornerShape(12.dp, 12.dp, 4.dp, 12.dp),
+            border = BorderStroke(1.dp, Border),
             modifier = Modifier.widthIn(max = 320.dp)
         ) {
             Text(
@@ -656,10 +652,10 @@ private fun formatUserFacingError(raw: String): String {
 @Composable private fun AssistantChatBubble(accent: Color = Lavender, content: @Composable ColumnScope.() -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
         Column(
-            Modifier.fillMaxWidth(.92f).background(Raised, RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp))
-                .border(1.dp, Border, RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp)).padding(14.dp)
+            Modifier.fillMaxWidth(.92f).background(Raised, RoundedCornerShape(4.dp, 12.dp, 12.dp, 12.dp))
+                .border(1.dp, Border, RoundedCornerShape(4.dp, 12.dp, 12.dp, 12.dp)).padding(14.dp)
         ) {
-            Text("ctrlB", color = accent, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            Text("Trimm", color = accent, fontWeight = FontWeight.Bold, fontSize = 11.sp)
             Spacer(Modifier.height(5.dp))
             content()
         }
@@ -779,7 +775,7 @@ private fun formatUserFacingError(raw: String): String {
 }
 
 @Composable private fun EditorialReadCard(read: EditorialRead) {
-    ReviewSurface("WHAT CTRLB FOUND", "Editorial read") {
+    ReviewSurface("WHAT TRIMM FOUND", "Editorial read") {
         ReviewSection("Likely story", read.likelyStory.ifEmpty { listOf("No evidence-backed spoken story was identified.") })
         ReviewSection("Repeated takes", read.repeatedTakes.map { comparison ->
             "“${comparison.sentence}” — ${comparison.alternatives.size + 1} take(s), ${reviewPercent(comparison.confidence)} confidence"
@@ -1050,7 +1046,7 @@ private fun formatDuration(ms: Long): String = "%d:%02d".format(ms / 60_000, (ms
 private fun operationTitle(op: EditOperation) = when (op) { is RemoveRanges -> "Range removal"; is SetColorGrade -> "Frame-based color"; is SetAudioLevels -> "Dialogue leveling"; is AddVfx -> if (op.kind == VfxType.DUAL_CLIP) "Transition" else "Filter"; is AddMotionPreset -> "Motion preset"; is AddCaptions -> "Captions"; is AddTextOverlay -> "Text overlay" }
 private fun operationDetail(op: EditOperation) = when (op) { is RemoveRanges -> "${op.ranges.size} range cuts"; is SetColorGrade -> "Natural, skin-safe grade"; is SetAudioLevels -> "${op.dialogueLufs.toInt()} LUFS dialogue"; is AddVfx -> "Custom Shader"; is AddMotionPreset -> op.preset; is AddCaptions -> "${op.cues.size} timed caption cards"; is AddTextOverlay -> "Generated Graphics" }
 
-@Composable private fun CtrlBTheme(content: @Composable () -> Unit) = MaterialTheme(
+@Composable private fun TrimmTheme(content: @Composable () -> Unit) = MaterialTheme(
     colorScheme = darkColorScheme(primary = Coral, secondary = Lavender, background = Ink, surface = Workspace, onSurface = CreamRaised, outline = Border),
     typography = Typography(
         headlineMedium = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = (-1).sp),

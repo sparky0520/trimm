@@ -122,7 +122,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun generateDraft(prompt: String, words: List<TranscriptWord> = emptyList()) {
         val current = mutable.value; val sources = current.sources
         val brief = prompt.trim().take(2_000)
-        require(brief.isNotEmpty()) { "Tell ctrlB what you want to make." }
+        require(brief.isNotEmpty()) { "Tell Trimm what you want to make." }
         val source = requireNotNull(sources.firstOrNull())
         val preferences = preferencesFromBrief(brief, current.preferences)
             .copy(aspectRatio = source.detectedAspectRatio())
@@ -251,7 +251,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val pendingTurn = EditorialConversationTurn(
             id = turnId,
             request = text,
-            response = "ctrlB is thinking…",
+            response = "Trimm is thinking…",
             isPending = true,
             isError = false
         )
@@ -310,7 +310,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val updatedProject = project.copy(
             analysis = project.analysis.copy(
                 revisionConversation = project.analysis.revisionConversation.map {
-                    if (it.id == turnId) it.copy(response = "ctrlB is thinking…", isPending = true, isError = false) else it
+                    if (it.id == turnId) it.copy(response = "Trimm is thinking…", isPending = true, isError = false) else it
                 }
             )
         )
@@ -526,7 +526,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             
             val info = awaitWork(manager, request.id)
             if (info.state == WorkInfo.State.CANCELLED) return@launch
-            android.widget.Toast.makeText(getApplication(), if (info.state == WorkInfo.State.SUCCEEDED) "Export saved to Movies/ctrlB" else "Export failed: ${info.outputData.getString("error") ?: info.state}", android.widget.Toast.LENGTH_LONG).show() 
+            android.widget.Toast.makeText(getApplication(), if (info.state == WorkInfo.State.SUCCEEDED) "Export saved to Movies/Trimm" else "Export failed: ${info.outputData.getString("error") ?: info.state}", android.widget.Toast.LENGTH_LONG).show()
         }
     } }
     private fun updateProject(project: MobileProject, preview: Boolean = false) { mutable.value = mutable.value.copy(project = project, creatorPreferences = project.creatorPreferences); viewModelScope.launch { store.save(project); if (preview) renderPreview(project) } }

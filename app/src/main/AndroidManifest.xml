@@ -4,9 +4,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <application android:name=".CtrlBApplication" android:allowBackup="false" android:label="ctrlB"
+    <application android:name=".TrimmApplication" android:allowBackup="false" android:label="Trimm"
         android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher"
-        android:theme="@style/Theme.CtrlB">
+        android:theme="@style/Theme.Trimm">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

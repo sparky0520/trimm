@@ -1,9 +1,9 @@
 <resources>
-    <style name="Theme.CtrlB" parent="android:style/Theme.Material.NoActionBar">
+    <style name="Theme.Trimm" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#D8FF55</item>
-        <item name="android:navigationBarColor">#0B0B0D</item>
+        <item name="android:colorAccent">#FAFAFA</item>
+        <item name="android:navigationBarColor">#09090B</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:statusBarColor">#0B0B0D</item>
+        <item name="android:statusBarColor">#09090B</item>
     </style>
 </resources>
