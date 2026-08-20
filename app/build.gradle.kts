@@ -76,6 +76,12 @@ android {
             buildConfigField("boolean", "FORCE_4K_EXPORT", force4kExport.toString())
         }
         release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig = signingConfigs.getByName("release")
             buildConfigField("String", "PLANNER_TOKEN", "\"\"")
             buildConfigField("boolean", "FORCE_4K_EXPORT", "false")
