@@ -504,8 +504,9 @@ class Layer2Orchestrator {
     const inventory = validateInventory(payload);
     if (inventory.evidenceJobIds.length) return null;
     const source = inventory.sources[0];
+    const maxAllowed = Math.min(MAX_VIDEO_RANGE_MS, inventory.budgets.maximumDurationMs);
     const job = await this.authorizeVideo(principal, inventory, {
-      source, startMs: 0, endMs: Math.min(source.durationMs, MAX_VIDEO_RANGE_MS), resolution: 'LOW', uncertainty: '',
+      source, startMs: 0, endMs: Math.min(source.durationMs, maxAllowed), resolution: 'LOW', uncertainty: '',
     }, 'request_selected');
     return { type: 'tool_request', tool: 'inspect_video_range', jobs: [job], bootstrap: true };
   }
