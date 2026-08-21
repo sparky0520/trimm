@@ -180,15 +180,11 @@ const PROPOSE_CAPTIONS_TOOL = operationTool(
 },
 );
 
-const PROPOSE_VFX_TOOL = operationTool(
-  'propose_vfx',
-  'Generate a custom visual effect (e.g. filter, stylistic effect) or transition using AI-generated GLSL. Send previousCode and compileError to fix compilation issues.',
-  ['sourceId', 'startMs', 'endMs', 'vfxType', 'description', 'reason'], {
-  ...targetRangeProperties,
-  vfxType: { type: 'string', enum: ['SINGLE_CLIP', 'DUAL_CLIP'] },
-  description: { type: 'string' },
-  previousCode: { type: 'string' },
-  compileError: { type: 'string' }
+const PROPOSE_ASPECT_RATIO_TOOL = operationTool(
+  'propose_set_aspect_ratio',
+  'Change the aspect ratio of the video (e.g., to vertical, landscape, or square).',
+  ['ratio', 'reason'], {
+  ratio: { type: 'string', enum: ['PORTRAIT', 'LANDSCAPE', 'SQUARE'] },
 },
 );
 
@@ -267,7 +263,7 @@ const AGENT_TOOLS = Object.freeze([
   INSPECT_VIDEO_RANGE_TOOL,
   PROPOSE_REMOVE_RANGES_TOOL,
   PROPOSE_DIALOGUE_LOUDNESS_TOOL, PROPOSE_MUSIC_DUCKING_TOOL,
-  PROPOSE_CAPTIONS_TOOL, PROPOSE_VFX_TOOL, PROPOSE_TEXT_OVERLAY_TOOL, ...PROPOSE_COLOR_TOOLS,
+  PROPOSE_CAPTIONS_TOOL, PROPOSE_ASPECT_RATIO_TOOL, PROPOSE_TEXT_OVERLAY_TOOL, ...PROPOSE_COLOR_TOOLS,
   ASK_CLARIFICATION_TOOL, FINALIZE_EDIT_PROGRAM_TOOL,
   REMOVE_DRAFT_OPERATION_TOOL, FINISH_WITHOUT_PROPOSAL_TOOL,
 ]);

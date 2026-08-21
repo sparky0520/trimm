@@ -149,44 +149,7 @@ Return only the corrected JSON object.`,
     tools: false,
   });
 
-  decide.generateGlsl = async ({ description, vfxType, previousCode, compileError }) => {
-    const prompt = `You are an expert OpenGL ES 3.0 shader developer.
-Create a custom fragment shader for an AndroidX Media3 GlEffect.
-The video frames are provided as a uniform sampler2D uTexSampler, and the sampling coordinate is in vec2 vTexSamplingCoord.
-Output the color to out vec4 outColor.
-You also have uTime (float, seconds since presentation started) and uProgress (float, 0.0 to 1.0 progress within the effect's time range).
-You can also define custom uniform floats and provide their values.
 
-Target description: ${description}
-VfxType: ${vfxType}
-
-${previousCode ? `The previous code failed to compile:\n\n${previousCode}\n\nError: ${compileError}\n\nPlease fix the shader.` : ''}
-
-Return a JSON object with:
-- fragmentShader: The GLSL shader code string.
-- uniforms: A map of string to float containing any custom uniforms you used.`;
-
-    const response = await generate({
-      systemPolicy: "You write GLSL shaders.",
-      contents: prompt,
-      temperature: 0.2,
-      purpose: 'vfx_shader_generation',
-      tools: false,
-      responseJsonSchema: {
-        type: 'object', properties: {
-          fragmentShader: { type: 'string' },
-          uniforms: { type: 'object', additionalProperties: { type: 'number' } }
-        }, required: ['fragmentShader', 'uniforms']
-      }
-    });
-
-    try {
-      const parsed = JSON.parse(response.rawText);
-      return parsed;
-    } catch (e) {
-      throw Object.assign(new Error("Failed to parse GLSL subagent response"), { code: 'glsl_subagent_error' });
-    }
-  };
 
   decide.generateTextOverlayConfig = async ({ description, text }) => {
     const prompt = `You are an AI video editor designing a native text overlay with vector graphics.

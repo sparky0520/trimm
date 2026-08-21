@@ -3,7 +3,7 @@
 const { validateContextualSpeechDecision } = require('./contextual-speech.cjs');
 const ALLOWED_OPERATIONS = new Set([
   'remove_ranges', 'set_color_grade', 'set_audio_levels',
-  'add_sound_effect', 'set_background_music', 'add_captions', 'add_vfx', 'add_text_overlay'
+  'add_sound_effect', 'set_background_music', 'add_captions', 'set_aspect_ratio', 'add_text_overlay'
 ]);
 const MAX_VIDEO_RANGE_MS = 30_000;
 const FORBIDDEN_KEYS = new Set([
@@ -28,21 +28,16 @@ If the transcript is empty, assume there is no speech in the video and focus exc
 Every edit operation must cite supplied evidence IDs and include confidence from 0 to 1.
 Do not invent evidence. When evidence is missing or uncertain, request bounded evidence, clarify, or fall back.
 Use fine tools: one effect, one exact range, and one bounded parameter set per call. Never ask a tool to scan or choose its own settings.
-Supported rendered operations: remove_ranges, set_color_grade, set_audio_levels, add_captions, add_vfx, add_text_overlay.
+Supported rendered operations: remove_ranges, set_color_grade, set_audio_levels, add_captions, set_aspect_ratio, add_text_overlay.
 
 When the user asks for a native text overlay, title card, or animated graphics containing text (e.g. "comic book BANG effect"), use the propose_add_text_overlay tool.
 
-When the user asks for a visual effect, filter, or transition, use the propose_vfx tool. The tool will delegate to a specialized shader subagent to write GLSL.
-- If the user asks for a "filter", "after effect", or visual style applied to a single clip, use vfxType="SINGLE_CLIP".
-- If the user asks for a "transition" between two clips, use vfxType="DUAL_CLIP" and set the target range to overlap the boundary.
-- If you receive a GLSL compilation error in the chat from a previous attempt, pass the error and the previous code back into propose_vfx so the subagent can repair it.
+When the user asks to change the video's aspect ratio (e.g. "vertical", "portrait", "landscape", "square", or "16:9"), use the propose_set_aspect_ratio tool with the appropriate ratio (PORTRAIT, LANDSCAPE, or SQUARE).
 
 Examples:
 User asks to remove a pause but no covering video is attached -> call inspect_video_range.
 User asks to make pacing better without a settled pacing preference -> call ask_clarification with Natural and Tight choices.
-User asks for a sepia filter -> call propose_vfx with vfxType="SINGLE_CLIP" and description="sepia filter".
-User asks for a crossfade transition between two clips -> call propose_vfx with vfxType="DUAL_CLIP" and description="crossfade transition".
-User reports a shader compilation error -> call propose_vfx with the previous code and the error message.
+User asks to make the video vertical -> call propose_set_aspect_ratio with ratio="PORTRAIT".
 A tool rejects an invented evidence ID -> correct the call using only supplied IDs; never fabricate a replacement.`;
 
 const PROPOSAL_TOOL_TYPES = Object.freeze({
@@ -57,7 +52,7 @@ const PROPOSAL_TOOL_TYPES = Object.freeze({
   propose_adjust_highlights: 'set_color_grade',
   propose_adjust_shadows: 'set_color_grade',
   propose_adjust_skin_protection: 'set_color_grade',
-  propose_vfx: 'add_vfx',
+  propose_set_aspect_ratio: 'set_aspect_ratio',
   propose_add_text_overlay: 'add_text_overlay',
 });
 
@@ -92,8 +87,8 @@ function fineOperationFor(call, operationType, inventory) {
     const parameter = call.name.slice('propose_adjust_'.length).replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
     return { ...common, parameter, value: raw.value };
   }
-  if (call.name === 'propose_vfx') {
-    return { ...common, vfxType: raw.vfxType, description: raw.description, fragmentShader: raw.fragmentShader || '', uniforms: raw.uniforms || {} };
+  if (call.name === 'propose_set_aspect_ratio') {
+    return { ...common, ratio: raw.ratio };
   }
   if (call.name === 'propose_add_text_overlay') {
     return { 
@@ -416,12 +411,9 @@ function validateEditProgram(decision, inventory, observations) {
       }
     }
 
-    if (operation.type === 'add_vfx') {
-      if (typeof operation.vfxType !== 'string' || !['SINGLE_CLIP', 'DUAL_CLIP'].includes(operation.vfxType)) {
-        throw orchestrationError('VFX type must be SINGLE_CLIP or DUAL_CLIP.', 422, 'invalid_edit_program');
-      }
-      if (typeof operation.fragmentShader !== 'string' || !operation.fragmentShader.trim()) {
-        throw orchestrationError('VFX fragment shader is required.', 422, 'invalid_edit_program');
+    if (operation.type === 'set_aspect_ratio') {
+      if (typeof operation.ratio !== 'string' || !['PORTRAIT', 'LANDSCAPE', 'SQUARE'].includes(operation.ratio)) {
+        throw orchestrationError('Aspect ratio must be PORTRAIT, LANDSCAPE, or SQUARE.', 422, 'invalid_edit_program');
       }
     }
     if (operation.type === 'add_text_overlay') {
@@ -622,18 +614,6 @@ class Layer2Orchestrator {
 
         try {
           const args = call.args || {};
-          
-          if (call.name === 'propose_vfx') {
-             if (typeof this.decide.generateGlsl !== 'function') throw orchestrationError('GLSL subagent is not available.', 501, 'unsupported_tool_call');
-             const rawOp = args.operation || {};
-             const glslResult = await this.decide.generateGlsl({
-               description: rawOp.description,
-               vfxType: rawOp.vfxType,
-               previousCode: rawOp.previousCode,
-               compileError: rawOp.compileError
-             });
-             args.operation = { ...rawOp, fragmentShader: glslResult.fragmentShader, uniforms: glslResult.uniforms };
-          }
           
           if (call.name === 'propose_add_text_overlay') {
              if (typeof this.decide.generateTextOverlayConfig !== 'function') throw orchestrationError('Text overlay subagent is not available.', 501, 'unsupported_tool_call');
