@@ -185,6 +185,7 @@ const PROPOSE_ASPECT_RATIO_TOOL = operationTool(
   'Change the aspect ratio of the video (e.g., to vertical, landscape, or square).',
   ['ratio', 'reason'], {
   ratio: { type: 'string', enum: ['PORTRAIT', 'LANDSCAPE', 'SQUARE'] },
+  reason: { type: 'string' },
 },
 );
 
