@@ -546,7 +546,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
     private fun toggle(op: EditOperation): EditOperation = when (op) {
         is RemoveRanges -> op.copy(enabled = !op.enabled); is SetColorGrade -> op.copy(enabled = !op.enabled); is SetAudioLevels -> op.copy(enabled = !op.enabled)
-        is AddVfx -> op.copy(enabled = !op.enabled); is AddMotionPreset -> op.copy(enabled = !op.enabled); is AddCaptions -> op.copy(enabled = !op.enabled)
+        is SetAspectRatio -> op.copy(enabled = !op.enabled); is AddMotionPreset -> op.copy(enabled = !op.enabled); is AddCaptions -> op.copy(enabled = !op.enabled)
         is AddTextOverlay -> op.copy(enabled = !op.enabled)
     }
     private fun processingMessage(stage: String?, percent: Int): String = when {
@@ -570,7 +570,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         is RemoveRanges -> "Cut ${ranges.size} range${if (ranges.size == 1) "" else "s"}"
         is SetColorGrade -> "Updated color grade"
         is SetAudioLevels -> "Updated audio levels"
-        is AddVfx -> "Updated VFX"
+        is SetAspectRatio -> "Updated aspect ratio"
         is AddMotionPreset -> "Updated motion"
         is AddCaptions -> "Updated ${cues.size} caption cue${if (cues.size == 1) "" else "s"}"
         is AddTextOverlay -> "Updated text overlay"

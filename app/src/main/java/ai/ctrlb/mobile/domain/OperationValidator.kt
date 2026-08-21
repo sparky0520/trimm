@@ -19,7 +19,7 @@ object OperationValidator {
                 is SetAudioLevels -> "dialogue-levels:${operation.dialogueLufs}:${operation.musicDuckDb}"
 
                 is AddCaptions -> "video-captions:${operation.cues}:${operation.style}"
-                is AddVfx -> "video-vfx:${operation.id}:${operation.kind}:${operation.range}"
+                is SetAspectRatio -> "video-aspect-ratio:${operation.ratio.name}"
                 is AddTextOverlay -> "video-text-overlay:${operation.id}:${operation.text}"
                 is AddMotionPreset -> error("Unrendered operation reached render contract")
             }
@@ -31,7 +31,7 @@ object OperationValidator {
         is SetAudioLevels -> "Default • ${operation.dialogueLufs.toInt()} LUFS dialogue target"
 
         is AddCaptions -> "Transcript evidence • ${operation.cues.size} timed cues"
-        is AddVfx -> "Custom Shader VFX"
+        is SetAspectRatio -> "Aspect ratio: ${operation.ratio.name}"
         is AddTextOverlay -> "Custom Text Overlay Graphics"
         is AddMotionPreset -> "Unavailable • not rendered"
     }
@@ -60,8 +60,6 @@ object OperationValidator {
                     matchesSpeaker && matchesTarget
                 }
                 op.copy(cues = CaptionSegmenter.segment(words))
-            } else if (op is AddVfx && op.range == null) {
-                op.copy(range = TimeRange(0, project.durationMs))
             } else if (op is AddMotionPreset && op.range == null) {
                 op.copy(range = TimeRange(0, project.durationMs))
             } else op
@@ -78,7 +76,7 @@ object OperationValidator {
                 else { require(op.dialogueLufs in -24f..-12f); require(op.musicDuckDb in -18f..-3f) }
                 require(op.attackMs in 0..2_000 && op.releaseMs in 0..5_000); validateTarget(project, op.target)
             }
-            is AddVfx -> { require(op.range != null && op.range.endMs <= project.durationMs); require(op.range.durationMs > 0); require(op.fragmentShader.isNotBlank()) }
+            is SetAspectRatio -> { }
             is AddMotionPreset -> { require(op.range != null && op.range.endMs <= project.durationMs); require(op.intensity in 0f..1f) }
 
             is AddCaptions -> { require(op.cues.isNotEmpty()); op.cues.forEach { require(it.range.endMs <= project.durationMs); require(it.text.isNotBlank() && it.text.length <= 120) } }

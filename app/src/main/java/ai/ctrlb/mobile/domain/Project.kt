@@ -100,15 +100,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
 @Serializable @SerialName("remove_ranges") data class RemoveRanges(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val ranges: List<TimeRange>, val confidence: Float, val reason: String = "", val pacing: String = "natural") : EditOperation
 @Serializable @SerialName("set_color_grade") data class SetColorGrade(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val grade: ColorGrade? = null, val target: OperationTarget? = null, val parameter: String? = null, val value: Float? = null) : EditOperation
 @Serializable @SerialName("set_audio_levels") data class SetAudioLevels(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val parameter: String? = null, val dialogueLufs: Float = -16f, val musicDuckDb: Float = -9f, val attackMs: Long = 120, val releaseMs: Long = 450, val target: OperationTarget? = null) : EditOperation
-@Serializable enum class VfxType { SINGLE_CLIP, DUAL_CLIP }
-@Serializable @SerialName("add_vfx") data class AddVfx(
-    override val id: String = UUID.randomUUID().toString(),
-    override val enabled: Boolean = true,
-    val kind: VfxType = VfxType.SINGLE_CLIP,
-    val range: TimeRange? = null,
-    val fragmentShader: String,
-    val uniforms: Map<String, Float> = emptyMap()
-) : EditOperation
+@Serializable @SerialName("set_aspect_ratio") data class SetAspectRatio(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val ratio: AspectRatio = AspectRatio.PORTRAIT) : EditOperation
 @Serializable @SerialName("add_text_overlay") data class AddTextOverlay(
     override val id: String = UUID.randomUUID().toString(),
     override val enabled: Boolean = true,
@@ -191,15 +183,27 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     init { require(schemaVersion == 1); require(source.durationMs > 0) }
     val orderedSources: List<SourceMedia> get() = sources.ifEmpty { listOf(source) }
     val durationMs: Long get() = orderedSources.sumOf { it.durationMs }
+    private fun withExportRatioRecomputed(): MobileProject {
+        val targetRatio = operations.filterIsInstance<SetAspectRatio>().lastOrNull { it.enabled }?.ratio ?: preferences.aspectRatio
+        val longSide = maxOf(export.width, export.height)
+        val shortSide = minOf(export.width, export.height)
+        val nextExport = when (targetRatio) {
+            AspectRatio.PORTRAIT -> export.copy(width = shortSide, height = longSide)
+            AspectRatio.LANDSCAPE -> export.copy(width = longSide, height = shortSide)
+            AspectRatio.SQUARE -> export.copy(width = shortSide, height = shortSide)
+        }
+        return if (export == nextExport) this else copy(export = nextExport)
+    }
+
     private fun snapshot() = ProjectSnapshot(operations, orderedSources, analysis)
-    fun replaceOperations(next: List<EditOperation>) = copy(operations = next, undo = (undo + snapshot()).takeLast(30), revision = revision + 1)
+    fun replaceOperations(next: List<EditOperation>) = copy(operations = next, undo = (undo + snapshot()).takeLast(30), revision = revision + 1).withExportRatioRecomputed()
     fun applyLayer1Program(programId: String, next: List<EditOperation>) =
         copy(
             operations = next,
             undo = (undo + snapshot()).takeLast(30),
             revision = revision + 1,
             appliedLayer1ProgramIds = (appliedLayer1ProgramIds + programId).takeLast(100)
-        )
+        ).withExportRatioRecomputed()
     fun markLayer1ProgramApplied(programId: String) =
         copy(appliedLayer1ProgramIds = (appliedLayer1ProgramIds + programId).takeLast(100))
     fun replaceSources(next: List<SourceMedia>): MobileProject {
@@ -215,6 +219,6 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
             analysis = snapshot.analysis ?: analysis,
             undo = undo.dropLast(1),
             revision = revision + 1
-        )
+        ).withExportRatioRecomputed()
     } ?: this
 }

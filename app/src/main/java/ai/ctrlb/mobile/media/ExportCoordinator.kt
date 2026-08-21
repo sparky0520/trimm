@@ -118,23 +118,6 @@ object ExportCoordinator {
             }
         }
         
-        // Add Dynamic Shaders (VFX)
-        project.operations.filterIsInstance<AddVfx>().filter { it.enabled }.forEach { vfx ->
-            val outputStart = timelineMapper.sourceToOutput(vfx.range!!.startMs)
-            val outputEnd = timelineMapper.sourceToOutput(vfx.range.endMs)
-            if (outputEnd > outputStart) {
-                videoEffects += DynamicShaderEffect(
-                    vfx.id, 
-                    TimeRange(outputStart, outputEnd), 
-                    vfx.fragmentShader, 
-                    vfx.uniforms
-                ) { errorMsg ->
-                    // Automated message back to the chat loop will be handled by the orchestrator
-                    // For now we log the error. The FallbackShaderProgram prevents crashes.
-                    android.util.Log.e("ExportCoordinator", "VFX Shader Error [${vfx.id}]: $errorMsg")
-                }
-            }
-        }
 
         // Add Native Text Overlays
         project.operations.filterIsInstance<AddTextOverlay>().filter { it.enabled }.forEach { textOverlay ->
