@@ -22,7 +22,7 @@ test('Gemini receives video directly and exposes evidence and focused proposal t
     id: 'job-1', sourceId: 'source-1', startMs: 0, endMs: 30_000,
     resolution: 'LOW', bytes: Buffer.from('video'),
   }] });
-  assert.equal(result.toolCall.name, 'inspect_video_range');
+  assert.equal(result.toolCalls[0].name, 'inspect_video_range');
   assert.equal(request.contents[0].parts[0].inlineData.mimeType, 'video/mp4');
   assert.deepEqual(request.config.tools[0].functionDeclarations.map((item) => item.name), [
     'inspect_video_range', 'propose_remove_ranges',

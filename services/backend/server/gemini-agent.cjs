@@ -85,17 +85,17 @@ function createGeminiDecisionProvider({
       console.error('[DEBUG] Gemini API Error:', err, JSON.stringify(err.details || err));
       throw err;
     }
-    const functionCall = response.functionCalls?.[0];
-    if (!response.text && !functionCall) throw Object.assign(new Error('Gemini returned no decision.'), { status: 502, code: 'empty_gemini_response' });
+    const functionCalls = response.functionCalls || [];
+    if (!response.text && functionCalls.length === 0) throw Object.assign(new Error('Gemini returned no decision.'), { status: 502, code: 'empty_gemini_response' });
     return {
       rawText: response.text || null,
-      toolCall: functionCall ? { name: functionCall.name, args: functionCall.args || {}, ...(functionCall.id ? { id: functionCall.id } : {}) } : null,
-      modelContent: response.candidates?.[0]?.content || (functionCall ? {
-        role: 'model', parts: [{ functionCall }],
+      toolCalls: functionCalls.map(fc => ({ name: fc.name, args: fc.args || {}, ...(fc.id ? { id: fc.id } : {}) })),
+      modelContent: response.candidates?.[0]?.content || (functionCalls.length > 0 ? {
+        role: 'model', parts: functionCalls.map(functionCall => ({ functionCall })),
       } : { role: 'model', parts: [{ text: response.text || '' }] }),
       history: [...(Array.isArray(contents) ? contents : [{ role: 'user', parts: [{ text: String(contents) }] }]),
-        response.candidates?.[0]?.content || (functionCall
-          ? { role: 'model', parts: [{ functionCall }] }
+        response.candidates?.[0]?.content || (functionCalls.length > 0
+          ? { role: 'model', parts: functionCalls.map(functionCall => ({ functionCall })) }
           : { role: 'model', parts: [{ text: response.text || '' }] })],
       finishReason: response.candidates?.[0]?.finishReason || null,
       usage: geminiUsage(response, { purpose, model, media: usageMedia }),
@@ -121,6 +121,14 @@ function createGeminiDecisionProvider({
       ...(toolCall.id ? { id: toolCall.id } : {}),
       response: result,
     } }] }],
+  });
+  decide.toolResults = async ({ systemPolicy, inventory, evidence = [], history = [], toolCalls, results }) => decide({
+    systemPolicy, inventory, evidence,
+    history: [...(history || []), { role: 'user', parts: toolCalls.map((toolCall, i) => ({ functionResponse: {
+      name: toolCall.name,
+      ...(toolCall.id ? { id: toolCall.id } : {}),
+      response: results[i],
+    } })) }],
   });
   decide.capabilities = Object.freeze({
     nativeVideoAudio: true,
