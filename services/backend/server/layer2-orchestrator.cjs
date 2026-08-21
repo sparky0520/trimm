@@ -255,8 +255,9 @@ function validateVideoToolCall(call, inventory, evidence) {
   if (!source) throw orchestrationError('Planner requested an unknown source.', 422, 'unsupported_video_request');
   const startMs = boundedInteger(request.startMs, 'video start', source.durationMs, true);
   const endMs = boundedInteger(request.endMs, 'video end', source.durationMs);
-  if (endMs <= startMs || endMs - startMs > MAX_VIDEO_RANGE_MS) {
-    throw orchestrationError('Video inspection ranges must be between 1 ms and 30 seconds.', 422, 'invalid_video_range');
+  const maxAllowed = Math.min(MAX_VIDEO_RANGE_MS, inventory.budgets.maximumDurationMs);
+  if (endMs <= startMs || endMs - startMs > maxAllowed) {
+    throw orchestrationError(`Video inspection ranges must be between 1 ms and ${maxAllowed / 1000} seconds.`, 422, 'invalid_video_range');
   }
   const resolution = request.resolution;
   if (!['LOW', 'HIGH'].includes(resolution)) throw orchestrationError('Invalid video resolution.', 422, 'invalid_video_resolution');
