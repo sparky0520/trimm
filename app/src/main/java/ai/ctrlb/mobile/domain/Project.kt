@@ -19,7 +19,7 @@ import java.util.UUID
     val confidence: Float,
     val speakerId: String? = null
 )
-@Serializable data class CaptionCue(val text: String, val range: TimeRange)
+@Serializable data class CaptionCue(val text: String, val range: TimeRange, val words: List<TranscriptWord> = emptyList())
 @Serializable data class SourceMedia(val uri: String, val fingerprint: String, val durationMs: Long, val width: Int, val height: Int, val rotation: Int = 0, val hasAudio: Boolean = true)
 @Serializable data class WizardPreferences(
     val platform: Platform = Platform.YOUTUBE,

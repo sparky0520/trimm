@@ -29,11 +29,28 @@ class CaptionOverlay(
     override fun getText(presentationTimeUs: Long): SpannableString {
         val timeMs = presentationTimeUs / 1_000
         val cue = cues.firstOrNull { timeMs >= it.range.startMs && timeMs < it.range.endMs } ?: return empty
-        return SpannableString(wrap(cue.text, if (portrait) 20 else 34)).apply {
+        val wrappedText = wrap(cue.text, if (portrait) 20 else 34)
+        return SpannableString(wrappedText).apply {
             setSpan(ForegroundColorSpan(Color.WHITE), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             setSpan(BackgroundColorSpan(Color.argb(210, 12, 12, 14)), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             setSpan(StyleSpan(Typeface.BOLD), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             setSpan(AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            
+            val activeWord = cue.words.firstOrNull { timeMs >= it.range.startMs && timeMs < it.range.endMs }
+            if (activeWord != null) {
+                var currentIndex = 0
+                for (word in cue.words) {
+                    val wordText = word.text.trim()
+                    val startIndex = wrappedText.indexOf(wordText, currentIndex)
+                    if (startIndex != -1) {
+                        if (word == activeWord) {
+                            setSpan(ForegroundColorSpan(Color.YELLOW), startIndex, startIndex + wordText.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                            break
+                        }
+                        currentIndex = startIndex + wordText.length
+                    }
+                }
+            }
         }
     }
 

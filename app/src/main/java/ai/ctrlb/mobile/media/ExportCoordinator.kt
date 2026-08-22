@@ -111,7 +111,14 @@ object ExportCoordinator {
             val mapped = captions.cues.mapNotNull { cue ->
                 val start = timelineMapper.sourceToOutput(cue.range.startMs)
                 val end = timelineMapper.sourceToOutput(cue.range.endMs)
-                if (end > start) CaptionCue(cue.text, TimeRange(start, end)) else null
+                if (end > start) {
+                    val mappedWords = cue.words.mapNotNull { word ->
+                        val wStart = timelineMapper.sourceToOutput(word.range.startMs)
+                        val wEnd = timelineMapper.sourceToOutput(word.range.endMs)
+                        if (wEnd > wStart) word.copy(range = TimeRange(wStart, wEnd)) else null
+                    }
+                    CaptionCue(cue.text, TimeRange(start, end), mappedWords)
+                } else null
             }
             if (mapped.isNotEmpty()) {
                 videoEffects += OverlayEffect(listOf(CaptionOverlay(mapped, project.export.height > project.export.width)))

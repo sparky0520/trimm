@@ -126,7 +126,8 @@ object CaptionSegmenter {
             if (group.isEmpty()) return
             result += CaptionCue(
                 group.joinToString(" ") { it.text.trim() }.replace(Regex("\\s+([,.!?])"), "$1"),
-                TimeRange(group.first().range.startMs, group.last().range.endMs)
+                TimeRange(group.first().range.startMs, group.last().range.endMs),
+                words = group.toList()
             )
             group = mutableListOf()
         }
