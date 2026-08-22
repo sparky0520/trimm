@@ -17,7 +17,7 @@ const DEFAULT_BUDGETS = Object.freeze({
 });
 const SYSTEM_POLICY = `You are ctrlB's private video-editing agent.
 Follow the latest user message while retaining relevant context from earlier messages.
-Return one JSON object with type edit_program, clarification, or fallback, or call one supplied tool.
+You must call one supplied tool to proceed.
 Use proposal tools for operations they cover; their descriptions contain the operation-specific editorial policy.
 Proposal tools build a private draft. After every successful tool result, continue until all necessary operations are present, then call finalize_edit_program.
 You may call multiple proposal tools simultaneously if they are independent. If an operation depends on the outcome of another (e.g., inspecting video before editing), call them sequentially over multiple steps.
@@ -462,11 +462,10 @@ function validateDecision(decision, inventory, evidence) {
 }
 
 class Layer2Orchestrator {
-  constructor({ derivativeJobs, decide, repair = decide?.repair }) {
+  constructor({ derivativeJobs, decide }) {
     if (!derivativeJobs || typeof decide !== 'function') throw new TypeError('Layer2Orchestrator dependencies are required.');
     this.derivativeJobs = derivativeJobs;
     this.decide = decide;
-    this.repair = repair;
   }
 
   async authorizeVideo(principal, inventory, request, selectionReason = 'agent_requested') {
@@ -517,23 +516,12 @@ class Layer2Orchestrator {
       const calls = raw.toolCalls || (raw.toolCall ? [raw.toolCall] : []);
 
       if (calls.length === 0) {
-        let decision;
-        try {
-          try {
-            decision = JSON.parse(raw.rawText);
-          } catch (e) {
-            decision = raw;
-          }
-          const validated = validateDecision(decision, workingInventory, evidence);
-          return { ...validated, ...(usage.length ? { _usage: usage } : {}) };
-        } catch (error) {
-          if (typeof this.decide !== 'function') throw error;
-          raw = await this.decide({
-            systemPolicy: SYSTEM_POLICY, inventory: workingInventory, evidence,
-            history: [...(raw.history || []), { role: 'user', parts: [{ text: `Agent run failure: ${error.message || 'invalid planner response'}` }] }]
-          });
-          continue;
-        }
+        if (typeof this.decide !== 'function') throw orchestrationError('Planner returned no tool calls.', 502, 'invalid_planner_response');
+        raw = await this.decide({
+          systemPolicy: SYSTEM_POLICY, inventory: workingInventory, evidence,
+          history: [...(raw.history || []), { role: 'user', parts: [{ text: `Agent run failure: Planner returned no tool calls.` }] }]
+        });
+        continue;
       }
 
       let yieldDecision = null;

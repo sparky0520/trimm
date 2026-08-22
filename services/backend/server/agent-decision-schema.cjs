@@ -14,57 +14,6 @@ const observationSchema = {
   },
 };
 
-const operationSchema = {
-  type: 'object',
-  required: ['id', 'type', 'enabled', 'confidence', 'evidenceIds'],
-  properties: {
-    id: { type: 'string' },
-    type: {
-      type: 'string', enum: [
-        'remove_ranges', 'set_color_grade', 'set_audio_levels',
-        'add_captions', 'add_vfx', 'add_text_overlay'
-      ]
-    },
-    enabled: { type: 'boolean' },
-    confidence: { type: 'number' },
-    evidenceIds: { type: 'array', items: { type: 'string' } },
-  },};
-
-const observations = { type: 'array', items: observationSchema };
-
-const AGENT_DECISION_SCHEMA = Object.freeze({
-  type: 'object',
-  additionalProperties: false,
-  required: ['type', 'observations'],
-  properties: {
-    type: { type: 'string', enum: ['edit_program', 'clarification', 'fallback'] },
-    observations,
-    
-    // edit_program fields
-    expectedRevision: { type: 'integer' },
-    summary: { type: 'string' },
-    operations: { type: 'array', items: operationSchema },
-    
-    // clarification fields
-    questions: {
-      type: 'array', items: {
-        type: 'object', additionalProperties: false, required: ['id', 'prompt', 'options', 'recommendedOptionId'],
-        properties: {
-          id: { type: 'string' }, prompt: { type: 'string' }, recommendedOptionId: { type: 'string' },
-          options: {
-            type: 'array', items: {
-              type: 'object', additionalProperties: false, required: ['id', 'label', 'description'],
-              properties: { id: { type: 'string' }, label: { type: 'string' }, description: { type: 'string' } },
-            }
-          },
-        },
-      }
-    },
-    
-    // fallback fields
-    reason: { type: 'string' },
-  },
-});
 
 const INSPECT_VIDEO_RANGE_TOOL = Object.freeze({
   name: 'inspect_video_range',
@@ -270,6 +219,6 @@ const AGENT_TOOLS = Object.freeze([
 ]);
 
 module.exports = {
-  AGENT_DECISION_SCHEMA, AGENT_TOOLS, INSPECT_VIDEO_RANGE_TOOL,
+  AGENT_TOOLS, INSPECT_VIDEO_RANGE_TOOL,
   PROPOSE_REMOVE_RANGES_TOOL,
 };

@@ -1,7 +1,7 @@
 'use strict';
 
 const { GoogleGenAI } = require('@google/genai');
-const { AGENT_DECISION_SCHEMA, AGENT_TOOLS } = require('./agent-decision-schema.cjs');
+const { AGENT_TOOLS } = require('./agent-decision-schema.cjs');
 const { geminiUsage } = require('./model-usage.cjs');
 
 function createGeminiDecisionProvider({
@@ -49,7 +49,7 @@ function createGeminiDecisionProvider({
   }
   async function generate({
     systemPolicy, contents, temperature, purpose = 'planning',
-    responseJsonSchema = AGENT_DECISION_SCHEMA, tools = true, usageMedia,
+    responseJsonSchema = null, tools = true, usageMedia,
   }) {
     if (!ai) throw Object.assign(new Error('GEMINI_API_KEY is not configured'), { status: 503, code: 'gemini_unconfigured' });
     const requestPayload = {
@@ -57,8 +57,10 @@ function createGeminiDecisionProvider({
       contents,
       config: {
         systemInstruction: systemPolicy,
-        responseMimeType: 'application/json',
-        ...(responseJsonSchema ? { responseJsonSchema: JSON.parse(JSON.stringify(responseJsonSchema)) } : {}),
+        ...(responseJsonSchema ? { 
+          responseMimeType: 'application/json',
+          responseJsonSchema: JSON.parse(JSON.stringify(responseJsonSchema)) 
+        } : {}),
         ...(tools ? { tools: [{ functionDeclarations: JSON.parse(JSON.stringify(AGENT_TOOLS)).map(t => ({ ...t, parametersJsonSchema: t.parameters, parameters: undefined })) }] } : {}),
         temperature,
         maxOutputTokens: 4096,
@@ -138,16 +140,7 @@ function createGeminiDecisionProvider({
     reusableCachedContext: false,
     primaryModel: model,
   });
-  decide.repair = (request) => generate({
-    systemPolicy: `You repair JSON for ${request.expectedSchema}.
-Correct structure only. Never change editorial intent, operations, ranges, evidence references, or expected revision.
-Return only the corrected JSON object.`,
-    contents: JSON.stringify(request),
-    temperature: 0,
-    purpose: 'proposal_repair',
-    responseJsonSchema: AGENT_DECISION_SCHEMA,
-    tools: false,
-  });
+
 
 
 
