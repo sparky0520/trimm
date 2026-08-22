@@ -187,10 +187,11 @@ class ExportWorker(context: Context, params: WorkerParameters) : ProgressWorker(
             inputData.getLong("estimatedBytes", 0)
         )
         val force4k = BuildConfig.FORCE_4K_EXPORT
-        val renderSize = project.orderedSources.renderSizeWithin(
-            if (force4k) 3840 else maxOf(capability.recommendedWidth, capability.recommendedHeight),
-            if (force4k) 2160 else minOf(capability.recommendedWidth, capability.recommendedHeight)
-        )
+        val maxLong = if (force4k) 3840 else maxOf(capability.recommendedWidth, capability.recommendedHeight)
+        val maxShort = if (force4k) 2160 else minOf(capability.recommendedWidth, capability.recommendedHeight)
+        val maxWidth = if (project.export.width >= project.export.height) maxLong else maxShort
+        val maxHeight = if (project.export.height >= project.export.width) maxLong else maxShort
+        val renderSize = DisplaySize(project.export.width, project.export.height).fitWithin(maxWidth, maxHeight)
         val renderProject = project.copy(export = project.export.copy(
             width = renderSize.width,
             height = renderSize.height,
@@ -237,10 +238,11 @@ class PreviewWorker(context: Context, params: WorkerParameters) : ProgressWorker
         val prepared = stored
         progress("preview", 5)
         val output = java.io.File(applicationContext.cacheDir, "previews/${prepared.id}-${prepared.revision}.mp4")
-        val previewSize = prepared.orderedSources.renderSizeWithin(
-            minOf(1280, maxOf(prepared.export.width, prepared.export.height)),
-            minOf(720, minOf(prepared.export.width, prepared.export.height))
-        )
+        val maxLong = minOf(1280, maxOf(prepared.export.width, prepared.export.height))
+        val maxShort = minOf(720, minOf(prepared.export.width, prepared.export.height))
+        val maxWidth = if (prepared.export.width >= prepared.export.height) maxLong else maxShort
+        val maxHeight = if (prepared.export.height >= prepared.export.width) maxLong else maxShort
+        val previewSize = DisplaySize(prepared.export.width, prepared.export.height).fitWithin(maxWidth, maxHeight)
         ExportCoordinator.export(applicationContext, prepared.copy(export = prepared.export.copy(width = previewSize.width, height = previewSize.height, codec = "video/avc", bitrate = 5_000_000)), output)
         progress("complete", 100)
         Result.success(Data.Builder().putString("previewUri", Uri.fromFile(output).toString()).putString("warning", warning).build())

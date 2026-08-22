@@ -78,8 +78,36 @@ private val Lavender = Color(0xFFD4D4D8)
 private val Green = Color(0xFFE4E4E7)
 
 class MainActivity : ComponentActivity() {
+    private val appUpdateManager by lazy { com.google.android.play.core.appupdate.AppUpdateManagerFactory.create(this) }
+    private val updateType = com.google.android.play.core.install.model.AppUpdateType.FLEXIBLE
+    private val updateRequestCode = 1001
+
+    private fun checkForAppUpdates() {
+        appUpdateManager.appUpdateInfo.addOnSuccessListener { info ->
+            val isUpdateAvailable = info.updateAvailability() == com.google.android.play.core.install.model.UpdateAvailability.UPDATE_AVAILABLE
+            val isUpdateAllowed = info.isUpdateTypeAllowed(updateType)
+            if (isUpdateAvailable && isUpdateAllowed) {
+                try {
+                    appUpdateManager.startUpdateFlowForResult(info, updateType, this, updateRequestCode)
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Failed to start update flow", e)
+                }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        appUpdateManager.appUpdateInfo.addOnSuccessListener { info ->
+            if (info.installStatus() == com.google.android.play.core.install.model.InstallStatus.DOWNLOADED) {
+                appUpdateManager.completeUpdate()
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        checkForAppUpdates()
         Log.i("DeviceCapability", DeviceCapability.report(this).diagnosticSummary())
         if (BuildConfig.FORCE_4K_EXPORT) {
             intent.getStringExtra("forceExportProjectId")?.takeIf(String::isNotBlank)?.let { projectId ->

@@ -24,7 +24,7 @@ android {
         applicationId = "ai.ctrlb.mobile"
         minSdk = 31
         targetSdk = 37
-        versionCode = 9
+        versionCode = 10
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         val backendUrl = providers.gradleProperty("CTRLB_BACKEND_URL")
@@ -110,6 +110,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.clerk:clerk-android-ui:1.0.28")
+    implementation("com.google.android.play:app-update-ktx:2.1.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")

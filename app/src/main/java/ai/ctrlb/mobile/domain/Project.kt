@@ -68,7 +68,7 @@ fun SourceMedia.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): DisplaySi
     return displayed.fitWithin(maxWidth, maxHeight)
 }
 
-private fun DisplaySize.fitWithin(maxWidth: Int, maxHeight: Int): DisplaySize {
+fun DisplaySize.fitWithin(maxWidth: Int, maxHeight: Int): DisplaySize {
     val scale = minOf(1f, maxWidth.toFloat() / width, maxHeight.toFloat() / height)
     fun even(value: Int): Int = if (value <= 2) value else value - value % 2
     return DisplaySize(
