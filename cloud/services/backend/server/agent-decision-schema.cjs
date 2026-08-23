@@ -162,6 +162,22 @@ const PROPOSE_COLOR_TOOLS = [
   colorAdjustmentTool('skinProtection', 0, 1),
 ];
 
+const PROPOSE_ADD_BGM_TOOL = operationTool(
+  'propose_add_bgm',
+  'Generate and add background music to the entire video based on a descriptive prompt (e.g. "cyberpunk synthwave").',
+  ['prompt', 'reason'], {
+  prompt: { type: 'string' },
+  reason: { type: 'string' },
+});
+
+const PROPOSE_ADD_SFX_TOOL = operationTool(
+  'propose_add_sfx',
+  'Generate and add a sound effect to a specific interval based on a descriptive prompt (e.g. "cinematic whoosh").',
+  ['sourceId', 'startMs', 'endMs', 'prompt', 'reason'], {
+  ...targetRangeProperties,
+  prompt: { type: 'string' },
+});
+
 
 const ASK_CLARIFICATION_TOOL = Object.freeze({
   name: 'ask_clarification',
@@ -214,6 +230,7 @@ const AGENT_TOOLS = Object.freeze([
   PROPOSE_REMOVE_RANGES_TOOL,
   PROPOSE_DIALOGUE_LOUDNESS_TOOL, PROPOSE_MUSIC_DUCKING_TOOL,
   PROPOSE_CAPTIONS_TOOL, PROPOSE_ASPECT_RATIO_TOOL, PROPOSE_TEXT_OVERLAY_TOOL, ...PROPOSE_COLOR_TOOLS,
+  PROPOSE_ADD_BGM_TOOL, PROPOSE_ADD_SFX_TOOL,
   ASK_CLARIFICATION_TOOL, FINALIZE_EDIT_PROGRAM_TOOL,
   REMOVE_DRAFT_OPERATION_TOOL, FINISH_WITHOUT_PROPOSAL_TOOL,
 ]);

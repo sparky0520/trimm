@@ -19,6 +19,7 @@ const { AgentRuns } = require('./agent-runs.cjs');
 const { Conversations } = require('./conversations.cjs');
 const { PostgresAgentRunStore, VolatileAgentRunStore } = require('./agent-run-store.cjs');
 const { createGeminiDecisionProvider } = require('./gemini-agent.cjs');
+const { AudioGeneration } = require('./audio-generation.cjs');
 
 const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.MOONSHOT_API_KEY;
@@ -48,6 +49,7 @@ const agentRuns = new AgentRuns({
     : new VolatileAgentRunStore(),
 });
 const conversations = new Conversations({ agentRuns });
+const audioGeneration = new AudioGeneration();
 const derivativeCleanupTimer = setInterval(() => {
   Promise.resolve(derivativeJobs.cleanup()).catch((error) => {
     console.error(JSON.stringify({ event: 'derivative_cleanup_failed', message: error.message }));
@@ -64,6 +66,7 @@ function policyFor(request, pathname) {
   };
   if (pathname.startsWith('/v1/transcribe')) return { scope: 'transcribe:create', action: request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'update' : 'create', resourceType: 'transcription' };
   if (pathname === '/v1/agent/runs' || pathname.startsWith('/v1/conversations') ||
+      pathname.startsWith('/v1/audio') ||
       /^\/v1\/agent\/runs\/[0-9a-f-]{36}(?:\/continue)?$/i.test(pathname)) {
     return { scope: 'plan:create', action: 'create', resourceType: 'plan' };
   }
@@ -240,6 +243,28 @@ const server = http.createServer(async (request, response) => {
     } catch (error) {
       console.error('[transcribe] request failed', { message: error?.message, status: error?.status });
       return json(response, error?.status && Number.isInteger(error.status) ? error.status : 502, { error: error?.message || 'Transcription failed' });
+    }
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/v1/audio/generate-bgm') {
+    try {
+      const { prompt, durationSecs } = await collect(request);
+      if (!prompt || !durationSecs) throw Object.assign(new Error('Missing prompt or durationSecs'), { status: 400 });
+      return json(response, 200, await audioGeneration.generateBgm(prompt, durationSecs));
+    } catch (error) {
+      console.error('[audio-generate-bgm] request failed', { message: error?.message });
+      return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message || 'BGM generation failed' });
+    }
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/v1/audio/fetch-sfx') {
+    try {
+      const { prompt } = await collect(request);
+      if (!prompt) throw Object.assign(new Error('Missing prompt'), { status: 400 });
+      return json(response, 200, await audioGeneration.fetchSfx(prompt));
+    } catch (error) {
+      console.error('[audio-fetch-sfx] request failed', { message: error?.message });
+      return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message || 'SFX fetch failed' });
     }
   }
 

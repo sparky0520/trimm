@@ -109,9 +109,22 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val designBlueprint: String = "{}"
 ) : EditOperation
 @Serializable @SerialName("add_motion_preset") data class AddMotionPreset(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val range: TimeRange? = null, val preset: String, val intensity: Float = .5f) : EditOperation
-
 @Serializable @SerialName("add_captions") data class AddCaptions(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val cues: List<CaptionCue> = emptyList(), val target: OperationTarget? = null, val speakerId: String? = null, val style: String = "bold-bottom") : EditOperation
 
+@Serializable @SerialName("set_background_music") data class AddBgm(
+    override val id: String = java.util.UUID.randomUUID().toString(),
+    override val enabled: Boolean = true,
+    val prompt: String,
+    val url: String
+) : EditOperation
+
+@Serializable @SerialName("add_sound_effect") data class AddSfx(
+    override val id: String = java.util.UUID.randomUUID().toString(),
+    override val enabled: Boolean = true,
+    val target: OperationTarget? = null,
+    val prompt: String,
+    val url: String
+) : EditOperation
 
 @Serializable data class ColorGrade(val exposure: Float = 0f, val temperature: Float = 0f, val contrast: Float = 1f, val saturation: Float = 1f, val highlights: Float = 0f, val shadows: Float = 0f, val skinProtection: Float = .8f) {
     init { require(exposure in -1f..1f && temperature in -1f..1f && contrast in .75f..1.35f && saturation in .7f..1.3f && highlights in -1f..1f && shadows in -1f..1f && skinProtection in 0f..1f) }

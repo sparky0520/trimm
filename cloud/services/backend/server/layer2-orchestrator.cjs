@@ -1,6 +1,8 @@
 'use strict';
 
 const { validateContextualSpeechDecision } = require('./contextual-speech.cjs');
+const { AudioGeneration } = require('./audio-generation.cjs');
+
 const ALLOWED_OPERATIONS = new Set([
   'remove_ranges', 'set_color_grade', 'set_audio_levels',
   'add_sound_effect', 'set_background_music', 'add_captions', 'set_aspect_ratio', 'add_text_overlay'
@@ -54,7 +56,11 @@ const PROPOSAL_TOOL_TYPES = Object.freeze({
   propose_adjust_skin_protection: 'set_color_grade',
   propose_set_aspect_ratio: 'set_aspect_ratio',
   propose_add_text_overlay: 'add_text_overlay',
+  propose_add_bgm: 'set_background_music',
+  propose_add_sfx: 'add_sound_effect',
 });
+
+const audioGeneration = new AudioGeneration();
 
 function fineOperationFor(call, operationType, inventory) {
   const args = call.args || {};
@@ -97,6 +103,12 @@ function fineOperationFor(call, operationType, inventory) {
       description: raw.description, 
       designBlueprint: raw.designBlueprint
     };
+  }
+  if (call.name === 'propose_add_bgm') {
+    return { ...common, prompt: raw.prompt, url: raw.url };
+  }
+  if (call.name === 'propose_add_sfx') {
+    return { ...common, prompt: raw.prompt, url: raw.url };
   }
 
   return common;
@@ -614,6 +626,17 @@ class Layer2Orchestrator {
                ...rawOp, 
                designBlueprint: JSON.stringify(configResult)
              };
+          }
+          if (call.name === 'propose_add_bgm') {
+             const rawOp = args.operation || {};
+             const durationSecs = Math.ceil(workingInventory.sources.reduce((sum, s) => sum + s.durationMs, 0) / 1000);
+             const result = await audioGeneration.generateBgm(rawOp.prompt || 'background music', durationSecs);
+             args.operation = { ...rawOp, url: result.url };
+          }
+          if (call.name === 'propose_add_sfx') {
+             const rawOp = args.operation || {};
+             const result = await audioGeneration.fetchSfx(rawOp.prompt || 'sound effect');
+             args.operation = { ...rawOp, url: result.url };
           }
 
           const operation = fineOperationFor(call, operationType, workingInventory);
