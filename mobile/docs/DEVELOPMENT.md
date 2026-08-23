@@ -6,14 +6,14 @@ Work here for Android UI, conversation state, selective tool-artifact media
 preparation, Media3 preview/export, Android persistence, device capability
 reporting, and Google Play client flows.
 
-Cloud agent/storage behavior belongs in `ctrlb-cloud`. Desktop and Remotion
-behavior belongs in `ctrlb-desktop`.
+Cloud agent/storage behavior belongs in `trimm-cloud`. Desktop and Remotion
+behavior belongs in `trimm-desktop`.
 
 ## Start
 
 1. Install JDK 17 and Android SDK 37.
 2. Copy `.env.local.example` to `.env.local`.
-3. Use the deployed cloud origin or run `ctrlb-cloud` separately.
+3. Use the deployed cloud origin or run `trimm-cloud` separately.
 4. Run `.\gradlew.bat testDebugUnitTest`.
 5. Run `.\gradlew.bat assembleDebug`.
 

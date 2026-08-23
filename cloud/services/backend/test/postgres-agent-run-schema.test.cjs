@@ -16,11 +16,11 @@ const recoveryMigration = fs.readFileSync(
 const store = fs.readFileSync(path.join(__dirname, '..', 'server', 'agent-run-store.cjs'), 'utf8');
 
 test('agent runs are durable, private, owner scoped, and versioned', () => {
-  assert.match(migration, /create table ctrlb_private\.agent_runs/i);
+  assert.match(migration, /create table trimm_private\.agent_runs/i);
   assert.match(migration, /owner_id text not null/i);
   assert.match(migration, /state_version bigint not null default 1/i);
   assert.match(migration, /enable row level security/i);
-  assert.match(migration, /revoke all on ctrlb_private\.agent_runs from public, anon, authenticated/i);
+  assert.match(migration, /revoke all on trimm_private\.agent_runs from public, anon, authenticated/i);
   assert.doesNotMatch(migration, /create policy/i);
 });
 

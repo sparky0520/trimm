@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ctrlb.ai/contracts/conversation-message.v3.json",
+  "$id": "https://trimm.ai/contracts/conversation-message.v3.json",
   "type": "object",
   "properties": {
     "message": { "type": "string", "minLength": 1, "maxLength": 2000 },

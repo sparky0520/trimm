@@ -12,7 +12,7 @@ const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000;
 
 class TranscriptionUploads {
   constructor(options = {}) {
-    this.directory = options.directory || path.join(os.tmpdir(), 'ctrlb-transcription-uploads');
+    this.directory = options.directory || path.join(os.tmpdir(), 'trimm-transcription-uploads');
     this.maxBytes = options.maxBytes || DEFAULT_MAX_BYTES;
     this.ttlMs = options.ttlMs || DEFAULT_TTL_MS;
     this.active = new Set();

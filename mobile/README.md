@@ -1,4 +1,4 @@
-# ctrlB Mobile
+# trimm Mobile
 
 Android-first conversational video editor. Import clips, describe the edit in chat, review the evidence-backed proposal, and preview or export the result locally.
 
@@ -24,12 +24,12 @@ Open this repository in Android Studio and run the `app` configuration, or run:
 Copy `.env.local.example` to the ignored `.env.local` for endpoint,
 authentication, and optional signing configuration.
 
-Runtime endpoints and public client configuration belong in user Gradle properties or CI secrets. Set `CTRLB_BACKEND_URL` to the deployed `ctrlb-cloud` HTTPS origin.
+Runtime endpoints and public client configuration belong in user Gradle properties or CI secrets. Set `TRIMM_BACKEND_URL` to the deployed `trimm-cloud` HTTPS origin.
 
 ### Production Android builds
 
 Set `JAVA_HOME` to JDK 17 and fill in every production and release-signing
-setting in `.env.local`. In particular, `CTRLB_ANDROID_UPLOAD_STORE_FILE` must
+setting in `.env.local`. In particular, `TRIMM_ANDROID_UPLOAD_STORE_FILE` must
 be a path to an existing upload keystore, relative to this repository.
 
 Build a signed production APK for direct distribution:
@@ -68,10 +68,10 @@ manager, and press Enter at the key-password prompt to reuse the keystore
 password. Then set:
 
 ```dotenv
-CTRLB_ANDROID_UPLOAD_STORE_FILE=keystore/ctrlb-upload.jks
-CTRLB_ANDROID_UPLOAD_STORE_PASSWORD=<the password you entered>
-CTRLB_ANDROID_UPLOAD_KEY_ALIAS=ctrlb-upload
-CTRLB_ANDROID_UPLOAD_KEY_PASSWORD=<the same password>
+TRIMM_ANDROID_UPLOAD_STORE_FILE=keystore/trimm-upload.jks
+TRIMM_ANDROID_UPLOAD_STORE_PASSWORD=<the password you entered>
+TRIMM_ANDROID_UPLOAD_KEY_ALIAS=trimm-upload
+TRIMM_ANDROID_UPLOAD_KEY_PASSWORD=<the same password>
 ```
 
 The keystore is ignored by Git. Back up both the keystore and its credentials
@@ -99,6 +99,6 @@ It should report version 17.
 
 ## Ownership
 
-This repository owns Android UI, on-device evidence, Layer 1 execution, Media3 preview/export, project persistence, and Google Play client flows. Cloud planning, transcription, derivatives, accounts, and billing live in `ctrlb-cloud`.
+This repository owns Android UI, on-device evidence, Layer 1 execution, Media3 preview/export, project persistence, and Google Play client flows. Cloud planning, transcription, derivatives, accounts, and billing live in `trimm-cloud`.
 
 Supported cloud wire versions are pinned in the test resources under `contracts/cloud-contract.lock.json` and checked by the Android test suite.

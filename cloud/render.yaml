@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: ctrlb-backend
+    name: trimm-backend
     runtime: docker
     dockerfilePath: ./services/backend/Dockerfile
     healthCheckPath: /health
@@ -18,17 +18,17 @@ services:
         value: https://api.moonshot.ai/v1
       - key: MOONSHOT_MODEL
         value: kimi-k3
-      - key: CTRLB_DESKTOP_AI_PROVIDER
+      - key: TRIMM_DESKTOP_AI_PROVIDER
         value: kimi
-      - key: CTRLB_PLANNER_CLIENT_TOKEN
+      - key: TRIMM_PLANNER_CLIENT_TOKEN
         sync: false
-      - key: CTRLB_CLERK_PUBLISHABLE_KEY
+      - key: TRIMM_CLERK_PUBLISHABLE_KEY
         sync: false
-      - key: CTRLB_AUTH_AUDIENCE
+      - key: TRIMM_AUTH_AUDIENCE
         sync: false
-      - key: CTRLB_AUTH_AUTHORIZED_PARTIES
+      - key: TRIMM_AUTH_AUTHORIZED_PARTIES
         sync: false
-      - key: CTRLB_AUTH_DEFAULT_SCOPES
+      - key: TRIMM_AUTH_DEFAULT_SCOPES
         value: plan:create transcribe:create derivatives:create
       - key: SUPABASE_DB_URL
         sync: false

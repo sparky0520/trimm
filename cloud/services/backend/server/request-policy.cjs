@@ -2,7 +2,7 @@
 
 const { IdentityRateLimiter, auditEvent, correlationId, requireScope } = require('./authorization.cjs');
 
-const limiter = new IdentityRateLimiter({ limit: Number(process.env.CTRLB_RATE_LIMIT_PER_MINUTE) || 120 });
+const limiter = new IdentityRateLimiter({ limit: Number(process.env.TRIMM_RATE_LIMIT_PER_MINUTE) || 120 });
 
 async function authorizeRequest(request, authentication, policy) {
   const requestId = correlationId(request);

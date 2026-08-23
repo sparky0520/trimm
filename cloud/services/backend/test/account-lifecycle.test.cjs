@@ -7,7 +7,7 @@ const { VolatileAccountStore } = require('../server/account-store.cjs');
 
 const principal = { id: 'user-123', authentication: 'oidc' };
 
-test('account export combines bounded identity and ctrlB-owned data', async () => {
+test('account export combines bounded identity and trimm-owned data', async () => {
   const lifecycle = new AccountLifecycle({
     identityProvider: { exportUser: async () => ({ id: principal.id }), revokeSessions: async () => {}, deleteUser: async () => {} },
     dataStore: Object.assign(new VolatileAccountStore(), { exportUser: async () => ({ projects: [{ id: 'project-1' }] }) }),

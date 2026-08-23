@@ -70,7 +70,7 @@ class PostgresAgentRunStore {
 
   async create(run) {
     const [row] = await this.sql`
-      insert into ctrlb_private.agent_runs
+      insert into trimm_private.agent_runs
         (id, owner_id, project_id, project_revision, status, events, inventory, decision, attempts, recovery, usage)
       values (
         ${run.id}, ${run.ownerId}, ${run.projectId}, ${run.projectRevision},
@@ -88,7 +88,7 @@ class PostgresAgentRunStore {
     const [row] = await this.sql`
       select id, owner_id, project_id, project_revision, status,
              events, inventory, decision, attempts, recovery, usage, state_version
-      from ctrlb_private.agent_runs
+      from trimm_private.agent_runs
       where id = ${runId} and owner_id = ${ownerId}
     `;
     return record(row);
@@ -96,7 +96,7 @@ class PostgresAgentRunStore {
 
   async save(run, expectedVersion) {
     const [row] = await this.sql`
-      update ctrlb_private.agent_runs set
+      update trimm_private.agent_runs set
         project_revision = ${run.projectRevision},
         status = ${run.status},
         events = ${this.sql.json(run.events)},

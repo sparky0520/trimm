@@ -1,23 +1,23 @@
-# ctrlB releases and public website
+# trimm releases and public website
 
 <p align="center">
-  <img src="./ctrlb-icon.svg" width="88" alt="ctrlB icon">
+  <img src="./trimm-icon.svg" width="88" alt="trimm icon">
 </p>
 
 <p align="center"><strong>Edit your video just by chatting.</strong></p>
 
-This public repository stores ctrlB desktop release assets and hosts the
+This public repository stores trimm desktop release assets and hosts the
 official download webpage through GitHub Pages.
 
-- Website: <https://sparky0520.github.io/ctrlb-releases/>
+- Website: <https://sparky0520.github.io/trimm-releases/>
 - Visual system explainer:
-  <https://sparky0520.github.io/ctrlb-releases/how-video-editing-works.html>
+  <https://sparky0520.github.io/trimm-releases/how-video-editing-works.html>
 - Latest Windows installer:
-  <https://github.com/sparky0520/ctrlb-releases/releases/latest/download/ctrlb-Setup-Windows.exe>
+  <https://github.com/sparky0520/trimm-releases/releases/latest/download/trimm-Setup-Windows.exe>
 
-## What ctrlB does
+## What trimm does
 
-ctrlB is a conversational video editor. Import your footage, describe the
+trimm is a conversational video editor. Import your footage, describe the
 result you want, review the proposed edit in the preview, and export locally.
 
 - Chat-first editing instead of a filter wizard
@@ -29,9 +29,9 @@ result you want, review the proposed edit in the preview, and export locally.
 ## Downloads and verification
 
 Installers are published under
-[Releases](https://github.com/sparky0520/ctrlb-releases/releases). Each release
+[Releases](https://github.com/sparky0520/trimm-releases/releases). Each release
 also provides `sha256sums.txt` for verifying the downloaded installer.
 
 For product or installation problems, use the
-[desktop issue tracker](https://github.com/sparky0520/ctrlb-desktop/issues).
-Public binary releases for ctrlb
+[desktop issue tracker](https://github.com/sparky0520/trimm-desktop/issues).
+Public binary releases for trimm

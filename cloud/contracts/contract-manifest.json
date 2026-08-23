@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "owner": "sparky0520/ctrlb-cloud",
+  "owner": "sparky0520/trimm-cloud",
   "contracts": {
     "planner": 1,
     "evidencePacket": 1,

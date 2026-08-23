@@ -22,6 +22,6 @@ test('Render backend serves the public privacy policy without authentication', (
 
   assert.match(source, /requestUrl\.pathname === '\/privacy'/);
   assert.match(source, /return html\(response, 200, privacyPolicy\)/);
-  assert.match(policy, /ctrlB Privacy Policy/);
+  assert.match(policy, /trimm Privacy Policy/);
   assert.match(policy, /darshjain05\.in@gmail\.com/);
 });

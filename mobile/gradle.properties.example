@@ -1,9 +1,9 @@
 # Copy these values into ~/.gradle/gradle.properties for local builds or inject them in CI.
 # Do not commit real credentials.
-CTRLB_BACKEND_URL=https://api.example.com
+TRIMM_BACKEND_URL=https://api.example.com
 # Optional per-route override:
-# CTRLB_PLANNER_URL=https://api.example.com/v1/mobile/plan
+# TRIMM_PLANNER_URL=https://api.example.com/v1/mobile/plan
 # Development bootstrap token only. Replace this shared-token scheme with user-scoped JWTs before public release.
-CTRLB_PLANNER_TOKEN=1234567890
-# CTRLB_TRANSCRIPTION_URL=https://api.example.com/v1/transcribe
-CTRLB_AUDIO_CATALOG_URL=https://cdn.example.com/ctrlb/audio/catalog.v1.json
+TRIMM_PLANNER_TOKEN=1234567890
+# TRIMM_TRANSCRIPTION_URL=https://api.example.com/v1/transcribe
+TRIMM_AUDIO_CATALOG_URL=https://cdn.example.com/trimm/audio/catalog.v1.json

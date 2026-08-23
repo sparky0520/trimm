@@ -1,6 +1,6 @@
-# ctrlB video agent
+# trimm video agent
 
-ctrlB is a conversational video editor. Android transcribes every source in full before planning. Gemini receives the timestamped transcript, project metadata, and existing accepted edits.
+trimm is a conversational video editor. Android transcribes every source in full before planning. Gemini receives the timestamped transcript, project metadata, and existing accepted edits.
 
 For a single source of 30 seconds or less, the run first authorizes and uploads the complete video, then Gemini processes it at low media resolution. For longer sources, Gemini starts from the complete transcript and calls `inspect_video_range` for the audiovisual context it needs. Each requested window is at most 30 seconds. Low resolution is normal; high resolution is allowed only for an overlapping range already inspected at low resolution and with a concrete remaining uncertainty.
 

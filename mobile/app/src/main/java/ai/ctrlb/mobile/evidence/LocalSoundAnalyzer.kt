@@ -23,7 +23,7 @@ class LocalSoundAnalyzer(
     private val decoder: AudioPcmDecoder,
     private val speechRanges: List<TimeRange> = emptyList(),
     override val identity: AnalyzerIdentity =
-        AnalyzerIdentity("ctrlB scene-aware audio analyzer", "2.0.0", ExecutionLocation.LOCAL_DEVICE)
+        AnalyzerIdentity("trimm scene-aware audio analyzer", "2.0.0", ExecutionLocation.LOCAL_DEVICE)
 ) : EvidenceAnalyzer {
     constructor(context: Context, speechRanges: List<TimeRange> = emptyList()) :
         this(AndroidAudioPcmDecoder(context), speechRanges)

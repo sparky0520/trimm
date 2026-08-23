@@ -1,10 +1,10 @@
-# ctrlB Cloud
+# trimm Cloud
 
-Shared long-lived backend for ctrlB mobile and desktop.
+Shared long-lived backend for trimm mobile and desktop.
 
 It owns authentication and authorization, planning, transcription, derivative jobs, the route-local LangGraph video agent, billing state, account lifecycle, catalog ingestion, and the public privacy policy.
 
-ctrlB is now defined as a video-first multimodal editing agent. See [Product definition](docs/PRODUCT.md), [Architecture](docs/ARCHITECTURE.md), and [Roadmap](docs/ROADMAP.md).
+trimm is now defined as a video-first multimodal editing agent. See [Product definition](docs/PRODUCT.md), [Architecture](docs/ARCHITECTURE.md), and [Roadmap](docs/ROADMAP.md).
 
 Start with the [cloud development guide](docs/DEVELOPMENT.md) before taking a
 ticket.

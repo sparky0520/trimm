@@ -104,7 +104,7 @@ class PostgresSemanticCache {
   async put(input) {
     const item = identity(input);
     const [row] = await this.sql`
-      insert into ctrlb_private.semantic_cache_entries (
+      insert into trimm_private.semantic_cache_entries (
         owner_id, project_id, cache_type, source_fingerprint, range_start_ms, range_end_ms,
         transform, model, model_version, analyzer_version, value, provenance, cost_micros, expires_at
       ) values (
@@ -127,7 +127,7 @@ class PostgresSemanticCache {
   async get(input) {
     const item = identity(input);
     const [row] = await this.sql`
-      update ctrlb_private.semantic_cache_entries set
+      update trimm_private.semantic_cache_entries set
         hit_count = hit_count + 1, last_hit_at = now()
       where owner_id = ${item.ownerId} and project_id = ${item.projectId}
         and cache_type = ${item.cacheType} and source_fingerprint = ${item.sourceFingerprint}
@@ -141,7 +141,7 @@ class PostgresSemanticCache {
   }
   async invalidateRange({ ownerId, projectId, sourceFingerprint, rangeStartMs, rangeEndMs }) {
     const rows = await this.sql`
-      delete from ctrlb_private.semantic_cache_entries
+      delete from trimm_private.semantic_cache_entries
       where owner_id = ${ownerId} and project_id = ${projectId}
         and source_fingerprint = ${sourceFingerprint}
         and range_start_ms < ${rangeEndMs} and range_end_ms > ${rangeStartMs}
@@ -151,13 +151,13 @@ class PostgresSemanticCache {
   }
   async deleteOwner(ownerId) {
     const rows = await this.sql`
-      delete from ctrlb_private.semantic_cache_entries where owner_id = ${ownerId} returning id
+      delete from trimm_private.semantic_cache_entries where owner_id = ${ownerId} returning id
     `;
     return rows.length;
   }
   async cleanupExpired() {
     const rows = await this.sql`
-      delete from ctrlb_private.semantic_cache_entries where expires_at <= now() returning id
+      delete from trimm_private.semantic_cache_entries where expires_at <= now() returning id
     `;
     return rows.length;
   }

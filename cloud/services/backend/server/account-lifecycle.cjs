@@ -7,7 +7,7 @@ function lifecycleError(message, status, code) {
 }
 
 function deletionId(userId) {
-  return crypto.createHash('sha256').update(`ctrlb-account-deletion:${userId}`).digest('hex').slice(0, 32);
+  return crypto.createHash('sha256').update(`trimm-account-deletion:${userId}`).digest('hex').slice(0, 32);
 }
 
 class AccountLifecycle {

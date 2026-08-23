@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ctrlb.ai/contracts/video-tool-request.v2.json",
+  "$id": "https://trimm.ai/contracts/video-tool-request.v2.json",
   "type": "object",
   "required": ["type", "tool", "jobs"],
   "properties": {

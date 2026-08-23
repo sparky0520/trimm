@@ -1,6 +1,6 @@
 'use strict';
 
-// ctrlB currently has no durable remote project database. This store tracks deletion
+// trimm currently has no durable remote project database. This store tracks deletion
 // progress for the process lifetime. A database-backed implementation can replace it
 // without weakening lifecycle ordering or idempotency.
 class VolatileAccountStore {

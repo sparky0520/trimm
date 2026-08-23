@@ -1,7 +1,7 @@
 {
-  "name": "ctrlb-cloud",
+  "name": "trimm-cloud",
   "version": "0.3.3",
-  "description": "Shared ctrlB cloud backend",
+  "description": "Shared trimm cloud backend",
   "private": true,
   "type": "module",
   "scripts": {

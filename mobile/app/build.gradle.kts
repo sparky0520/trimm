@@ -11,10 +11,10 @@ val rootLocalEnv: Map<String, String> = rootProject.file(".env.local").takeIf { 
         else trimmed.substringBefore("=").trim() to trimmed.substringAfter("=").trim()
     }?.toMap().orEmpty()
 
-val uploadStorePath = rootLocalEnv["CTRLB_ANDROID_UPLOAD_STORE_FILE"].orEmpty()
-val uploadStorePassword = rootLocalEnv["CTRLB_ANDROID_UPLOAD_STORE_PASSWORD"].orEmpty()
-val uploadKeyAlias = rootLocalEnv["CTRLB_ANDROID_UPLOAD_KEY_ALIAS"].orEmpty()
-val uploadKeyPassword = rootLocalEnv["CTRLB_ANDROID_UPLOAD_KEY_PASSWORD"].orEmpty()
+val uploadStorePath = rootLocalEnv["TRIMM_ANDROID_UPLOAD_STORE_FILE"].orEmpty()
+val uploadStorePassword = rootLocalEnv["TRIMM_ANDROID_UPLOAD_STORE_PASSWORD"].orEmpty()
+val uploadKeyAlias = rootLocalEnv["TRIMM_ANDROID_UPLOAD_KEY_ALIAS"].orEmpty()
+val uploadKeyPassword = rootLocalEnv["TRIMM_ANDROID_UPLOAD_KEY_PASSWORD"].orEmpty()
 
 android {
     namespace = "ai.ctrlb.mobile"
@@ -27,23 +27,23 @@ android {
         versionCode = 11
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        val backendUrl = providers.gradleProperty("CTRLB_BACKEND_URL")
-            .orElse(providers.environmentVariable("CTRLB_BACKEND_URL"))
-            .orElse(rootLocalEnv["CTRLB_BACKEND_URL"] ?: "")
+        val backendUrl = providers.gradleProperty("TRIMM_BACKEND_URL")
+            .orElse(providers.environmentVariable("TRIMM_BACKEND_URL"))
+            .orElse(rootLocalEnv["TRIMM_BACKEND_URL"] ?: "")
             .get().trimEnd('/')
-        val plannerUrl = providers.gradleProperty("CTRLB_PLANNER_URL").orElse(
+        val plannerUrl = providers.gradleProperty("TRIMM_PLANNER_URL").orElse(
             backendUrl.takeIf { it.isNotEmpty() }?.let { "$it/v1/mobile/plan" } ?: ""
         ).get()
-        val agentRunsUrl = providers.gradleProperty("CTRLB_AGENT_RUNS_URL").orElse(
+        val agentRunsUrl = providers.gradleProperty("TRIMM_AGENT_RUNS_URL").orElse(
             backendUrl.takeIf { it.isNotEmpty() }?.let { "$it/v1/conversations" } ?: ""
         ).get()
-        val transcriptionUrl = providers.gradleProperty("CTRLB_TRANSCRIPTION_URL").orElse(
+        val transcriptionUrl = providers.gradleProperty("TRIMM_TRANSCRIPTION_URL").orElse(
             backendUrl.takeIf { it.isNotEmpty() }?.let { "$it/v1/transcribe" } ?: ""
         ).get()
-        val catalogUrl = providers.gradleProperty("CTRLB_AUDIO_CATALOG_URL").orElse("").get()
-        val clerkPublishableKey = providers.gradleProperty("CTRLB_CLERK_PUBLISHABLE_KEY")
-            .orElse(providers.environmentVariable("CTRLB_CLERK_PUBLISHABLE_KEY"))
-            .orElse(rootLocalEnv["CTRLB_CLERK_PUBLISHABLE_KEY"] ?: rootLocalEnv["VITE_CLERK_PUBLISHABLE_KEY"] ?: "").get()
+        val catalogUrl = providers.gradleProperty("TRIMM_AUDIO_CATALOG_URL").orElse("").get()
+        val clerkPublishableKey = providers.gradleProperty("TRIMM_CLERK_PUBLISHABLE_KEY")
+            .orElse(providers.environmentVariable("TRIMM_CLERK_PUBLISHABLE_KEY"))
+            .orElse(rootLocalEnv["TRIMM_CLERK_PUBLISHABLE_KEY"] ?: rootLocalEnv["VITE_CLERK_PUBLISHABLE_KEY"] ?: "").get()
         buildConfigField("String", "PLANNER_URL", "\"${plannerUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "AGENT_RUNS_URL", "\"${agentRunsUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "TRANSCRIPTION_URL", "\"${transcriptionUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
@@ -62,15 +62,15 @@ android {
     }
     buildTypes {
         debug {
-            val allowBootstrap = providers.gradleProperty("CTRLB_ALLOW_BOOTSTRAP_AUTH")
-                .orElse(providers.environmentVariable("CTRLB_ALLOW_BOOTSTRAP_AUTH"))
-                .orElse(rootLocalEnv["CTRLB_ALLOW_BOOTSTRAP_AUTH"] ?: "false").get().equals("true", ignoreCase = true)
-            val force4kExport = providers.gradleProperty("CTRLB_FORCE_4K_EXPORT")
+            val allowBootstrap = providers.gradleProperty("TRIMM_ALLOW_BOOTSTRAP_AUTH")
+                .orElse(providers.environmentVariable("TRIMM_ALLOW_BOOTSTRAP_AUTH"))
+                .orElse(rootLocalEnv["TRIMM_ALLOW_BOOTSTRAP_AUTH"] ?: "false").get().equals("true", ignoreCase = true)
+            val force4kExport = providers.gradleProperty("TRIMM_FORCE_4K_EXPORT")
                 .orElse("false").get().equals("true", ignoreCase = true)
             val bootstrapToken = if (allowBootstrap) {
-                providers.gradleProperty("CTRLB_PLANNER_TOKEN")
-                    .orElse(providers.environmentVariable("CTRLB_PLANNER_CLIENT_TOKEN"))
-                    .orElse(rootLocalEnv["CTRLB_PLANNER_CLIENT_TOKEN"] ?: "").get()
+                providers.gradleProperty("TRIMM_PLANNER_TOKEN")
+                    .orElse(providers.environmentVariable("TRIMM_PLANNER_CLIENT_TOKEN"))
+                    .orElse(rootLocalEnv["TRIMM_PLANNER_CLIENT_TOKEN"] ?: "").get()
             } else ""
             buildConfigField("String", "PLANNER_TOKEN", "\"${bootstrapToken.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
             buildConfigField("boolean", "FORCE_4K_EXPORT", force4kExport.toString())

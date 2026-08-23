@@ -147,7 +147,7 @@ function validateActualContent(file, job) {
 
 class DerivativeJobs {
   constructor(options = {}) {
-    this.directory = options.directory || path.join(os.tmpdir(), 'ctrlb-derivative-jobs');
+    this.directory = options.directory || path.join(os.tmpdir(), 'trimm-derivative-jobs');
     this.now = options.now || Date.now;
     this.ttlMs = options.ttlMs || DEFAULT_TTL_MS;
     this.retentionMs = options.retentionMs || DEFAULT_RETENTION_MS;

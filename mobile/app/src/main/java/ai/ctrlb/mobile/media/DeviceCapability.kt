@@ -93,7 +93,7 @@ data class DeviceCapabilityReport(
             .filter(String::isNotEmpty)
             .distinct()
         return if (adjustments.isEmpty()) headline
-        else "$headline ctrlB will adapt automatically: ${adjustments.joinToString(" ")}"
+        else "$headline trimm will adapt automatically: ${adjustments.joinToString(" ")}"
     }
 }
 

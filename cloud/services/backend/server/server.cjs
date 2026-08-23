@@ -1,6 +1,6 @@
 'use strict';
 
-// Production HTTP entrypoint for the shared ctrlB backend.
+// Production HTTP entrypoint for the shared trimm backend.
 
 require('dotenv').config({ path: require('node:path').join(__dirname, '..', '..', '..', '.env.local') });
 require('dotenv').config({ path: require('node:path').join(__dirname, '..', '..', '..', '.env') });
@@ -30,7 +30,7 @@ const transcriptionUploads = new TranscriptionUploads();
 const uploadCleanupTimer = setInterval(() => transcriptionUploads.cleanup(), 15 * 60 * 1000);
 uploadCleanupTimer.unref();
 const authentication = authenticationFromEnvironment();
-const rateLimiter = new IdentityRateLimiter({ limit: Number(process.env.CTRLB_RATE_LIMIT_PER_MINUTE) || 120 });
+const rateLimiter = new IdentityRateLimiter({ limit: Number(process.env.TRIMM_RATE_LIMIT_PER_MINUTE) || 120 });
 if (process.env.NODE_ENV === 'production' && !process.env.SUPABASE_DB_URL) {
   throw new Error('Production database is not configured; agent run persistence requires it.');
 }
@@ -112,8 +112,8 @@ function derivativeView(job) {
 
 function derivativeContext(request) {
   return {
-    projectId: String(request.headers['x-ctrlb-project-id'] || ''),
-    deviceSessionId: String(request.headers['x-ctrlb-device-session-id'] || ''),
+    projectId: String(request.headers['x-trimm-project-id'] || ''),
+    deviceSessionId: String(request.headers['x-trimm-device-session-id'] || ''),
   };
 }
 
@@ -313,4 +313,4 @@ const server = http.createServer(async (request, response) => {
 // default whole-request timeout.
 server.requestTimeout = 0;
 server.keepAliveTimeout = 65_000;
-server.listen(port, () => console.log(`[ctrlb-backend] listening on :${port} with ${model}`));
+server.listen(port, () => console.log(`[trimm-backend] listening on :${port} with ${model}`));

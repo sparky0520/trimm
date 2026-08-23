@@ -9,7 +9,7 @@ const { Readable } = require('node:stream');
 const { TranscriptionUploads } = require('../server/transcription-uploads.cjs');
 
 function fixture() {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ctrlb-upload-test-'));
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'trimm-upload-test-'));
   return { directory, uploads: new TranscriptionUploads({ directory, maxBytes: 32, ttlMs: 1000 }) };
 }
 

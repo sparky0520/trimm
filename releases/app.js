@@ -1,4 +1,4 @@
-fetch('https://api.github.com/repos/sparky0520/ctrlb-releases/releases/latest', {
+fetch('https://api.github.com/repos/sparky0520/trimm-releases/releases/latest', {
   headers: { Accept: 'application/vnd.github+json' },
 })
   .then((response) => response.ok ? response.json() : Promise.reject(new Error('Release unavailable')))

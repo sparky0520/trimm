@@ -18,7 +18,7 @@ $ErrorActionPreference = "Continue"
 $javaVersionOutput = & $javaExecutable -version 2>&1 | Out-String
 $ErrorActionPreference = $previousErrorActionPreference
 if ($javaVersionOutput -notmatch 'version "17(?:[."-])') {
-    throw "ctrlB Mobile requires JDK 17. JAVA_HOME currently reports: $($javaVersionOutput.Trim())"
+    throw "trimm Mobile requires JDK 17. JAVA_HOME currently reports: $($javaVersionOutput.Trim())"
 }
 
 if (-not (Test-Path -LiteralPath $localEnvironmentFile)) {
@@ -33,12 +33,12 @@ Get-Content -LiteralPath $localEnvironmentFile | ForEach-Object {
 }
 
 $requiredSettings = @(
-    "CTRLB_BACKEND_URL",
-    "CTRLB_CLERK_PUBLISHABLE_KEY",
-    "CTRLB_ANDROID_UPLOAD_STORE_FILE",
-    "CTRLB_ANDROID_UPLOAD_STORE_PASSWORD",
-    "CTRLB_ANDROID_UPLOAD_KEY_ALIAS",
-    "CTRLB_ANDROID_UPLOAD_KEY_PASSWORD"
+    "TRIMM_BACKEND_URL",
+    "TRIMM_CLERK_PUBLISHABLE_KEY",
+    "TRIMM_ANDROID_UPLOAD_STORE_FILE",
+    "TRIMM_ANDROID_UPLOAD_STORE_PASSWORD",
+    "TRIMM_ANDROID_UPLOAD_KEY_ALIAS",
+    "TRIMM_ANDROID_UPLOAD_KEY_PASSWORD"
 )
 
 $missingSettings = $requiredSettings | Where-Object {
@@ -50,13 +50,13 @@ if ($missingSettings) {
 
 $backendUri = $null
 if (
-    -not [Uri]::TryCreate($localEnvironment["CTRLB_BACKEND_URL"], [UriKind]::Absolute, [ref]$backendUri) -or
+    -not [Uri]::TryCreate($localEnvironment["TRIMM_BACKEND_URL"], [UriKind]::Absolute, [ref]$backendUri) -or
     $backendUri.Scheme -ne "https"
 ) {
-    throw "CTRLB_BACKEND_URL must be an absolute HTTPS production origin."
+    throw "TRIMM_BACKEND_URL must be an absolute HTTPS production origin."
 }
 
-$keyStorePath = Join-Path $repositoryRoot $localEnvironment["CTRLB_ANDROID_UPLOAD_STORE_FILE"]
+$keyStorePath = Join-Path $repositoryRoot $localEnvironment["TRIMM_ANDROID_UPLOAD_STORE_FILE"]
 if (-not (Test-Path -LiteralPath $keyStorePath)) {
     throw "The configured upload keystore does not exist: $keyStorePath"
 }

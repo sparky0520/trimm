@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ctrlb.ai/contracts/conversation.v3.json",
+  "$id": "https://trimm.ai/contracts/conversation.v3.json",
   "type": "object",
   "required": ["contractVersion", "conversationId", "projectId", "projectRevision", "status", "events", "outcome", "usage"],
   "properties": {

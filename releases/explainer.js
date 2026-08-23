@@ -2,7 +2,7 @@ const details = {
   coverage: {
     tag: 'Representative coverage',
     title: 'Enough context to preserve the story',
-    body: 'ctrlB includes moments across the whole recording, not just suspected mistakes. This helps the agent understand what should stay.',
+    body: 'trimm includes moments across the whole recording, not just suspected mistakes. This helps the agent understand what should stay.',
   },
   candidate: {
     tag: 'Measured candidate',

@@ -40,18 +40,18 @@ class PostgresDerivativeJobs {
   async withOwner(ownerId, operation) {
     return this.sql.begin(async (sql) => {
       await sql`
-        insert into ctrlb_private.derivative_owner_state (owner_id)
+        insert into trimm_private.derivative_owner_state (owner_id)
         values (${ownerId}) on conflict (owner_id) do nothing
       `;
       const [state] = await sql`
-        select payload, state_version from ctrlb_private.derivative_owner_state
+        select payload, state_version from trimm_private.derivative_owner_state
         where owner_id = ${ownerId} for update
       `;
-      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ctrlb-durable-derivative-'));
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'trimm-durable-derivative-'));
       const engine = new DerivativeJobs({ ...this.options, directory });
       hydrate(engine, state.payload);
       const blobs = await sql`
-        select job_id, bytes from ctrlb_private.derivative_blobs where owner_id = ${ownerId}
+        select job_id, bytes from trimm_private.derivative_blobs where owner_id = ${ownerId}
       `;
       for (const blob of blobs) fs.writeFileSync(engine.mediaPath(blob.job_id), Buffer.from(blob.bytes));
       try {
@@ -62,21 +62,21 @@ class PostgresDerivativeJobs {
           if (!fs.existsSync(file)) continue;
           retained.push(job.id);
           await sql`
-            insert into ctrlb_private.derivative_blobs (job_id, owner_id, bytes)
+            insert into trimm_private.derivative_blobs (job_id, owner_id, bytes)
             values (${job.id}, ${ownerId}, ${fs.readFileSync(file)})
             on conflict (job_id) do update set bytes = excluded.bytes, updated_at = now()
           `;
         }
         if (retained.length) {
           await sql`
-            delete from ctrlb_private.derivative_blobs
+            delete from trimm_private.derivative_blobs
             where owner_id = ${ownerId} and job_id not in ${sql(retained)}
           `;
         } else {
-          await sql`delete from ctrlb_private.derivative_blobs where owner_id = ${ownerId}`;
+          await sql`delete from trimm_private.derivative_blobs where owner_id = ${ownerId}`;
         }
         await sql`
-          update ctrlb_private.derivative_owner_state
+          update trimm_private.derivative_owner_state
           set payload = ${sql.json(payloadFor(engine))},
               state_version = state_version + 1,
               updated_at = now()
@@ -112,13 +112,13 @@ class PostgresDerivativeJobs {
     return this.withOwner(ownerId, (engine) => engine.cleanup());
   }
   async cleanup() {
-    const owners = await this.sql`select owner_id from ctrlb_private.derivative_owner_state`;
+    const owners = await this.sql`select owner_id from trimm_private.derivative_owner_state`;
     await Promise.all(owners.map(({ owner_id: ownerId }) => this.cleanupOwner(ownerId)));
   }
   async deleteOwner(ownerId) {
     await this.sql.begin(async (sql) => {
-      await sql`delete from ctrlb_private.derivative_blobs where owner_id = ${ownerId}`;
-      await sql`delete from ctrlb_private.derivative_owner_state where owner_id = ${ownerId}`;
+      await sql`delete from trimm_private.derivative_blobs where owner_id = ${ownerId}`;
+      await sql`delete from trimm_private.derivative_owner_state where owner_id = ${ownerId}`;
     });
   }
 }

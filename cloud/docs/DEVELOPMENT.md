@@ -6,8 +6,8 @@ Work here only when the change owns shared server behavior: authentication,
 agent orchestration, derivatives, transcription, canonical contracts, durable
 state, billing, account lifecycle, or the operated audio catalog.
 
-Android UI/rendering belongs in `ctrlb-mobile`. Electron/Remotion behavior
-belongs in `ctrlb-desktop`.
+Android UI/rendering belongs in `trimm-mobile`. Electron/Remotion behavior
+belongs in `trimm-desktop`.
 
 ## Start
 

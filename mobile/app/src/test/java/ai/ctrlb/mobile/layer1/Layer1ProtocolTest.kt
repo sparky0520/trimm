@@ -14,7 +14,7 @@ import org.junit.Test
 class Layer1ProtocolTest {
     private val source = SourceMedia("content://media/video/1", "sha256:source", 10_000, 1920, 1080)
     private val project = MobileProject(id = "project-1", title = "Test", source = source, revision = 4)
-    private val root = Files.createTempDirectory("ctrlb-layer1-").toFile()
+    private val root = Files.createTempDirectory("trimm-layer1-").toFile()
     private val policy = Layer1PathPolicy(setOf(source.uri), setOf(root))
     private val capabilities = Layer1Capabilities(
         commands = setOf(

@@ -23,7 +23,7 @@ function download(source, destination) {
     const partial = `${destination}.partial`;
     run('curl', [
       '--fail', '--location', '--retry', '4', '--retry-all-errors',
-      '--user-agent', 'ctrlB-mobile-editorial-fixture/1.0',
+      '--user-agent', 'trimm-mobile-editorial-fixture/1.0',
       '--output', partial, source.sourceUrl
     ], `Download failed for ${source.id}`);
     fs.renameSync(partial, destination);

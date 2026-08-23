@@ -88,7 +88,7 @@ class DerivativeUploadClient(
             connectTimeout = 15_000
             readTimeout = 60_000
             setRequestProperty("Authorization", "Bearer $token")
-            setRequestProperty("X-ctrlB-Project-Id", projectId)
-            setRequestProperty("X-ctrlB-Device-Session-Id", deviceSessionId)
+            setRequestProperty("X-trimm-Project-Id", projectId)
+            setRequestProperty("X-trimm-Device-Session-Id", deviceSessionId)
         }
 }

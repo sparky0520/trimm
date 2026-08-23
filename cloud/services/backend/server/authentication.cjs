@@ -69,7 +69,7 @@ class Authenticator {
       return Object.freeze({
         id: payload.sub,
         scopes: Object.freeze([...new Set([...this.defaultScopes, ...claimedScopes])]),
-        // Paid access is resolved from ctrlB's billing store. Identity-provider
+        // Paid access is resolved from trimm's billing store. Identity-provider
         // custom claims are intentionally not an authorization source.
         entitlements: Object.freeze([]),
         authentication: 'oidc',
@@ -82,17 +82,17 @@ class Authenticator {
 
 function fromEnvironment(environment = process.env) {
   const production = environment.NODE_ENV === 'production';
-  const derivedIssuer = clerkIssuer(environment.CTRLB_CLERK_PUBLISHABLE_KEY || environment.VITE_CLERK_PUBLISHABLE_KEY);
-  const issuer = derivedIssuer || environment.CTRLB_AUTH_ISSUER;
-  const revokedTokenIds = new Set(String(environment.CTRLB_AUTH_REVOKED_TOKEN_IDS || '').split(',').map((value) => value.trim()).filter(Boolean));
+  const derivedIssuer = clerkIssuer(environment.TRIMM_CLERK_PUBLISHABLE_KEY || environment.VITE_CLERK_PUBLISHABLE_KEY);
+  const issuer = derivedIssuer || environment.TRIMM_AUTH_ISSUER;
+  const revokedTokenIds = new Set(String(environment.TRIMM_AUTH_REVOKED_TOKEN_IDS || '').split(',').map((value) => value.trim()).filter(Boolean));
   return new Authenticator({
     issuer,
-    audience: environment.CTRLB_AUTH_AUDIENCE,
-    jwksUri: derivedIssuer ? `${derivedIssuer}/.well-known/jwks.json` : environment.CTRLB_AUTH_JWKS_URL,
-    authorizedParties: String(environment.CTRLB_AUTH_AUTHORIZED_PARTIES || '').split(',').map((value) => value.trim()).filter(Boolean),
-    defaultScopes: String(environment.CTRLB_AUTH_DEFAULT_SCOPES || '').split(/\s+/).filter(Boolean),
-    bootstrapToken: environment.CTRLB_PLANNER_CLIENT_TOKEN,
-    allowBootstrap: !production && environment.CTRLB_ALLOW_BOOTSTRAP_AUTH === 'true',
+    audience: environment.TRIMM_AUTH_AUDIENCE,
+    jwksUri: derivedIssuer ? `${derivedIssuer}/.well-known/jwks.json` : environment.TRIMM_AUTH_JWKS_URL,
+    authorizedParties: String(environment.TRIMM_AUTH_AUTHORIZED_PARTIES || '').split(',').map((value) => value.trim()).filter(Boolean),
+    defaultScopes: String(environment.TRIMM_AUTH_DEFAULT_SCOPES || '').split(/\s+/).filter(Boolean),
+    bootstrapToken: environment.TRIMM_PLANNER_CLIENT_TOKEN,
+    allowBootstrap: !production && environment.TRIMM_ALLOW_BOOTSTRAP_AUTH === 'true',
     isRevoked: ({ tokenId }) => tokenId !== null && revokedTokenIds.has(tokenId),
   });
 }

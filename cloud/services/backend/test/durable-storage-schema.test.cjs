@@ -14,9 +14,9 @@ const store = fs.readFileSync(path.join(__dirname, '..', 'server', 'postgres-der
 
 test('production derivative state, bytes and semantic caches are private durable tables', () => {
   for (const table of ['derivative_owner_state', 'derivative_blobs', 'semantic_cache_entries']) {
-    assert.match(migration, new RegExp(`create table ctrlb_private\\.${table}`, 'i'));
-    assert.match(migration, new RegExp(`alter table ctrlb_private\\.${table} enable row level security`, 'i'));
-    assert.match(migration, new RegExp(`revoke all on ctrlb_private\\.${table} from public, anon, authenticated`, 'i'));
+    assert.match(migration, new RegExp(`create table trimm_private\\.${table}`, 'i'));
+    assert.match(migration, new RegExp(`alter table trimm_private\\.${table} enable row level security`, 'i'));
+    assert.match(migration, new RegExp(`revoke all on trimm_private\\.${table} from public, anon, authenticated`, 'i'));
   }
   assert.match(migration, /cache_type in \('provider_context', 'media_index'\)/i);
   assert.match(migration, /hit_count bigint not null default 0/i);
@@ -25,6 +25,6 @@ test('production derivative state, bytes and semantic caches are private durable
 test('production selects transactional Postgres derivative storage', () => {
   assert.match(server, /process\.env\.SUPABASE_DB_URL[\s\S]*new PostgresDerivativeJobs/i);
   assert.match(store, /for update/i);
-  assert.match(store, /insert into ctrlb_private\.derivative_blobs/i);
+  assert.match(store, /insert into trimm_private\.derivative_blobs/i);
   assert.match(store, /state_version = state_version \+ 1/i);
 });

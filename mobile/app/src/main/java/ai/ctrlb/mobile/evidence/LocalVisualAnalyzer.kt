@@ -8,7 +8,7 @@ import java.io.File
 import kotlin.math.abs
 
 class LocalVisualAnalyzer(private val context: android.content.Context) : EvidenceAnalyzer {
-    override val identity = AnalyzerIdentity("ctrlB frame sampler", "1.0.0", ExecutionLocation.LOCAL_DEVICE)
+    override val identity = AnalyzerIdentity("trimm frame sampler", "1.0.0", ExecutionLocation.LOCAL_DEVICE)
 
     override suspend fun analyze(context: AnalyzerContext): List<EvidenceObservation> {
         val source = context.source

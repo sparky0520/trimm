@@ -6,7 +6,7 @@ import ai.ctrlb.mobile.domain.TranscriptWord
 
 class SpeechEvidenceAnalyzer(
     private val words: List<TranscriptWord>,
-    override val identity: AnalyzerIdentity = AnalyzerIdentity("ctrlB speech structure", "1.0.0", ExecutionLocation.EXTERNAL_SERVICE)
+    override val identity: AnalyzerIdentity = AnalyzerIdentity("trimm speech structure", "1.0.0", ExecutionLocation.EXTERNAL_SERVICE)
 ) : EvidenceAnalyzer {
     override suspend fun analyze(context: AnalyzerContext): List<EvidenceObservation> {
         val source = context.source

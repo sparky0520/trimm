@@ -15,7 +15,7 @@ const DEFAULT_BUDGETS = Object.freeze({
   maximumDurationMs: 10 * 60 * 1000,
   retentionMs: 6 * 60 * 60 * 1000,
 });
-const SYSTEM_POLICY = `You are ctrlB's private video-editing agent.
+const SYSTEM_POLICY = `You are trimm's private video-editing agent.
 Follow the latest user message while retaining relevant context from earlier messages.
 You must call one supplied tool to proceed.
 Use proposal tools for operations they cover; their descriptions contain the operation-specific editorial policy.
