@@ -10,6 +10,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.jsonArray
@@ -457,44 +459,53 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
     }
 
     private suspend fun post(endpoint: URI, body: String): AgentRun {
-        val connection = endpoint.toURL().openConnection() as HttpURLConnection
-        return try {
-            connection.requestMethod = "POST"
-            connection.connectTimeout = 30_000
-            connection.readTimeout = AGENT_RUN_READ_TIMEOUT_MS
-            connection.doOutput = true
-            connection.setRequestProperty("Content-Type", "application/json")
-            connection.setRequestProperty("Authorization", "Bearer ${accessToken()}")
-            connection.outputStream.use { it.write(body.toByteArray()) }
-            val responseCode = connection.responseCode
-            if (responseCode !in 200..299) {
-                val error = connection.errorStream
-                    ?.bufferedReader()
-                    ?.use { it.readText().take(1_000) }
-                    ?.takeIf(String::isNotBlank)
-                throw IllegalArgumentException(
-                    buildString {
-                        append("Agent run failed ($responseCode)")
-                        if (error != null) append(": $error")
+        var attempt = 0
+        while (true) {
+            coroutineContext.ensureActive()
+            val connection = endpoint.toURL().openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 30_000
+                connection.readTimeout = AGENT_RUN_READ_TIMEOUT_MS
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.setRequestProperty("Authorization", "Bearer ${accessToken()}")
+                connection.outputStream.use { it.write(body.toByteArray()) }
+                val responseCode = connection.responseCode
+                if (responseCode !in 200..299) {
+                    val error = connection.errorStream
+                        ?.bufferedReader()
+                        ?.use { it.readText().take(1_000) }
+                        ?.takeIf(String::isNotBlank)
+                        
+                    if (responseCode in listOf(502, 503, 504) && attempt < 3) {
+                        attempt++
+                        kotlinx.coroutines.delay(1000L * attempt)
+                        continue
                     }
-                )
+                    
+                    throw IllegalArgumentException(
+                        buildString {
+                            append("Agent run failed ($responseCode)")
+                            if (error != null) append(": $error")
+                        }
+                    )
+                }
+                return connection.inputStream.bufferedReader().use { decodeRun(it.readText()) }
+            } catch (failure: java.io.IOException) {
+                if (attempt == 3) throw failure
+                attempt++
+                kotlinx.coroutines.delay(1000L * attempt)
+            } finally {
+                connection.disconnect()
             }
-            connection.inputStream.bufferedReader().use { decodeRun(it.readText()) }
-        } finally {
-            connection.disconnect()
         }
     }
 
     private fun decodeRun(text: String): AgentRun {
         val root = json.parseToJsonElement(text).jsonObject
         if (root["conversationId"] == null) return json.decodeFromString(AgentRun.serializer(), text)
-        val publicStatus = root.getValue("status").jsonPrimitive.content
-        val status = when (publicStatus) {
-            "waiting_for_tool" -> AgentRunStatus.WAITING_FOR_EVIDENCE
-            "awaiting_approval" -> AgentRunStatus.PROPOSAL_READY
-            "completed" -> AgentRunStatus.PARTIAL
-            else -> json.decodeFromJsonElement(AgentRunStatus.serializer(), root.getValue("status"))
-        }
+        
         val publicOutcome = root.getValue("outcome").jsonObject
         val outcome = when (publicOutcome["type"]?.jsonPrimitive?.content) {
             "tool_call" -> buildJsonObject {
@@ -507,6 +518,14 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
                 put("type", "edit_program")
             }
             else -> publicOutcome
+        }
+
+        val publicStatus = root.getValue("status").jsonPrimitive.content
+        val status = when (publicStatus) {
+            "waiting_for_tool" -> AgentRunStatus.WAITING_FOR_EVIDENCE
+            "awaiting_approval" -> AgentRunStatus.PROPOSAL_READY
+            "completed" -> if (outcome["type"]?.jsonPrimitive?.content == "edit_program") AgentRunStatus.PROPOSAL_READY else AgentRunStatus.PARTIAL
+            else -> json.decodeFromJsonElement(AgentRunStatus.serializer(), root.getValue("status"))
         }
         return AgentRun(
             contractVersion = 2,
