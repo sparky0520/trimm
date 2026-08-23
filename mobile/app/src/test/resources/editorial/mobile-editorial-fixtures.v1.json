@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "fixtureVersion": "mobile-editorial-v1",
+  "redistribution": {
+    "preparedMediaCommitted": false,
+    "outputDirectory": "app/src/test/fixtures/media/mobile-editorial-v1",
+    "notice": "Prepared derivatives retain their source license and attribution. Redistribute them only with this manifest."
+  },
+  "sources": [
+    {
+      "id": "accent-coach",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/Special:Redirect/file/Can%20I%20get%20some%20water%20in%20my%20water%20bottle%20in%2026%20different%20accents.webm",
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:Can_I_get_some_water_in_my_water_bottle_in_26_different_accents.webm",
+      "author": "Sarah Valentine Actors Accent Coach",
+      "license": "CC BY 3.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/3.0/",
+      "sha256": "538a53724ad7b6fa170cac835f121f0003b8cc36d40ca8f315eca89f143829e7"
+    },
+    {
+      "id": "phone-demo",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/Special:Redirect/file/Notification%20LED.webm",
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:Notification_LED.webm",
+      "author": "Xpclient",
+      "license": "CC BY-SA 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "sha256": "53295a81ba2e7c5fbab8a5dac401da825406c433a3a0aa1a4ac890ab1b7e8dac"
+    }
+  ],
+  "clips": [
+    {
+      "id": "take-a",
+      "sourceId": "accent-coach",
+      "sourceRangeMs": [4000, 7600],
+      "features": ["talking-head", "repeated-take", "complete-claim"]
+    },
+    {
+      "id": "take-b",
+      "sourceId": "accent-coach",
+      "sourceRangeMs": [7600, 11200],
+      "features": ["talking-head", "repeated-take", "preferred-take", "clean-onset"]
+    },
+    {
+      "id": "take-c",
+      "sourceId": "accent-coach",
+      "sourceRangeMs": [11200, 14800],
+      "features": ["talking-head", "repeated-take", "delivery-variation"]
+    },
+    {
+      "id": "product-demo",
+      "sourceId": "phone-demo",
+      "sourceRangeMs": [0, 10000],
+      "features": ["product-demonstration", "supporting-visual", "handheld-shake", "screen-glare", "missing-production-audio"]
+    },
+    {
+      "id": "cta",
+      "sourceId": "accent-coach",
+      "sourceRangeMs": [94400, 101721],
+      "features": ["clear-cta", "on-screen-audience-prompt", "must-keep"]
+    }
+  ],
+  "groundTruth": {
+    "takeGroups": [
+      {
+        "id": "water-bottle-line",
+        "candidateClipIds": ["take-a", "take-b", "take-c"],
+        "preferredClipId": "take-b",
+        "rationale": "The repeated sentence has a clean onset and complete delivery; accent variation alone is not a defect."
+      }
+    ],
+    "shots": [
+      {"id": "shot-take-a", "clipId": "take-a", "rangeMs": [0, 3600], "kind": "talking-head"},
+      {"id": "shot-take-b", "clipId": "take-b", "rangeMs": [0, 3600], "kind": "talking-head"},
+      {"id": "shot-take-c", "clipId": "take-c", "rangeMs": [0, 3600], "kind": "talking-head"},
+      {"id": "shot-product", "clipId": "product-demo", "rangeMs": [0, 10000], "kind": "product-close-up"},
+      {"id": "shot-cta", "clipId": "cta", "rangeMs": [0, 7321], "kind": "talking-head"}
+    ],
+    "storyBeats": [
+      {"id": "beat-hook", "evidenceIds": ["take-b"], "essential": true},
+      {"id": "beat-demo", "evidenceIds": ["product-demo"], "essential": true},
+      {"id": "beat-cta", "evidenceIds": ["cta"], "essential": true}
+    ],
+    "mustKeepClaims": [
+      {"id": "claim-repeated-line", "evidenceIds": ["take-b"], "text": "One complete delivery of the repeated water-bottle line."},
+      {"id": "claim-cta", "evidenceIds": ["cta"], "text": "The clear on-screen audience prompt requesting the repeated phrase."}
+    ],
+    "safeRemovals": [
+      {"id": "remove-take-a", "evidenceIds": ["take-a"], "reason": "Superseded by the annotated preferred complete take."},
+      {"id": "remove-take-c", "evidenceIds": ["take-c"], "reason": "Superseded by the annotated preferred complete take."}
+    ],
+    "supportingVisuals": [
+      {"id": "support-product", "evidenceIds": ["product-demo"], "supportsBeatId": "beat-demo"}
+    ],
+    "audioProblems": [
+      {"id": "audio-missing-demo", "evidenceIds": ["product-demo"], "kind": "missing-production-audio", "destructiveActionAllowed": false}
+    ],
+    "technicalDefects": [
+      {"id": "defect-shake", "evidenceIds": ["product-demo"], "kind": "handheld-shake", "severity": "moderate"},
+      {"id": "defect-glare", "evidenceIds": ["product-demo"], "kind": "screen-glare", "severity": "moderate"}
+    ]
+  },
+  "evaluationContract": {
+    "requiredMetrics": [
+      "falseDestructiveCuts",
+      "takeSelectionAccuracy",
+      "evidenceGroundingRate",
+      "previewExportParity",
+      "timeToPreviewMs"
+    ],
+    "laterTicketRule": "Perception and planning acceptance must run against this prepared real-camera fixture or another versioned redistributable real-media fixture; synthetic-only inputs are insufficient."
+  }
+}

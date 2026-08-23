@@ -1,0 +1,5 @@
+08-06 08:17:33.427 E/AndroidRuntime(26635): java.lang.IllegalArgumentException
+08-06 08:17:33.427 E/AndroidRuntime(26635): 	at com.google.common.base.Preconditions.checkArgument(Preconditions.java:129)
+08-06 08:17:33.427 E/AndroidRuntime(26635): 	at androidx.media3.transformer.EditedMediaItem.getClippedDuration(EditedMediaItem.java:478)
+08-06 08:17:33.427 E/AndroidRuntime(26635): 	at androidx.media3.transformer.EditedMediaItem.getPresentationDurationUs(EditedMediaItem.java:389)
+08-06 08:17:33.427 E/AndroidRuntime(26635): 	at androidx.media3.transformer.CompositionPlayer.setComposition(CompositionPlayer.java:730)
