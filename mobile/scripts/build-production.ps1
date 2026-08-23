@@ -5,11 +5,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$javaExecutable = Join-Path $env:JAVA_HOME "bin\java.exe"
-$gradleWrapper = Join-Path $repositoryRoot "gradlew.bat"
+$javaExecutable = $null
+if ($env:JAVA_HOME) {
+    $javaExecutable = if ($IsWindows) { Join-Path $env:JAVA_HOME "bin\java.exe" } else { Join-Path $env:JAVA_HOME "bin/java" }
+}
+$gradleWrapper = if ($IsWindows) { Join-Path $repositoryRoot "gradlew.bat" } else { Join-Path $repositoryRoot "gradlew" }
 $localEnvironmentFile = Join-Path $repositoryRoot ".env.local"
 
-if (-not $env:JAVA_HOME -or -not (Test-Path -LiteralPath $javaExecutable)) {
+if (-not $env:JAVA_HOME -or -not $javaExecutable -or -not (Test-Path -LiteralPath $javaExecutable)) {
     throw "JAVA_HOME must point to a JDK 17 installation. Current value: '$env:JAVA_HOME'"
 }
 
@@ -62,17 +65,22 @@ if (-not (Test-Path -LiteralPath $keyStorePath)) {
 }
 
 # Ensure Gradle uses JAVA_HOME even if an obsolete Java executable appears earlier in PATH.
-$env:Path = "$(Join-Path $env:JAVA_HOME 'bin');$env:Path"
+$pathSeparator = if ($IsWindows) { ";" } else { ":" }
+$env:Path = "$(Join-Path $env:JAVA_HOME 'bin')$pathSeparator$env:Path"
 $gradleTask = if ($Artifact -eq "apk") { "assembleRelease" } else { "bundleRelease" }
 $artifactPath = if ($Artifact -eq "apk") {
-    "app\build\outputs\apk\release\app-release.apk"
+    "app/build/outputs/apk/release/app-release.apk"
 } else {
-    "app\build\outputs\bundle\release\app-release.aab"
+    "app/build/outputs/bundle/release/app-release.aab"
 }
 
 Push-Location $repositoryRoot
 try {
-    & $gradleWrapper clean $gradleTask
+    if ($IsWindows) {
+        & $gradleWrapper clean $gradleTask
+    } else {
+        bash $gradleWrapper clean $gradleTask
+    }
     if ($LASTEXITCODE -ne 0) {
         throw "Gradle failed with exit code $LASTEXITCODE."
     }

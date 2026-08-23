@@ -1071,8 +1071,8 @@ private fun reviewPercent(value: Float) = "${(value * 100).toInt()}%"
 }
 
 private fun formatDuration(ms: Long): String = "%d:%02d".format(ms / 60_000, (ms / 1_000) % 60)
-private fun operationTitle(op: EditOperation) = when (op) { is RemoveRanges -> "Range removal"; is SetColorGrade -> "Frame-based color"; is SetAudioLevels -> "Dialogue leveling"; is SetAspectRatio -> "Aspect ratio"; is AddMotionPreset -> "Motion preset"; is AddCaptions -> "Captions"; is AddTextOverlay -> "Text overlay" }
-private fun operationDetail(op: EditOperation) = when (op) { is RemoveRanges -> "${op.ranges.size} range cuts"; is SetColorGrade -> "Natural, skin-safe grade"; is SetAudioLevels -> "${op.dialogueLufs.toInt()} LUFS dialogue"; is SetAspectRatio -> op.ratio.name; is AddMotionPreset -> op.preset; is AddCaptions -> "${op.cues.size} timed caption cards"; is AddTextOverlay -> "Generated Graphics" }
+private fun operationTitle(op: EditOperation) = when (op) { is RemoveRanges -> "Range removal"; is SetColorGrade -> "Frame-based color"; is SetAudioLevels -> "Dialogue leveling"; is SetAspectRatio -> "Aspect ratio"; is AddMotionPreset -> "Motion preset"; is AddCaptions -> "Captions"; is AddTextOverlay -> "Text overlay"; is AddBgm -> "Background music"; is AddSfx -> "Sound effect" }
+private fun operationDetail(op: EditOperation) = when (op) { is RemoveRanges -> "${op.ranges.size} range cuts"; is SetColorGrade -> "Natural, skin-safe grade"; is SetAudioLevels -> "${op.dialogueLufs.toInt()} LUFS dialogue"; is SetAspectRatio -> op.ratio.name; is AddMotionPreset -> op.preset; is AddCaptions -> "${op.cues.size} timed caption cards"; is AddTextOverlay -> "Generated Graphics"; is AddBgm -> "AI-generated BGM"; is AddSfx -> "AI-generated SFX" }
 
 @Composable private fun TrimmTheme(content: @Composable () -> Unit) = MaterialTheme(
     colorScheme = darkColorScheme(primary = Coral, secondary = Lavender, background = Ink, surface = Workspace, onSurface = CreamRaised, outline = Border),
