@@ -29,3 +29,7 @@
 # ── AndroidX / Jetpack ──────────────────────────────────────
 -keep class androidx.datastore.** { *; }
 -keep class androidx.work.** { *; }
+
+# ── FFmpegKit ────────────────────────────────────────────────
+-dontwarn com.arthenica.smartexception.**
+-dontwarn com.arthenica.ffmpegkit.**

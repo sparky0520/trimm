@@ -115,7 +115,7 @@ dependencies {
     // AI Audio Integration
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
-    implementation("com.arthenica:ffmpeg-kit-full:6.0-2")
+    implementation("dev.ffmpegkit-maintained:ffmpeg-kit-audio:+")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
