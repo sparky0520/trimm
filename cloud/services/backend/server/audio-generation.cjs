@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { createClient } = require('@supabase/supabase-js');
 
 class AudioGeneration {
   constructor() {
@@ -106,19 +107,16 @@ class AudioGeneration {
        const cacheKey = `bgm/bgm_${Date.now()}.mp3`;
        const publicUrl = `${supabaseUrl}/storage/v1/object/public/${this.s3Bucket}/${cacheKey}`;
        
-       try {
+        try {
          const audioRes = await fetch(audioUrl);
          const audioBuffer = await audioRes.arrayBuffer();
-         const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/${this.s3Bucket}/${cacheKey}`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${supabaseKey}`,
-              'Content-Type': 'audio/mpeg'
-            },
-            body: Buffer.from(audioBuffer)
+         const supabase = createClient(supabaseUrl, supabaseKey);
+         const { error } = await supabase.storage.from(this.s3Bucket).upload(cacheKey, Buffer.from(audioBuffer), {
+           contentType: 'audio/mpeg'
          });
-         if (!uploadRes.ok) {
-           throw new Error(`Supabase upload failed: ${await uploadRes.text()}`);
+         
+         if (error) {
+           throw error;
          }
          return { url: publicUrl, prompt: augmentedPrompt, duration: durationSecs };
        } catch (err) {
@@ -195,18 +193,13 @@ class AudioGeneration {
     
     // Save to Supabase Storage
     try {
-      const uploadUrl = `${supabaseUrl}/storage/v1/object/${this.s3Bucket}/${cacheKey}`;
-      const uploadRes = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${supabaseKey}`,
-          'Content-Type': 'audio/mpeg'
-        },
-        body: Buffer.from(audioBuffer)
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      const { error } = await supabase.storage.from(this.s3Bucket).upload(cacheKey, Buffer.from(audioBuffer), {
+        contentType: 'audio/mpeg'
       });
       
-      if (!uploadRes.ok) {
-        throw new Error(`Supabase upload failed: ${await uploadRes.text()}`);
+      if (error) {
+        throw error;
       }
       
       return { url: publicUrl, source: 'ai_generation' };
