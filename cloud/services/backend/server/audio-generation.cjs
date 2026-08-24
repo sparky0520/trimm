@@ -162,7 +162,7 @@ class AudioGeneration {
     console.log(`[AudioGeneration] SFX Cache MISS for: ${augmentedPrompt}. Generating via AI...`);
     
     if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Supabase Storage must be configured to return SFX URLs.');
+      console.warn('[AudioGeneration] Supabase keys missing. Will bypass upload and return Data URI.');
     }
 
     if (!this.elevenLabsApiToken) {
@@ -211,8 +211,12 @@ class AudioGeneration {
       
       return { url: publicUrl, source: 'ai_generation' };
     } catch (err) {
-      console.error(`[AudioGeneration] Failed to upload to Supabase:`, err.message);
-      throw new Error('Failed to generate and cache SFX');
+      console.warn(`[AudioGeneration] Failed to upload to Supabase, falling back to Data URI:`, err.message);
+      
+      // Fallback: Return the audio as a Base64 Data URI
+      const base64Audio = Buffer.from(audioBuffer).toString('base64');
+      const dataUri = `data:audio/mpeg;base64,${base64Audio}`;
+      return { url: dataUri, source: 'ai_generation_data_uri' };
     }
   }
 }
