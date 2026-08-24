@@ -5,7 +5,8 @@ import retrofit2.http.POST
 
 data class BgmRequest(
     val prompt: String,
-    val durationSecs: Float
+    val durationSecs: Float,
+    val beats: List<Float> = emptyList()
 )
 
 data class BgmResponse(

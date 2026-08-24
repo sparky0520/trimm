@@ -57,8 +57,11 @@ class AudioGeneration {
     return userPrompt;
   }
 
-  async generateBgm(prompt, durationSecs) {
-    const augmentedPrompt = await this.augmentPrompt(prompt, 'bgm');
+  async generateBgm(prompt, durationSecs, beats = []) {
+    let augmentedPrompt = await this.augmentPrompt(prompt, 'bgm');
+    if (beats && beats.length > 0) {
+      augmentedPrompt += ` The music must emphasize beats and rhythm changes at the following timestamps in seconds: ${beats.join(', ')}.`;
+    }
     console.log(`[AudioGeneration] Generating BGM for prompt: "${augmentedPrompt}", duration: ${durationSecs}s`);
     
     if (!this.replicateApiToken) {

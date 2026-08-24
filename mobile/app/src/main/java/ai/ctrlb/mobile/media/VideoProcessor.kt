@@ -9,46 +9,76 @@ import java.io.File
 class VideoProcessor {
 
     /**
-     * Extracts visual "beats" from a video file.
-     * In a real implementation, this would use more advanced CV.
-     * Here, we just use MediaExtractor to find sync frames (keyframes) as beats.
+     * Extracts audio "beats" from a video file using energy-based onset detection.
      */
     suspend fun extractBeats(videoPath: String): List<Float> = withContext(Dispatchers.IO) {
         val beats = mutableListOf<Float>()
-        val extractor = MediaExtractor()
+        var tempFile: File? = null
         try {
-            extractor.setDataSource(videoPath)
-            var videoTrackIndex = -1
-            for (i in 0 until extractor.trackCount) {
-                val format = extractor.getTrackFormat(i)
-                val mime = format.getString(MediaFormat.KEY_MIME)
-                if (mime?.startsWith("video/") == true) {
-                    videoTrackIndex = i
-                    break
-                }
-            }
+            tempFile = File.createTempFile("audio_extract", ".wav")
+            val command = "-y -i $videoPath -vn -acodec pcm_s16le -ar 8000 -ac 1 ${tempFile.absolutePath}"
+            val session = com.arthenica.ffmpegkit.FFmpegKit.execute(command)
             
-            if (videoTrackIndex >= 0) {
-                extractor.selectTrack(videoTrackIndex)
-                while (true) {
-                    val sampleTime = extractor.sampleTime
-                    if (sampleTime < 0) {
-                        break
+            if (com.arthenica.ffmpegkit.ReturnCode.isSuccess(session.returnCode)) {
+                val bytes = tempFile.readBytes()
+                val headerSize = 44
+                if (bytes.size > headerSize) {
+                    val samples = ShortArray((bytes.size - headerSize) / 2)
+                    java.nio.ByteBuffer.wrap(bytes, headerSize, bytes.size - headerSize)
+                        .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                        .asShortBuffer()
+                        .get(samples)
+
+                    val sampleRate = 8000
+                    val windowSize = sampleRate * 20 / 1000 // 20ms = 160 samples
+                    val energyLevels = mutableListOf<Float>()
+                    
+                    for (i in samples.indices step windowSize) {
+                        val end = minOf(i + windowSize, samples.size)
+                        var sumSq = 0f
+                        for (j in i until end) {
+                            val s = samples[j] / 32768f
+                            sumSq += s * s
+                        }
+                        energyLevels.add(sumSq / (end - i))
                     }
-                    val flags = extractor.sampleFlags
-                    if ((flags and MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
-                        // Found a keyframe, record as a beat (convert microsecs to secs)
-                        beats.add(sampleTime / 1_000_000f)
+
+                    // Compute rolling average for dynamic threshold
+                    val historySize = 43 // ~860ms
+                    var sumHistory = 0f
+                    for (i in 0 until minOf(historySize, energyLevels.size)) {
+                        sumHistory += energyLevels[i]
                     }
-                    if (!extractor.advance()) {
-                        break
+
+                    val thresholdMultiplier = 1.5f
+                    var lastBeatTime = -1f
+
+                    for (i in energyLevels.indices) {
+                        val currentEnergy = energyLevels[i]
+                        val avgEnergy = sumHistory / minOf(historySize, i + 1)
+                        
+                        // Detect peak that is significantly above local average and has minimum absolute energy
+                        if (currentEnergy > avgEnergy * thresholdMultiplier && currentEnergy > 0.005f) {
+                            val time = (i * windowSize).toFloat() / sampleRate
+                            // Debounce: minimum 0.2s between beats
+                            if (time - lastBeatTime > 0.2f) {
+                                beats.add(time)
+                                lastBeatTime = time
+                            }
+                        }
+
+                        // update rolling sum (center-aligned window approximately)
+                        val nextIdx = i + historySize / 2
+                        if (nextIdx < energyLevels.size) sumHistory += energyLevels[nextIdx]
+                        val dropIdx = i - historySize / 2
+                        if (dropIdx >= 0) sumHistory -= energyLevels[dropIdx]
                     }
                 }
             }
         } catch (e: Exception) {
             e.printStackTrace()
         } finally {
-            extractor.release()
+            tempFile?.delete()
         }
         
         return@withContext beats
