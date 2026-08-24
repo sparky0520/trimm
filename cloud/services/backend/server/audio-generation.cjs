@@ -100,7 +100,7 @@ class AudioGeneration {
     const audioUrl = prediction.output;
     
     const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY;
     
     if (supabaseUrl && supabaseKey) {
        const cacheKey = `bgm/bgm_${Date.now()}.mp3`;
@@ -109,7 +109,7 @@ class AudioGeneration {
        try {
          const audioRes = await fetch(audioUrl);
          const audioBuffer = await audioRes.arrayBuffer();
-         await fetch(`${supabaseUrl}/storage/v1/object/${this.s3Bucket}/${cacheKey}`, {
+         const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/${this.s3Bucket}/${cacheKey}`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${supabaseKey}`,
@@ -117,9 +117,12 @@ class AudioGeneration {
             },
             body: Buffer.from(audioBuffer)
          });
+         if (!uploadRes.ok) {
+           throw new Error(`Supabase upload failed: ${await uploadRes.text()}`);
+         }
          return { url: publicUrl, prompt: augmentedPrompt, duration: durationSecs };
        } catch (err) {
-         console.error(`[AudioGeneration] Failed to cache BGM in Supabase:`, err);
+         console.error(`[AudioGeneration] Failed to cache BGM in Supabase:`, err.message);
        }
     }
     
@@ -135,7 +138,7 @@ class AudioGeneration {
     console.log(`[AudioGeneration] Fetching SFX for prompt: "${augmentedPrompt}"`);
     
     const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY;
     const cacheKey = `sfx/${augmentedPrompt.toLowerCase().replace(/[^a-z0-9]/g, '_')}.mp3`;
     const publicUrl = `${supabaseUrl}/storage/v1/object/public/${this.s3Bucket}/${cacheKey}`;
 
@@ -158,6 +161,10 @@ class AudioGeneration {
 
     console.log(`[AudioGeneration] SFX Cache MISS for: ${augmentedPrompt}. Generating via AI...`);
     
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Supabase Storage must be configured to return SFX URLs.');
+    }
+
     if (!this.elevenLabsApiToken) {
       throw new Error('ELEVENLABS_API_TOKEN is not configured');
     }
@@ -187,27 +194,26 @@ class AudioGeneration {
     }
     
     // Save to Supabase Storage
-    if (supabaseUrl && supabaseKey) {
-      try {
-        const uploadUrl = `${supabaseUrl}/storage/v1/object/${this.s3Bucket}/${cacheKey}`;
-        await fetch(uploadUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${supabaseKey}`,
-            'Content-Type': 'audio/mpeg'
-          },
-          body: Buffer.from(audioBuffer)
-        });
-        return { url: publicUrl, source: 'ai_generation' };
-      } catch (err) {
-        console.error(`[AudioGeneration] Failed to upload to Supabase:`, err.message);
+    try {
+      const uploadUrl = `${supabaseUrl}/storage/v1/object/${this.s3Bucket}/${cacheKey}`;
+      const uploadRes = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Content-Type': 'audio/mpeg'
+        },
+        body: Buffer.from(audioBuffer)
+      });
+      
+      if (!uploadRes.ok) {
+        throw new Error(`Supabase upload failed: ${await uploadRes.text()}`);
       }
-    } else {
-      // Cannot save locally when it's a buffer in this mock architecture
-      throw new Error('Supabase Storage must be configured to return SFX URLs.');
+      
+      return { url: publicUrl, source: 'ai_generation' };
+    } catch (err) {
+      console.error(`[AudioGeneration] Failed to upload to Supabase:`, err.message);
+      throw new Error('Failed to generate and cache SFX');
     }
-    
-    throw new Error('Failed to generate and cache SFX');
   }
 }
 
