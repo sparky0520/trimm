@@ -651,6 +651,7 @@ class Layer2Orchestrator {
           draftObservations.push(...(validated.observations || []));
           results.push({ ok: true, operationId: accepted.id, operationType, draftOperationCount: drafts.size });
         } catch (error) {
+          console.error('[DEBUG] Orchestration Validation Error:', error.message, error.stack);
           results.push({ ok: false, code: error.code || 'invalid_tool_arguments', message: String(error.message).slice(0, 300) });
         }
       }
