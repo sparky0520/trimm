@@ -153,7 +153,26 @@ class SpeechDuckingGainProvider(
         return gain * minOf(entrance, ending)
     }
 
-    override fun isUnityUntil(samplePosition: Long, sampleRate: Int): Long = C.TIME_UNSET
+    override fun isUnityUntil(samplePosition: Long, sampleRate: Int): Long {
+        if (normal < 1f) return samplePosition
+        
+        val timeMs = samplePosition * 1_000 / sampleRate
+        var nextNonUnityMs = Long.MAX_VALUE
+        
+        for (range in ranges) {
+            val attackStartMs = maxOf(0L, range.startMs - attackMs)
+            if (timeMs <= attackStartMs) {
+                nextNonUnityMs = minOf(nextNonUnityMs, attackStartMs)
+            }
+        }
+        
+        if (fadeOutStartMs != null && timeMs <= fadeOutStartMs) {
+            nextNonUnityMs = minOf(nextNonUnityMs, fadeOutStartMs)
+        }
+        
+        if (nextNonUnityMs == Long.MAX_VALUE) return C.TIME_END_OF_SOURCE
+        return maxOf(samplePosition + 1, nextNonUnityMs * sampleRate / 1_000)
+    }
 
     private fun mergeRanges(input: List<TimeRange>): List<TimeRange> {
         val merged = mutableListOf<TimeRange>()

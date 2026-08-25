@@ -155,17 +155,18 @@ object ExportCoordinator {
 
         // BGM and SFX Generation
         val ducking = project.operations.filterIsInstance<SetAudioLevels>().lastOrNull { it.enabled && (it.parameter == "music_ducking" || it.parameter == null) }
-        val speechRanges = if (ducking != null) {
-            project.analysis.words.mapNotNull { word ->
-                val start = timelineMapper.sourceToOutput(word.range.startMs)
-                val end = timelineMapper.sourceToOutput(word.range.endMs)
-                if (end > start) TimeRange(start, end) else null
-            }
-        } else emptyList()
+        val duckDb = ducking?.musicDuckDb ?: -15f
+        val bufferMs = 500L
+        
+        val speechRanges = project.analysis.words.mapNotNull { word ->
+            val start = timelineMapper.sourceToOutput(word.range.startMs)
+            val end = timelineMapper.sourceToOutput(word.range.endMs)
+            if (end > start) TimeRange(maxOf(0L, start - bufferMs), end + bufferMs) else null
+        }
 
         project.operations.filterIsInstance<AddBgm>().lastOrNull { it.enabled }?.let { bgm ->
             val item = MediaItem.Builder().setUri(Uri.parse(bgm.url)).build()
-            val effects = if (ducking != null) listOf(GainProcessor(SpeechDuckingGainProvider(1f, ducking.musicDuckDb, speechRanges))) else emptyList()
+            val effects = if (speechRanges.isNotEmpty()) listOf(GainProcessor(SpeechDuckingGainProvider(1f, duckDb, speechRanges))) else emptyList()
             val audioDurationMs = getRemoteMediaDurationMs(bgm.url, 15000L)
             val edited = EditedMediaItem.Builder(item)
                 .setDurationUs(audioDurationMs * 1000L)
