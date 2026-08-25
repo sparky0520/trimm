@@ -170,7 +170,22 @@ object ExportCoordinator {
             
             if (isPreview) {
                 // CompositionPlayer doesn't support isLooping=true and throws IllegalStateException
-                val items = List(50) { edited }
+                val audioDurationMs = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+                    try {
+                        val mmr = android.media.MediaMetadataRetriever()
+                        mmr.setDataSource(bgm.url, HashMap<String, String>())
+                        val duration = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 15000L
+                        mmr.release()
+                        duration
+                    } catch (e: Exception) {
+                        15000L
+                    }
+                }
+                val totalVideoDurationMs = timelineMapper.sourceToOutput(project.orderedSources.sumOf { it.durationMs })
+                val repeats = if (audioDurationMs > 0) {
+                    (totalVideoDurationMs / audioDurationMs).toInt() + 1
+                } else 1
+                val items = List(repeats) { edited }
                 sequences += EditedMediaItemSequence.Builder(items).build()
             } else {
                 val builder = EditedMediaItemSequence.Builder(listOf(edited))
