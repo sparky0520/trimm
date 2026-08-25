@@ -1051,7 +1051,7 @@ private fun reviewPercent(value: Float) = "${(value * 100).toInt()}%"
     val context = androidx.compose.ui.platform.LocalContext.current
     val player = remember(project.revision, project.operations, project.export, project.orderedSources) {
         CompositionPlayer.Builder(context).build().apply {
-            setComposition(ExportCoordinator.composition(context, project))
+            setComposition(ExportCoordinator.composition(context, project, isPreview = true))
             prepare()
         }
     }

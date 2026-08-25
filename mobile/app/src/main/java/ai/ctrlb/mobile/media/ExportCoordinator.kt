@@ -36,7 +36,7 @@ import kotlin.math.pow
 
 @OptIn(UnstableApi::class)
 object ExportCoordinator {
-    fun composition(context: Context, project: MobileProject): Composition {
+    fun composition(context: Context, project: MobileProject, isPreview: Boolean = false): Composition {
         val cuts = (
             project.operations.filterIsInstance<RemoveRanges>().filter { it.enabled }.flatMap { it.ranges }
             ).distinct().sortedBy { it.startMs }
@@ -167,9 +167,16 @@ object ExportCoordinator {
             val item = MediaItem.Builder().setUri(Uri.parse(bgm.url)).build()
             val effects = if (ducking != null) listOf(GainProcessor(SpeechDuckingGainProvider(1f, ducking.musicDuckDb, speechRanges))) else emptyList()
             val edited = EditedMediaItem.Builder(item).setEffects(Effects(effects, emptyList())).build()
-            val builder = EditedMediaItemSequence.Builder(listOf(edited))
-            builder.setIsLooping(true)
-            sequences += builder.build()
+            
+            if (isPreview) {
+                // CompositionPlayer doesn't support isLooping=true and throws IllegalStateException
+                val items = List(50) { edited }
+                sequences += EditedMediaItemSequence.Builder(items).build()
+            } else {
+                val builder = EditedMediaItemSequence.Builder(listOf(edited))
+                builder.setIsLooping(true)
+                sequences += builder.build()
+            }
         }
 
         project.operations.filterIsInstance<AddSfx>().filter { it.enabled }.forEach { sfx ->
