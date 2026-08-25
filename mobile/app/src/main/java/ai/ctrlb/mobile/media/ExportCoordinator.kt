@@ -166,21 +166,13 @@ object ExportCoordinator {
         project.operations.filterIsInstance<AddBgm>().lastOrNull { it.enabled }?.let { bgm ->
             val item = MediaItem.Builder().setUri(Uri.parse(bgm.url)).build()
             val effects = if (ducking != null) listOf(GainProcessor(SpeechDuckingGainProvider(1f, ducking.musicDuckDb, speechRanges))) else emptyList()
-            val edited = EditedMediaItem.Builder(item).setEffects(Effects(effects, emptyList())).build()
+            val audioDurationMs = getRemoteMediaDurationMs(bgm.url, 15000L)
+            val edited = EditedMediaItem.Builder(item)
+                .setDurationUs(audioDurationMs * 1000L)
+                .setEffects(Effects(effects, emptyList()))
+                .build()
             
             if (isPreview) {
-                // CompositionPlayer doesn't support isLooping=true and throws IllegalStateException
-                val audioDurationMs = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
-                    try {
-                        val mmr = android.media.MediaMetadataRetriever()
-                        mmr.setDataSource(bgm.url, HashMap<String, String>())
-                        val duration = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 15000L
-                        mmr.release()
-                        duration
-                    } catch (e: Exception) {
-                        15000L
-                    }
-                }
                 val totalVideoDurationMs = timelineMapper.sourceToOutput(project.orderedSources.sumOf { it.durationMs })
                 val repeats = if (audioDurationMs > 0) {
                     (totalVideoDurationMs / audioDurationMs).toInt() + 1
@@ -200,10 +192,17 @@ object ExportCoordinator {
             if (targetMs > 0) {
                 val silenceUri = getSilenceUri(context, targetMs)
                 val silenceItem = MediaItem.Builder().setUri(silenceUri).build()
-                items += EditedMediaItem.Builder(silenceItem).setEffects(Effects(emptyList(), emptyList())).build()
+                items += EditedMediaItem.Builder(silenceItem)
+                    .setDurationUs(targetMs * 1000L)
+                    .setEffects(Effects(emptyList(), emptyList()))
+                    .build()
             }
             val sfxItem = MediaItem.Builder().setUri(Uri.parse(sfx.url)).build()
-            items += EditedMediaItem.Builder(sfxItem).setEffects(Effects(emptyList(), emptyList())).build()
+            val sfxDurationMs = getRemoteMediaDurationMs(sfx.url, 3000L)
+            items += EditedMediaItem.Builder(sfxItem)
+                .setDurationUs(sfxDurationMs * 1000L)
+                .setEffects(Effects(emptyList(), emptyList()))
+                .build()
             sequences += EditedMediaItemSequence.Builder(items).build()
         }
 
@@ -245,6 +244,20 @@ object ExportCoordinator {
     private fun splitAtBoundaries(ranges: List<TimeRange>, boundaries: List<Long>): List<TimeRange> = ranges.flatMap { range ->
         val points = (listOf(range.startMs) + boundaries.filter { it > range.startMs && it < range.endMs } + range.endMs).sorted()
         points.zipWithNext { start, end -> TimeRange(start, end) }
+    }
+
+    private fun getRemoteMediaDurationMs(url: String, defaultMs: Long = 15000L): Long {
+        return kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val mmr = android.media.MediaMetadataRetriever()
+                mmr.setDataSource(url, HashMap<String, String>())
+                val duration = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: defaultMs
+                mmr.release()
+                duration
+            } catch (e: Exception) {
+                defaultMs
+            }
+        }
     }
 
     private fun getSilenceUri(context: Context, durationMs: Long): Uri {
