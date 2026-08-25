@@ -28,6 +28,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.pow
@@ -151,6 +153,38 @@ object ExportCoordinator {
         }
         val sequences = mutableListOf(sequence)
 
+        // BGM and SFX Generation
+        val ducking = project.operations.filterIsInstance<SetAudioLevels>().lastOrNull { it.enabled && (it.parameter == "music_ducking" || it.parameter == null) }
+        val speechRanges = if (ducking != null) {
+            project.analysis.words.mapNotNull { word ->
+                val start = timelineMapper.sourceToOutput(word.range.startMs)
+                val end = timelineMapper.sourceToOutput(word.range.endMs)
+                if (end > start) TimeRange(start, end) else null
+            }
+        } else emptyList()
+
+        project.operations.filterIsInstance<AddBgm>().lastOrNull { it.enabled }?.let { bgm ->
+            val item = MediaItem.Builder().setUri(Uri.parse(bgm.url)).build()
+            val effects = if (ducking != null) listOf(GainProcessor(SpeechDuckingGainProvider(1f, ducking.musicDuckDb, speechRanges))) else emptyList()
+            val edited = EditedMediaItem.Builder(item).setEffects(Effects(effects, emptyList())).build()
+            val builder = EditedMediaItemSequence.Builder(listOf(edited))
+            builder.setIsLooping(true)
+            sequences += builder.build()
+        }
+
+        project.operations.filterIsInstance<AddSfx>().filter { it.enabled }.forEach { sfx ->
+            val targetMs = timelineMapper.sourceToOutput(sfx.target?.startMs ?: 0L)
+            val items = mutableListOf<EditedMediaItem>()
+            if (targetMs > 0) {
+                val silenceUri = getSilenceUri(context, targetMs)
+                val silenceItem = MediaItem.Builder().setUri(silenceUri).build()
+                items += EditedMediaItem.Builder(silenceItem).setEffects(Effects(emptyList(), emptyList())).build()
+            }
+            val sfxItem = MediaItem.Builder().setUri(Uri.parse(sfx.url)).build()
+            items += EditedMediaItem.Builder(sfxItem).setEffects(Effects(emptyList(), emptyList())).build()
+            sequences += EditedMediaItemSequence.Builder(items).build()
+        }
+
         return Composition.Builder(sequences).setEffects(Effects(emptyList(), videoEffects)).build()
     }
 
@@ -189,5 +223,43 @@ object ExportCoordinator {
     private fun splitAtBoundaries(ranges: List<TimeRange>, boundaries: List<Long>): List<TimeRange> = ranges.flatMap { range ->
         val points = (listOf(range.startMs) + boundaries.filter { it > range.startMs && it < range.endMs } + range.endMs).sorted()
         points.zipWithNext { start, end -> TimeRange(start, end) }
+    }
+
+    private fun getSilenceUri(context: Context, durationMs: Long): Uri {
+        val sampleRate = 44100
+        val numChannels = 2
+        val bitsPerSample = 16
+        val numSamples = (durationMs * sampleRate / 1000).toInt()
+        val dataSize = numSamples * numChannels * bitsPerSample / 8
+        val totalSize = 36 + dataSize
+
+        val file = File(context.cacheDir, "silence_${durationMs}ms.wav")
+        if (file.exists() && file.length() >= totalSize + 8) return Uri.fromFile(file)
+
+        file.outputStream().use { out ->
+            val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
+            header.put("RIFF".toByteArray(Charsets.US_ASCII))
+            header.putInt(totalSize)
+            header.put("WAVE".toByteArray(Charsets.US_ASCII))
+            header.put("fmt ".toByteArray(Charsets.US_ASCII))
+            header.putInt(16) // Subchunk1Size
+            header.putShort(1) // AudioFormat (PCM)
+            header.putShort(numChannels.toShort())
+            header.putInt(sampleRate)
+            header.putInt(sampleRate * numChannels * bitsPerSample / 8) // byteRate
+            header.putShort((numChannels * bitsPerSample / 8).toShort()) // blockAlign
+            header.putShort(bitsPerSample.toShort())
+            header.put("data".toByteArray(Charsets.US_ASCII))
+            header.putInt(dataSize)
+            out.write(header.array())
+            val empty = ByteArray(minOf(dataSize, 8192))
+            var written = 0
+            while (written < dataSize) {
+                val chunk = minOf(dataSize - written, empty.size)
+                out.write(empty, 0, chunk)
+                written += chunk
+            }
+        }
+        return Uri.fromFile(file)
     }
 }
