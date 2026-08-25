@@ -69,14 +69,13 @@ class AudioGeneration {
       throw new Error('REPLICATE_API_TOKEN is not configured');
     }
 
-    const replicateResponse = await fetch('https://api.replicate.com/v1/predictions', {
+    const replicateResponse = await fetch('https://api.replicate.com/v1/models/meta/musicgen/predictions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.replicateApiToken}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        version: "b05b1dff1d8c6dc63d14b0cdb421ce531221102dbd6ec03299712a45a3376249", // MusicGen
         input: { prompt: augmentedPrompt, duration: Math.max(1, durationSecs) }
       })
     });
