@@ -9,7 +9,7 @@ const ALLOWED_OPERATIONS = new Set([
 ]);
 const MAX_VIDEO_RANGE_MS = 30_000;
 const FORBIDDEN_KEYS = new Set([
-  'prompt', 'systemPrompt', 'tools', 'toolSchema', 'provider', 'providerKey',
+  'systemPrompt', 'tools', 'toolSchema', 'provider', 'providerKey',
   'apiKey', 'command', 'shell', 'executable', 'sourceUri', 'renderedOutput',
 ]);
 const DEFAULT_BUDGETS = Object.freeze({
