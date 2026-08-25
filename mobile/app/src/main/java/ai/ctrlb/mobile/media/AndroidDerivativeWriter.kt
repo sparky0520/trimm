@@ -92,14 +92,15 @@ class AndroidDerivativeWriter(private val context: Context) : DerivativeWriter {
         removeVideo: Boolean,
         destination: File
     ) = withContext(Dispatchers.Main.immediate) { suspendCancellableCoroutine { continuation ->
+        val localStart = maxOf(0L, range.startMs)
+        val localEnd = minOf(range.endMs, source.durationMs)
+        val clipping = MediaItem.ClippingConfiguration.Builder().setStartPositionMs(localStart)
+        if (localEnd < source.durationMs - 50) {
+            clipping.setEndPositionMs(localEnd)
+        }
         val mediaItem = MediaItem.Builder()
             .setUri(source.uri)
-            .setClippingConfiguration(
-                MediaItem.ClippingConfiguration.Builder()
-                    .setStartPositionMs(range.startMs)
-                    .setEndPositionMs(range.endMs)
-                    .build()
-            )
+            .setClippingConfiguration(clipping.build())
             .build()
         lateinit var transformer: Transformer
         val listener = object : Transformer.Listener {
@@ -144,6 +145,7 @@ class AndroidDerivativeWriter(private val context: Context) : DerivativeWriter {
         }
         transformer.start(
             EditedMediaItem.Builder(mediaItem)
+                .setDurationUs(maxOf(1L, source.durationMs * 1000L))
                 .setRemoveAudio(removeAudio)
                 .setRemoveVideo(removeVideo)
                 .setEffects(Effects(emptyList(), videoEffects))

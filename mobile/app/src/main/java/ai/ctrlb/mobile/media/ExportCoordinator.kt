@@ -72,9 +72,11 @@ object ExportCoordinator {
                 if (end <= start) null else {
                     val localStart = start - sourceStart
                     val localEnd = end - sourceStart
-                    val item = MediaItem.Builder().setUri(source.uri).setClippingConfiguration(
-                        MediaItem.ClippingConfiguration.Builder().setStartPositionMs(localStart).setEndPositionMs(localEnd).build()
-                    ).build()
+                    val clipping = MediaItem.ClippingConfiguration.Builder().setStartPositionMs(localStart)
+                    if (localEnd < source.durationMs - 50) {
+                        clipping.setEndPositionMs(localEnd)
+                    }
+                    val item = MediaItem.Builder().setUri(source.uri).setClippingConfiguration(clipping.build()).build()
                     val globalRange = TimeRange(start, end)
                     val target = project.operations.filterIsInstance<SetAudioLevels>().lastOrNull {
                         it.enabled && it.parameter != "music_ducking" && targets(it.target, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd)

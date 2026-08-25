@@ -394,23 +394,21 @@ function validateEditProgram(decision, inventory, observations) {
         operation.musicDuckDb >= -18 && operation.musicDuckDb <= -3;
       if (!validDialogue && !validDucking && !legacy) throw orchestrationError('Audio level operation is invalid.', 422, 'invalid_edit_program');
     }
-    if (operation.type === 'add_sound_effect' &&
-      (!Number.isSafeInteger(operation.atSourceMs) || operation.atSourceMs < 0 ||
-        (operation.target && (operation.atSourceMs !== inventory.sources.slice(0,
-          inventory.sources.findIndex((source) => source.id === operation.target.sourceId))
-          .reduce((total, source) => total + source.durationMs, operation.target.startMs) ||
-          !Number.isSafeInteger(operation.durationMs) || operation.durationMs < 1)) ||
-        typeof operation.catalogId !== 'string' || !operation.catalogId ||
-        typeof operation.gainDb !== 'number' || operation.gainDb < -36 || operation.gainDb > 0)) {
-      throw orchestrationError('Sound effect parameters are invalid.', 422, 'invalid_edit_program');
+    if (operation.type === 'add_sound_effect') {
+      if (typeof operation.prompt !== 'string' || !operation.prompt.trim()) {
+        throw orchestrationError('Sound effect requires a prompt.', 422, 'invalid_edit_program');
+      }
+      if (typeof operation.url !== 'string' || !operation.url.trim()) {
+        throw orchestrationError('Sound effect requires a url.', 422, 'invalid_edit_program');
+      }
     }
-    if (operation.type === 'set_background_music' &&
-      (typeof operation.catalogId !== 'string' || !operation.catalogId ||
-        typeof operation.gainDb !== 'number' || operation.gainDb < -40 || operation.gainDb > -6 ||
-        typeof operation.loop !== 'boolean' || (operation.target && (!Number.isSafeInteger(operation.fadeInMs) || operation.fadeInMs < 0 ||
-          !Number.isSafeInteger(operation.fadeOutMs) || operation.fadeOutMs < 0 ||
-          operation.fadeInMs + operation.fadeOutMs > operation.target.endMs - operation.target.startMs)))) {
-      throw orchestrationError('Background music parameters are invalid.', 422, 'invalid_edit_program');
+    if (operation.type === 'set_background_music') {
+      if (typeof operation.prompt !== 'string' || !operation.prompt.trim()) {
+        throw orchestrationError('Background music requires a prompt.', 422, 'invalid_edit_program');
+      }
+      if (typeof operation.url !== 'string' || !operation.url.trim()) {
+        throw orchestrationError('Background music requires a url.', 422, 'invalid_edit_program');
+      }
     }
     if (operation.type === 'add_captions') {
       if (!Array.isArray(operation.cues) || operation.style !== 'bold-bottom' ||
