@@ -317,7 +317,7 @@ function validateEditProgram(decision, inventory, observations) {
   if (decision.expectedRevision !== inventory.projectRevision || !Array.isArray(decision.operations)) {
     throw orchestrationError('Invalid edit program envelope.', 422, 'invalid_edit_program');
   }
-  const evidenceIds = new Set([...observations.map((item) => item.id), 'transcript:full', 'transcript']);
+  const evidenceIds = new Set([...observations.map((item) => item.id), ...inventory.evidenceJobIds, 'transcript:full', 'transcript']);
   const operationIds = new Set();
   for (const operation of decision.operations) {
     if (!operation || !ALLOWED_OPERATIONS.has(operation.type) || typeof operation.id !== 'string' ||

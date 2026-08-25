@@ -73,7 +73,7 @@ const PROPOSE_REMOVE_RANGES_TOOL = Object.freeze({
     properties: {
       id: { type: 'string' }, enabled: { type: 'boolean' },
       confidence: { type: 'number' },
-      evidenceIds: { type: 'array', items: { type: 'string' } },
+      evidenceIds: { type: 'array', items: { type: 'string' }, description: 'MUST exactly match the id of an observation you provide in the observations array.' },
       ranges: { type: 'array', items: range },
       reason: { type: 'string' },
       pacing: { type: 'string' },
@@ -94,7 +94,7 @@ const operationTool = (name, description, required, properties) => Object.freeze
     properties: {
       id: { type: 'string' }, enabled: { type: 'boolean' },
       confidence: { type: 'number' },
-      evidenceIds: { type: 'array', items: { type: 'string' } },
+      evidenceIds: { type: 'array', items: { type: 'string' }, description: 'MUST exactly match the id of an observation you provide in the observations array.' },
       ...properties,
     },
   }),
