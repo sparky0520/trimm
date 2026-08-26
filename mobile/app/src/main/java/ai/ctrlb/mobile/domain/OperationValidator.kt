@@ -23,6 +23,7 @@ object OperationValidator {
                 is AddTextOverlay -> "video-text-overlay:${operation.id}:${operation.text}"
                 is AddBgm -> "audio-bgm:${operation.url}"
                 is AddSfx -> "audio-sfx:${operation.target?.startMs}:${operation.target?.endMs}:${operation.url}"
+                is AddSectionTransition -> "video-transition:${operation.id}:${operation.preset}"
                 is AddMotionPreset -> error("Unrendered operation reached render contract")
             }
         }
@@ -37,6 +38,7 @@ object OperationValidator {
         is AddTextOverlay -> "Custom Text Overlay Graphics"
         is AddBgm -> "Generated • ${operation.prompt}"
         is AddSfx -> "Generated • ${operation.prompt}"
+        is AddSectionTransition -> "Transition • ${operation.preset}"
         is AddMotionPreset -> "Unavailable • not rendered"
     }
 
@@ -87,6 +89,7 @@ object OperationValidator {
             is AddTextOverlay -> { require(op.text.isNotBlank()); validateTarget(project, op.target) }
             is AddBgm -> { require(op.url.isNotBlank()) }
             is AddSfx -> { require(op.url.isNotBlank()); validateTarget(project, op.target) }
+            is AddSectionTransition -> { require(op.preset.isNotBlank()); validateTarget(project, op.target) }
         } }
         return resolved
     }

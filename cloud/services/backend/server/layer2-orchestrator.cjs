@@ -5,7 +5,7 @@ const { AudioGeneration } = require('./audio-generation.cjs');
 
 const ALLOWED_OPERATIONS = new Set([
   'remove_ranges', 'set_color_grade', 'set_audio_levels',
-  'add_sound_effect', 'set_background_music', 'add_captions', 'set_aspect_ratio', 'add_text_overlay'
+  'add_sound_effect', 'set_background_music', 'add_captions', 'set_aspect_ratio', 'add_text_overlay', 'add_section_transition'
 ]);
 const MAX_VIDEO_RANGE_MS = 30_000;
 const FORBIDDEN_KEYS = new Set([
@@ -34,6 +34,8 @@ Supported rendered operations: remove_ranges, set_color_grade, set_audio_levels,
 
 When the user asks for a native text overlay, title card, or animated graphics containing text (e.g. "comic book BANG effect"), use the propose_add_text_overlay tool.
 
+When the user asks for a video transition (e.g. fade, wipe, dissolve, slide), use the propose_add_section_transition tool. For basic ones, specify the preset. For unique or custom transitions, use preset="custom" and provide a detailed description.
+
 When the user asks to change the video's aspect ratio (e.g. "vertical", "portrait", "landscape", "square", or "16:9"), use the propose_set_aspect_ratio tool with the appropriate ratio (PORTRAIT, LANDSCAPE, or SQUARE).
 
 Examples:
@@ -56,6 +58,7 @@ const PROPOSAL_TOOL_TYPES = Object.freeze({
   propose_adjust_skin_protection: 'set_color_grade',
   propose_set_aspect_ratio: 'set_aspect_ratio',
   propose_add_text_overlay: 'add_text_overlay',
+  propose_add_section_transition: 'add_section_transition',
   propose_add_bgm: 'set_background_music',
   propose_add_sfx: 'add_sound_effect',
 });
@@ -102,6 +105,14 @@ function fineOperationFor(call, operationType, inventory) {
       text: raw.text, 
       description: raw.description, 
       designBlueprint: raw.designBlueprint
+    };
+  }
+  if (call.name === 'propose_add_section_transition') {
+    return { 
+      ...common, 
+      preset: raw.preset,
+      description: raw.description, 
+      customBlueprint: raw.customBlueprint
     };
   }
   if (call.name === 'propose_add_bgm') {
@@ -434,6 +445,14 @@ function validateEditProgram(decision, inventory, observations) {
         throw orchestrationError('Text overlay requires a designBlueprint.', 422, 'invalid_edit_program');
       }
     }
+    if (operation.type === 'add_section_transition') {
+      if (typeof operation.preset !== 'string' || !operation.preset.trim()) {
+        throw orchestrationError('Transition requires a preset.', 422, 'invalid_edit_program');
+      }
+      if (operation.preset === 'custom' && (typeof operation.customBlueprint !== 'string' || !operation.customBlueprint.trim())) {
+        throw orchestrationError('Custom transition requires a customBlueprint.', 422, 'invalid_edit_program');
+      }
+    }
 
   }
   for (const operation of decision.operations.filter((item) => item.type === 'set_color_grade' && item.parameter === 'skinProtection')) {
@@ -624,6 +643,24 @@ class Layer2Orchestrator {
                ...rawOp, 
                designBlueprint: JSON.stringify(configResult)
              };
+          }
+          if (call.name === 'propose_add_section_transition') {
+             const rawOp = args.operation || {};
+             if (rawOp.preset === 'custom') {
+               if (typeof this.decide.generateTransitionConfig !== 'function') throw orchestrationError('Transition subagent is not available.', 501, 'unsupported_tool_call');
+               const configResult = await this.decide.generateTransitionConfig({
+                 description: rawOp.description
+               });
+               args.operation = { 
+                 ...rawOp, 
+                 customBlueprint: JSON.stringify(configResult)
+               };
+             } else {
+               args.operation = {
+                 ...rawOp,
+                 customBlueprint: "{}"
+               };
+             }
           }
           if (call.name === 'propose_add_bgm') {
              const rawOp = args.operation || {};

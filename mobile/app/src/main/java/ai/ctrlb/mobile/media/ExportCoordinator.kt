@@ -151,6 +151,27 @@ object ExportCoordinator {
                 }
             }
         }
+
+        // Add Section Transitions
+        project.operations.filterIsInstance<AddSectionTransition>().filter { it.enabled }.forEach { transition ->
+            val range = transition.target?.let { TimeRange(it.startMs, it.endMs) }
+            if (range != null) {
+                val outputStart = timelineMapper.sourceToOutput(range.startMs)
+                val outputEnd = timelineMapper.sourceToOutput(range.endMs)
+                if (outputEnd > outputStart) {
+                    videoEffects += OverlayEffect(
+                        listOf(
+                            TransitionGraphicOverlay(
+                                preset = transition.preset,
+                                blueprintJson = transition.customBlueprint,
+                                startMs = outputStart,
+                                endMs = outputEnd
+                            )
+                        )
+                    )
+                }
+            }
+        }
         val sequences = mutableListOf(sequence)
 
         // BGM and SFX Generation

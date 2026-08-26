@@ -227,6 +227,53 @@ Return ONLY a JSON blueprint matching the schema.`;
     }
   };
 
+  decide.generateTransitionConfig = async ({ description }) => {
+    const prompt = `You are an AI video editor designing a custom Canvas-based video transition.
+Your goal is to parse the user's description and generate a JSON blueprint (Generative Canvas DSL).
+This blueprint defines simple shapes that animate to cover the screen and act as a transition wipe.
+
+Effect description: ${description}
+
+Examples of descriptions to blueprints:
+
+Description: "a black circle that grows to cover the screen"
+Output: {
+  "shapes": [
+    { "type": "circle", "color": "#000000", "radius": 2000.0, "animateScale": true }
+  ]
+}
+
+Return ONLY a JSON blueprint matching the schema.`;
+
+    const response = await generate({
+      systemPolicy: "You are a Generative Canvas DSL transition design agent.",
+      contents: prompt,
+      temperature: 0.4,
+      purpose: 'transition_generation',
+      tools: false,
+      responseJsonSchema: {
+        type: 'object', properties: {
+          shapes: {
+            type: 'array', items: {
+              type: 'object', properties: {
+                type: { type: 'string', description: 'circle or rectangle' },
+                color: { type: 'string', description: 'Hex color, e.g. #000000' },
+                radius: { type: 'number' },
+                animateScale: { type: 'boolean' }
+              }, required: ['type', 'color', 'radius', 'animateScale']
+            }
+          }
+        }, required: ['shapes']
+      }
+    });
+
+    try {
+      return JSON.parse(response.rawText);
+    } catch (e) {
+      throw Object.assign(new Error("Failed to parse transition subagent response"), { code: 'transition_subagent_error' });
+    }
+  };
+
   return decide;
 }
 

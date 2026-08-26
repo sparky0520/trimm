@@ -148,6 +148,16 @@ const PROPOSE_TEXT_OVERLAY_TOOL = operationTool(
 },
 );
 
+const PROPOSE_ADD_SECTION_TRANSITION_TOOL = operationTool(
+  'propose_add_section_transition',
+  'Add a video transition (e.g. fade-in, fade-out, crossfade, dissolve, wipe, slide, zoom, dip-to-black). Describe the desired effect in the description for custom transitions.',
+  ['sourceId', 'startMs', 'endMs', 'preset', 'description', 'reason'], {
+  ...targetRangeProperties,
+  preset: { type: 'string' },
+  description: { type: 'string' },
+},
+);
+
 const colorAdjustmentTool = (parameter, minimum, maximum) => operationTool(
   `propose_adjust_${parameter.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)}`,
   `Adjust only ${parameter} in one exact source interval, based on cited visual evidence.`,
@@ -229,7 +239,7 @@ const AGENT_TOOLS = Object.freeze([
   INSPECT_VIDEO_RANGE_TOOL,
   PROPOSE_REMOVE_RANGES_TOOL,
   PROPOSE_DIALOGUE_LOUDNESS_TOOL, PROPOSE_MUSIC_DUCKING_TOOL,
-  PROPOSE_CAPTIONS_TOOL, PROPOSE_ASPECT_RATIO_TOOL, PROPOSE_TEXT_OVERLAY_TOOL, ...PROPOSE_COLOR_TOOLS,
+  PROPOSE_CAPTIONS_TOOL, PROPOSE_ASPECT_RATIO_TOOL, PROPOSE_TEXT_OVERLAY_TOOL, PROPOSE_ADD_SECTION_TRANSITION_TOOL, ...PROPOSE_COLOR_TOOLS,
   PROPOSE_ADD_BGM_TOOL, PROPOSE_ADD_SFX_TOOL,
   ASK_CLARIFICATION_TOOL, FINALIZE_EDIT_PROGRAM_TOOL,
   REMOVE_DRAFT_OPERATION_TOOL, FINISH_WITHOUT_PROPOSAL_TOOL,

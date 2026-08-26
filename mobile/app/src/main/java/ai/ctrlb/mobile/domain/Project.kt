@@ -110,6 +110,13 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
 ) : EditOperation
 @Serializable @SerialName("add_motion_preset") data class AddMotionPreset(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val range: TimeRange? = null, val preset: String, val intensity: Float = .5f) : EditOperation
 @Serializable @SerialName("add_captions") data class AddCaptions(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val cues: List<CaptionCue> = emptyList(), val target: OperationTarget? = null, val speakerId: String? = null, val style: String = "bold-bottom") : EditOperation
+@Serializable @SerialName("add_section_transition") data class AddSectionTransition(
+    override val id: String = UUID.randomUUID().toString(),
+    override val enabled: Boolean = true,
+    val target: OperationTarget? = null,
+    val preset: String = "fade-in",
+    val customBlueprint: String = "{}"
+) : EditOperation
 
 @Serializable @SerialName("set_background_music") data class AddBgm(
     override val id: String = java.util.UUID.randomUUID().toString(),
