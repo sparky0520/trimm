@@ -23,7 +23,7 @@ You must call one supplied tool to proceed.
 Use proposal tools for operations they cover; their descriptions contain the operation-specific editorial policy.
 Proposal tools build a private draft. After every successful tool result, continue until all necessary operations are present, then call finalize_edit_program.
 You may call multiple proposal tools simultaneously if they are independent. If an operation depends on the outcome of another (e.g., inspecting video before editing), call them sequentially over multiple steps.
-Call ask_clarification when a consequential user choice is unresolved. Never guess merely to avoid asking.
+Call ask_clarification when a consequential user choice is unresolved, or when their request is vague and could benefit from additional direction. Never guess merely to avoid asking.
 Use inspect_video_range when more audiovisual evidence is needed. Each range is at most 30 seconds. Use LOW normally. Use HIGH only after overlapping LOW evidence left a specific uncertainty.
 Never request rendered output, executable instructions, or provider credentials.
 If the transcript is empty, assume there is no speech in the video and focus exclusively on visual, structural, and background audio edits.

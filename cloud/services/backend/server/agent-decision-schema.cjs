@@ -181,7 +181,7 @@ const PROPOSE_ADD_SFX_TOOL = operationTool(
 
 const ASK_CLARIFICATION_TOOL = Object.freeze({
   name: 'ask_clarification',
-  description: 'Pause and ask one to three consequential questions. Prefer concrete options and recommend the safest useful default when possible.',
+  description: 'Pause and ask one to three consequential questions if the user request is vague, needs additional direction, or involves an unresolved consequential choice. Prefer concrete options and recommend the safest useful default when possible.',
   parameters: {
     type: 'object', additionalProperties: false, required: ['questions'], properties: {
       questions: {
