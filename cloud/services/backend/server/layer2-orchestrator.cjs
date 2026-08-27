@@ -303,7 +303,11 @@ function validateObservations(items, inventory, evidence) {
       throw orchestrationError('Gemini returned invalid or duplicate observations.', 422, 'invalid_observations');
     }
     seen.add(item.id);
-    const origin = evidence.find((clip) => clip.sourceId === item.sourceId && clip.startMs <= item.startMs && clip.endMs >= item.endMs);
+    let origin = evidence.find((clip) => clip.sourceId === item.sourceId && clip.startMs <= item.startMs && clip.endMs >= item.endMs);
+    if (!origin) {
+      // Allow up to a 2 second (2000ms) margin for LLM timestamp drift
+      origin = evidence.find((clip) => clip.sourceId === item.sourceId && clip.startMs - 2000 <= item.startMs && clip.endMs + 2000 >= item.endMs);
+    }
     if (!origin) throw orchestrationError('Gemini observation is outside supplied video.', 422, 'ungrounded_observation');
     return { ...item, description: item.description.slice(0, 500), originatingJobId: origin.id };
   });
