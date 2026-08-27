@@ -127,8 +127,8 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                 }
             )
             runCatching {
-                val completedRun = coordinator.run(
-                    AgentRunRequest(
+                val completedRun = coordinator.orchestrateStateless(
+                    request = AgentRunRequest(
                         projectId = project.id,
                         deviceSessionId = deviceSessionId,
                         projectRevision = analyzed.revision,
@@ -140,11 +140,15 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                             )
                         },
                         transcript = sourceTranscript(analyzed.analysis.words, project.orderedSources)
-                    )
-                ) { snapshot ->
-                    analyzed = analyzed.copy(analysis = analyzed.analysis.copy(agentRun = snapshot))
-                    store.save(analyzed)
-                }
+                    ),
+                    onProgress = { stage, percent ->
+                        progress(stage, percent)
+                    },
+                    onPersist = { snapshot ->
+                        analyzed = analyzed.copy(analysis = analyzed.analysis.copy(agentRun = snapshot))
+                        store.save(analyzed)
+                    }
+                )
                 AgentDecisionMapper.pendingProposal(completedRun)?.let { proposal ->
                     OperationValidator.validate(analyzed, proposal.operations, proposal.expectedRevision)
                     analyzed = analyzed.copy(analysis = analyzed.analysis.copy(

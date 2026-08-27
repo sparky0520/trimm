@@ -154,7 +154,13 @@ data class ContinueAgentRunRequest(
 @Serializable
 data class RecoverAgentRunRequest(val action: String, val clarification: String? = null)
 
+@Serializable data class AgentPlanRequest(val prompt: String)
+@Serializable data class AgentTask(val id: String, val description: String, val dependsOn: List<String> = emptyList())
+@Serializable data class AgentPlanResponse(val tasks: List<AgentTask>)
+
 interface AgentRunGateway {
+    suspend fun plan(request: AgentPlanRequest): AgentPlanResponse = error("Planning is not implemented by this gateway.")
+    suspend fun executeStateless(request: AgentRunRequest): JsonObject = error("Stateless execution is not implemented by this gateway.")
     suspend fun start(request: AgentRunRequest): AgentRun
     suspend fun continueWith(runId: String, evidenceJobIds: List<String>): AgentRun
     suspend fun sendMessage(runId: String, message: String, projectRevision: Long, existingOperations: List<JsonObject>): AgentRun =
@@ -265,6 +271,110 @@ class AgentRunCoordinator(
         var snapshot = reduce(null, gateway.start(request), request)
         onPersist(snapshot)
         return advance(snapshot, request, onPersist)
+    }
+
+    suspend fun orchestrateStateless(
+        request: AgentRunRequest,
+        onProgress: suspend (String, Int) -> Unit,
+        onPersist: suspend (PersistedAgentRun) -> Unit
+    ): PersistedAgentRun {
+        var planResponse: AgentPlanResponse? = null
+        var planAttempt = 0
+        while (planAttempt < 3) {
+            try {
+                planResponse = gateway.plan(AgentPlanRequest(request.intent))
+                break
+            } catch (e: Exception) {
+                planAttempt++
+                if (planAttempt == 3) throw e
+                kotlinx.coroutines.delay(2000L * planAttempt)
+            }
+        }
+        val tasks = planResponse?.tasks ?: emptyList()
+        if (tasks.isEmpty()) {
+            return run(request, onPersist)
+        }
+
+        var snapshot = PersistedAgentRun(
+            runId = java.util.UUID.randomUUID().toString(),
+            projectId = request.projectId,
+            projectRevision = request.projectRevision,
+            status = AgentRunStatus.PARTIAL,
+            events = listOf(
+                AgentActivityEvent(1, "started", "Starting an orchestrated video edit.", java.time.Instant.now().toString())
+            ),
+            decision = buildJsonObject { put("type", "fallback"); put("reason", "Planning") }
+        )
+        onPersist(snapshot)
+
+        var existingOperations = request.existingOperations
+        tasks.forEachIndexed { index, task ->
+            onProgress("agent-task: ${index + 1} of ${tasks.size}: ${task.description}", (index * 100) / tasks.size)
+            var taskAttempt = 0
+            while (taskAttempt < 3) {
+                try {
+                    val taskRequest = request.copy(
+                        intent = task.description,
+                        existingOperations = existingOperations
+                    )
+                    var outcome = gateway.executeStateless(taskRequest)
+                    
+                    // advance stateless
+                    while (outcome["type"]?.jsonPrimitive?.content == "tool_request") {
+                        val evidence = json.decodeFromJsonElement(EvidenceRequestDecision.serializer(), outcome)
+                        require(evidence.tool == "inspect_video_range" && evidence.jobs.isNotEmpty())
+                        val completed = evidence.jobs.map { job -> fulfiller.fulfill(job) }
+                        
+                        // Hit continueWith on the stateless side? No, stateless doesn't have continue.
+                        // We must append evidenceJobIds to the request and hit executeStateless again!
+                        val nextTaskRequest = taskRequest.copy(
+                            evidenceJobIds = taskRequest.evidenceJobIds + completed
+                        )
+                        outcome = gateway.executeStateless(nextTaskRequest)
+                    }
+
+                    // Once we have a final outcome for this task, append operations to our existing ones
+                    if (outcome["type"]?.jsonPrimitive?.content == "edit_program") {
+                        val newOps = outcome["operations"]?.jsonArray?.map { it.jsonObject } ?: emptyList()
+                        existingOperations = existingOperations + newOps
+                        
+                        snapshot = snapshot.copy(
+                            status = if (index == tasks.size - 1) AgentRunStatus.PROPOSAL_READY else AgentRunStatus.PARTIAL,
+                            decision = buildJsonObject {
+                                put("type", "edit_program")
+                                put("operations", kotlinx.serialization.json.JsonArray(existingOperations))
+                                put("expectedRevision", request.projectRevision)
+                                put("summary", "Proposed edit")
+                            },
+                            events = snapshot.events + AgentActivityEvent(
+                                snapshot.events.size + 1,
+                                "partial",
+                                "Completed task: ${task.description}",
+                                java.time.Instant.now().toString()
+                            )
+                        )
+                    } else if (outcome["type"]?.jsonPrimitive?.content == "fallback") {
+                        throw Exception(outcome["reason"]?.jsonPrimitive?.content ?: "Task failed")
+                    }
+                    onPersist(snapshot)
+                    break // break retry loop on success
+                } catch (e: Exception) {
+                    taskAttempt++
+                    if (taskAttempt == 3) {
+                        snapshot = snapshot.copy(
+                            status = AgentRunStatus.FAILED,
+                            decision = buildJsonObject { put("type", "fallback"); put("reason", "Task failed after retries: ${e.message}") }
+                        )
+                        onPersist(snapshot)
+                        throw e
+                    }
+                    kotlinx.coroutines.delay(2000L * taskAttempt)
+                }
+            }
+        }
+        
+        onProgress("agent-run-complete", 100)
+        return snapshot
     }
 
     suspend fun recover(
@@ -404,43 +514,55 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
     private val runsEndpoint = URI(endpoint).also { require(it.scheme == "https") }
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = false }
 
+    override suspend fun plan(request: AgentPlanRequest): AgentPlanResponse = withContext(Dispatchers.IO) {
+        val endpoint = URI("${runsEndpoint.toString().trimEnd('/').substringBeforeLast('/')}/plan")
+        val responseText = postRaw(endpoint, json.encodeToString(AgentPlanRequest.serializer(), request))
+        json.decodeFromString(AgentPlanResponse.serializer(), responseText)
+    }
+
+    override suspend fun executeStateless(request: AgentRunRequest): JsonObject = withContext(Dispatchers.IO) {
+        val endpoint = URI("${runsEndpoint.toString().trimEnd('/').substringBeforeLast('/')}/execute")
+        val responseText = postRaw(endpoint, json.encodeToString(AgentRunRequest.serializer(), request))
+        json.parseToJsonElement(responseText).jsonObject
+    }
+
     override suspend fun start(request: AgentRunRequest): AgentRun = withContext(Dispatchers.IO) {
-        post(runsEndpoint, json.encodeToString(AgentRunRequest.serializer(), request))
+        decodeRun(postRaw(runsEndpoint, json.encodeToString(AgentRunRequest.serializer(), request)))
     }
 
     override suspend fun continueWith(runId: String, evidenceJobIds: List<String>): AgentRun = withContext(Dispatchers.IO) {
         require(runId.isNotBlank() && runId.length <= 200)
         require(evidenceJobIds.isNotEmpty())
-        post(
+        decodeRun(postRaw(
             URI("${runsEndpoint.toString().trimEnd('/')}/$runId/messages"),
             json.encodeToString(ContinueAgentRunRequest.serializer(), ContinueAgentRunRequest(
                 toolArtifacts = evidenceJobIds.map { ToolArtifactResult(it, it) }
             ))
-        )
+        ))
     }
 
     override suspend fun sendMessage(runId: String, message: String, projectRevision: Long, existingOperations: List<JsonObject>): AgentRun = withContext(Dispatchers.IO) {
         require(runId.isNotBlank() && runId.length <= 200)
         require(message.isNotBlank() && message.length <= 2_000)
-        post(
+        decodeRun(postRaw(
             URI("${runsEndpoint.toString().trimEnd('/')}/$runId/messages"),
             json.encodeToString(ContinueAgentRunRequest.serializer(), ContinueAgentRunRequest(
                 message = message.trim(), projectRevision = projectRevision, existingOperations = existingOperations
             ))
-        )
+        ))
     }
 
     override suspend fun recover(runId: String, action: String, clarification: String?): AgentRun = withContext(Dispatchers.IO) {
         require(runId.isNotBlank() && runId.length <= 200)
         require(action in setOf("retry", "clarify"))
         if (action == "clarify") require(!clarification.isNullOrBlank() && clarification.length <= 500)
-        post(
+        decodeRun(postRaw(
             URI("${runsEndpoint.toString().trimEnd('/')}/$runId/messages"),
             json.encodeToString(
                 RecoverAgentRunRequest.serializer(),
                 RecoverAgentRunRequest(action, clarification)
             )
-        )
+        ))
     }
 
     override suspend fun cancel(runId: String): AgentRun = withContext(Dispatchers.IO) {
@@ -458,7 +580,7 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
         } finally { connection.disconnect() }
     }
 
-    private suspend fun post(endpoint: URI, body: String): AgentRun {
+    private suspend fun postRaw(endpoint: URI, body: String): String {
         var attempt = 0
         while (true) {
             coroutineContext.ensureActive()
@@ -486,12 +608,12 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
                     
                     throw IllegalArgumentException(
                         buildString {
-                            append("Agent run failed ($responseCode)")
+                            append("Agent request failed ($responseCode)")
                             if (error != null) append(": $error")
                         }
                     )
                 }
-                return connection.inputStream.bufferedReader().use { decodeRun(it.readText()) }
+                return connection.inputStream.bufferedReader().use { it.readText() }
             } catch (failure: java.io.IOException) {
                 if (attempt == 3) throw failure
                 attempt++

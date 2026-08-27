@@ -557,6 +557,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         stage?.startsWith("upload-") == true -> "Transcribing speech… $percent%"
         stage == "speech-hints" -> "Reviewing speech and take structure…"
         stage == "agent-run" || stage == "planner" -> "Preparing your edit proposal…"
+        stage?.startsWith("agent-task:") == true -> "Working on step ${stage.removePrefix("agent-task:").trim()}…"
         else -> "Reading your clips and preparing a proposal…"
     }
     private fun editResultLines(before: List<EditOperation>, after: List<EditOperation>): List<String> {
