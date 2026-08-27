@@ -145,7 +145,11 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                         progress(stage, percent)
                     },
                     onPersist = { snapshot ->
-                        analyzed = analyzed.copy(analysis = analyzed.analysis.copy(agentRun = snapshot))
+                        val proposal = AgentDecisionMapper.pendingProposal(snapshot)
+                        analyzed = analyzed.copy(analysis = analyzed.analysis.copy(
+                            agentRun = snapshot,
+                            pendingProposal = proposal ?: analyzed.analysis.pendingProposal
+                        ))
                         store.save(analyzed)
                     }
                 )
@@ -169,6 +173,15 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                     warnings = analyzed.analysis.warnings + "Agent run could not continue: $detail"
                 ))
                 store.save(analyzed)
+                
+                if (analyzed.analysis.pendingProposal != null) {
+                    // We have partial results to show, so we treat the outer job as success
+                    // to allow the UI to render the preview.
+                    progress("complete", 100)
+                    return Result.success()
+                } else {
+                    throw error
+                }
             }
         }
         progress("complete", 100)

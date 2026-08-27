@@ -223,7 +223,7 @@ object AgentDecisionMapper {
     }
 
     fun pendingProposal(run: PersistedAgentRun): PendingEditorialProposal? {
-        if (run.status != AgentRunStatus.PROPOSAL_READY ||
+        if (run.status !in setOf(AgentRunStatus.PROPOSAL_READY, AgentRunStatus.PARTIAL, AgentRunStatus.FAILED) ||
             run.decision["type"]?.jsonPrimitive?.content != "edit_program") return null
         val operations = run.decision["operations"]?.jsonArray?.map { element ->
             json.decodeFromJsonElement(EditOperation.serializer(), element)
@@ -363,7 +363,12 @@ class AgentRunCoordinator(
                     if (taskAttempt == 3) {
                         snapshot = snapshot.copy(
                             status = AgentRunStatus.FAILED,
-                            decision = buildJsonObject { put("type", "fallback"); put("reason", "Task failed after retries: ${e.message}") }
+                            events = snapshot.events + AgentActivityEvent(
+                                snapshot.events.size + 1,
+                                "failed",
+                                "Task failed after retries: ${e.message}",
+                                java.time.Instant.now().toString()
+                            )
                         )
                         onPersist(snapshot)
                         throw e
