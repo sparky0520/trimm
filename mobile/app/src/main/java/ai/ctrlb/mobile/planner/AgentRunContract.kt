@@ -276,7 +276,7 @@ class AgentRunCoordinator(
     suspend fun orchestrateStateless(
         request: AgentRunRequest,
         onProgress: suspend (String, Int) -> Unit,
-        onPersist: suspend (PersistedAgentRun) -> Unit
+        onPersist: suspend (PersistedAgentRun, AgentPlanResponse?) -> Unit
     ): PersistedAgentRun {
         var planResponse: AgentPlanResponse? = null
         var planAttempt = 0
@@ -292,7 +292,7 @@ class AgentRunCoordinator(
         }
         val tasks = planResponse?.tasks ?: emptyList()
         if (tasks.isEmpty()) {
-            return run(request, onPersist)
+            return run(request) { snapshot -> onPersist(snapshot, null) }
         }
 
         var snapshot = PersistedAgentRun(
@@ -305,7 +305,7 @@ class AgentRunCoordinator(
             ),
             decision = buildJsonObject { put("type", "fallback"); put("reason", "Planning") }
         )
-        onPersist(snapshot)
+        onPersist(snapshot, planResponse)
 
         var existingOperations = request.existingOperations
         tasks.forEachIndexed { index, task ->
@@ -354,9 +354,9 @@ class AgentRunCoordinator(
                             )
                         )
                     } else if (outcome["type"]?.jsonPrimitive?.content == "fallback") {
-                        throw Exception(outcome["reason"]?.jsonPrimitive?.content ?: "Task failed")
+                        throw Exception(outcome["reason"]?.jsonPrimitive?.content ?: "Task failed: ${task.description}")
                     }
-                    onPersist(snapshot)
+                    onPersist(snapshot, planResponse)
                     break // break retry loop on success
                 } catch (e: Exception) {
                     taskAttempt++
@@ -366,11 +366,11 @@ class AgentRunCoordinator(
                             events = snapshot.events + AgentActivityEvent(
                                 snapshot.events.size + 1,
                                 "failed",
-                                "Task failed after retries: ${e.message}",
+                                "Task failed: ${task.description}. ${e.message}",
                                 java.time.Instant.now().toString()
                             )
                         )
-                        onPersist(snapshot)
+                        onPersist(snapshot, planResponse)
                         throw e
                     }
                     kotlinx.coroutines.delay(2000L * taskAttempt)

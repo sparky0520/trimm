@@ -538,6 +538,11 @@ private sealed interface ChatElement {
             if (review != null) {
                 item { ProposalChatBubble(review, applyProposal, rejectProposal) }
             }
+            if (!state.isProcessing && project.analysis.agentPlan != null) {
+                item(key = "agent-plan-${project.analysis.agentRun?.runId}") {
+                    AgentPlanBubble(project.analysis.agentPlan, project.analysis.agentRun)
+                }
+            }
             if (state.isProcessing && project.analysis.revisionConversation.none { it.isPending }) {
                 state.jobMessage?.let { message ->
                     item(key = "job-status") {
@@ -886,6 +891,38 @@ private fun formatUserFacingError(raw: String): String {
 }
 
 private fun reviewPercent(value: Float) = "${(value * 100).toInt()}%"
+
+@Composable private fun AgentPlanBubble(plan: ai.ctrlb.mobile.planner.AgentPlanResponse, run: ai.ctrlb.mobile.planner.PersistedAgentRun?) {
+    AssistantChatBubble(accent = Coral) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Execution Plan", color = CreamRaised, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            plan.tasks.forEach { task ->
+                val succeeded = run?.events?.any { it.message == "Completed task: ${task.description}" } == true
+                val failed = run?.events?.any { it.message.startsWith("Task failed: ${task.description}") } == true
+                
+                val icon = if (succeeded) "✅" else if (failed) "❌" else "⚪"
+                val color = if (succeeded) Cream else if (failed) Coral else Muted
+                
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+                    Text(icon, fontSize = 12.sp)
+                    Column {
+                        Text(task.description, color = color, fontSize = 13.sp, lineHeight = 18.sp)
+                        if (task.dependsOn.isNotEmpty()) {
+                            Text("↳ Depends on: ${task.dependsOn.joinToString(", ")}", color = Muted.copy(alpha = 0.7f), fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable private fun ActionCard(title: String, detail: String, accent: Color) {
+    Row(Modifier.fillMaxWidth().background(Raised, RoundedCornerShape(10.dp)).border(1.dp, Border, RoundedCornerShape(10.dp)).padding(12.dp)) {
+        Box(Modifier.size(8.dp).background(accent, RoundedCornerShape(50)).align(Alignment.CenterVertically))
+        Column(Modifier.padding(start = 10.dp)) { Text(title, color = Cream, fontWeight = FontWeight.Bold, fontSize = 11.sp); Text(detail, color = Muted, fontSize = 11.sp) }
+    }
+}
 
 @Composable private fun StatusCard(title: String, detail: String, accent: Color) {
     Row(Modifier.fillMaxWidth().background(Raised, RoundedCornerShape(10.dp)).border(1.dp, Border, RoundedCornerShape(10.dp)).padding(12.dp)) {

@@ -144,10 +144,11 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                     onProgress = { stage, percent ->
                         progress(stage, percent)
                     },
-                    onPersist = { snapshot ->
+                    onPersist = { snapshot, plan ->
                         val proposal = AgentDecisionMapper.pendingProposal(snapshot)
                         analyzed = analyzed.copy(analysis = analyzed.analysis.copy(
                             agentRun = snapshot,
+                            agentPlan = plan ?: analyzed.analysis.agentPlan,
                             pendingProposal = proposal ?: analyzed.analysis.pendingProposal
                         ))
                         store.save(analyzed)

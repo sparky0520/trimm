@@ -2,6 +2,7 @@ package ai.ctrlb.mobile.domain
 
 import ai.ctrlb.mobile.layer1.RequestShapedMediaIndex
 import ai.ctrlb.mobile.planner.PersistedAgentRun
+import ai.ctrlb.mobile.planner.AgentPlanResponse
 import ai.ctrlb.mobile.evidence.TakeGroup
 import ai.ctrlb.mobile.evidence.EditorialProfile
 import ai.ctrlb.mobile.evidence.StoryGraph
@@ -146,6 +147,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val editorialProfile: EditorialProfile? = null,
     val storyGraph: StoryGraph? = null,
     val mediaIndex: RequestShapedMediaIndex? = null,
+    val agentPlan: AgentPlanResponse? = null,
     val agentRun: PersistedAgentRun? = null,
     val editorialPlan: StagedEditorialPlan? = null,
     val pendingProposal: PendingEditorialProposal? = null,
