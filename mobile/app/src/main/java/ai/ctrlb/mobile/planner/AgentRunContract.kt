@@ -257,7 +257,7 @@ class AgentRunCoordinator(
     private val gateway: AgentRunGateway,
     private val fulfiller: AgentEvidenceFulfiller
 ) {
-    private val json = Json { ignoreUnknownKeys = false }
+    private val json = Json { ignoreUnknownKeys = true }
     private val allowedActivityTypes = setOf(
         "started", "transcript_received", "analyzing", "evidence_requested", "evidence_received",
         "proposal_repairing", "proposal_repaired", "proposal_repair_failed",
@@ -545,7 +545,7 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
     }
 
     private val runsEndpoint = URI(endpoint).also { require(it.scheme == "https") }
-    private val json = Json { encodeDefaults = true; ignoreUnknownKeys = false }
+    private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
 
     override suspend fun plan(request: AgentPlanRequest): AgentPlanResponse = withContext(Dispatchers.IO) {
         val endpoint = URI("${runsEndpoint.toString().trimEnd('/').substringBeforeLast('/')}/agent/plan")
