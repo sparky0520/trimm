@@ -182,56 +182,66 @@ Output: {
 
 Return ONLY a JSON blueprint matching the schema.`;
 
-    const response = await generate({
-      systemPolicy: "You are a Generative Canvas DSL design agent.",
-      contents: prompt,
-      temperature: 0.4,
-      purpose: 'text_overlay_generation',
-      tools: false,
-      responseJsonSchema: {
-        type: 'object', properties: {
-          backgroundShapes: {
-            type: 'array', items: {
+    let history = [];
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const response = await generate({
+        systemPolicy: "You are a Generative Canvas DSL design agent.",
+        contents: history.length > 0 ? history : prompt,
+        temperature: 0.4,
+        purpose: 'text_overlay_generation',
+        tools: false,
+        responseJsonSchema: {
+          type: 'object', properties: {
+            backgroundShapes: {
+              type: 'array', items: {
+                type: 'object', properties: {
+                  type: { type: 'string', description: 'rectangle, circle, or starburst' },
+                  color: { type: 'string', description: 'Hex color, e.g. #FFFF00 or #80000000' },
+                  strokeColor: { type: 'string' },
+                  strokeWidth: { type: 'number' },
+                  points: { type: 'integer' },
+                  innerRadius: { type: 'number' },
+                  outerRadius: { type: 'number' },
+                  width: { type: 'number' },
+                  height: { type: 'number' },
+                  cornerRadius: { type: 'number' }
+                }, required: ['type', 'color', 'strokeColor', 'strokeWidth', 'points', 'innerRadius', 'outerRadius', 'width', 'height', 'cornerRadius']
+              }
+            },
+            textStyle: {
               type: 'object', properties: {
-                type: { type: 'string', description: 'rectangle, circle, or starburst' },
-                color: { type: 'string', description: 'Hex color, e.g. #FFFF00 or #80000000' },
+                color: { type: 'string' },
                 strokeColor: { type: 'string' },
                 strokeWidth: { type: 'number' },
-                points: { type: 'integer' },
-                innerRadius: { type: 'number' },
-                outerRadius: { type: 'number' },
-                width: { type: 'number' },
-                height: { type: 'number' },
-                cornerRadius: { type: 'number' }
-              }, required: ['type', 'color', 'strokeColor', 'strokeWidth', 'points', 'innerRadius', 'outerRadius', 'width', 'height', 'cornerRadius']
+                shadowRadius: { type: 'number' },
+                shadowColor: { type: 'string' },
+                fontFamily: { type: 'string', description: 'Choose from: comic, neon, typewriter, elegant, plain' }
+              }, required: ['color', 'strokeColor', 'strokeWidth', 'shadowRadius', 'shadowColor', 'fontFamily']
+            },
+            layout: {
+              type: 'object', properties: {
+                posX: { type: 'number' },
+                posY: { type: 'number' },
+                scale: { type: 'number' },
+                rotation: { type: 'number' }
+              }, required: ['posX', 'posY', 'scale', 'rotation']
             }
-          },
-          textStyle: {
-            type: 'object', properties: {
-              color: { type: 'string' },
-              strokeColor: { type: 'string' },
-              strokeWidth: { type: 'number' },
-              shadowRadius: { type: 'number' },
-              shadowColor: { type: 'string' },
-              fontFamily: { type: 'string', description: 'Choose from: comic, neon, typewriter, elegant, plain' }
-            }, required: ['color', 'strokeColor', 'strokeWidth', 'shadowRadius', 'shadowColor', 'fontFamily']
-          },
-          layout: {
-            type: 'object', properties: {
-              posX: { type: 'number' },
-              posY: { type: 'number' },
-              scale: { type: 'number' },
-              rotation: { type: 'number' }
-            }, required: ['posX', 'posY', 'scale', 'rotation']
-          }
-        }, required: ['backgroundShapes', 'textStyle', 'layout']
-      }
-    });
+          }, required: ['backgroundShapes', 'textStyle', 'layout']
+        }
+      });
 
-    try {
-      return JSON.parse(response.rawText);
-    } catch (e) {
-      throw Object.assign(new Error("Failed to parse text overlay subagent response"), { code: 'text_overlay_subagent_error' });
+      try {
+        return JSON.parse(response.rawText);
+      } catch (e) {
+        if (attempt === 3) {
+          throw Object.assign(new Error("Failed to parse text overlay subagent response"), { code: 'text_overlay_subagent_error' });
+        }
+        history = [
+          { role: 'user', parts: [{ text: prompt }] },
+          { role: 'model', parts: [{ text: response.rawText || '' }] },
+          { role: 'user', parts: [{ text: "The response was not valid JSON. Please fix it and output ONLY valid JSON matching the schema. Error: " + e.message }] }
+        ];
+      }
     }
   };
 
@@ -253,32 +263,46 @@ Output: {
 
 Return ONLY a JSON blueprint matching the schema.`;
 
-    const response = await generate({
-      systemPolicy: "You are a Generative Canvas DSL transition design agent.",
-      contents: prompt,
-      temperature: 0.4,
-      purpose: 'transition_generation',
-      tools: false,
-      responseJsonSchema: {
-        type: 'object', properties: {
-          shapes: {
-            type: 'array', items: {
-              type: 'object', properties: {
-                type: { type: 'string', description: 'circle or rectangle' },
-                color: { type: 'string', description: 'Hex color, e.g. #000000' },
-                radius: { type: 'number' },
-                animateScale: { type: 'boolean' }
-              }, required: ['type', 'color', 'radius', 'animateScale']
+    let history = [];
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const response = await generate({
+        systemPolicy: "You are a Generative Canvas DSL design agent.",
+        contents: history.length > 0 ? history : prompt,
+        temperature: 0.4,
+        purpose: 'transition_generation',
+        tools: false,
+        responseJsonSchema: {
+          type: 'object', properties: {
+            shapes: {
+              type: 'array', items: {
+                type: 'object', properties: {
+                  type: { type: 'string', description: 'rectangle, circle' },
+                  color: { type: 'string' },
+                  posX: { type: 'number' },
+                  posY: { type: 'number' },
+                  radius: { type: 'number' },
+                  width: { type: 'number' },
+                  height: { type: 'number' },
+                  animateScale: { type: 'boolean' }
+                }, required: ['type', 'color']
+              }
             }
-          }
-        }, required: ['shapes']
-      }
-    });
+          }, required: ['shapes']
+        }
+      });
 
-    try {
-      return JSON.parse(response.rawText);
-    } catch (e) {
-      throw Object.assign(new Error("Failed to parse transition subagent response"), { code: 'transition_subagent_error' });
+      try {
+        return JSON.parse(response.rawText);
+      } catch (e) {
+        if (attempt === 3) {
+          throw Object.assign(new Error("Failed to parse transition subagent response"), { code: 'transition_subagent_error' });
+        }
+        history = [
+          { role: 'user', parts: [{ text: prompt }] },
+          { role: 'model', parts: [{ text: response.rawText || '' }] },
+          { role: 'user', parts: [{ text: "The response was not valid JSON. Please fix it and output ONLY valid JSON matching the schema. Error: " + e.message }] }
+        ];
+      }
     }
   };
 
@@ -289,31 +313,41 @@ Use the 'dependsOn' field to enforce sequential execution if a task relies on th
 
 Return ONLY a JSON blueprint matching the schema.`;
 
-    const response = await generate({
-      systemPolicy,
-      contents: prompt,
-      temperature: 0.1,
-      purpose: 'planning',
-      tools: false,
-      responseJsonSchema: {
-        type: 'object', properties: {
-          tasks: {
-            type: 'array', items: {
-              type: 'object', properties: {
-                id: { type: 'string', description: 'Unique identifier for this task (e.g. task_1)' },
-                description: { type: 'string', description: 'The natural language sub-prompt for the worker agent' },
-                dependsOn: { type: 'array', items: { type: 'string' }, description: 'List of task ids that must finish before this one starts' }
-              }, required: ['id', 'description', 'dependsOn']
+    let history = [];
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const response = await generate({
+        systemPolicy,
+        contents: history.length > 0 ? history : prompt,
+        temperature: 0.1,
+        purpose: 'planning',
+        tools: false,
+        responseJsonSchema: {
+          type: 'object', properties: {
+            tasks: {
+              type: 'array', items: {
+                type: 'object', properties: {
+                  id: { type: 'string', description: 'Unique identifier for this task (e.g. task_1)' },
+                  description: { type: 'string', description: 'The natural language sub-prompt for the worker agent' },
+                  dependsOn: { type: 'array', items: { type: 'string' }, description: 'List of task ids that must finish before this one starts' }
+                }, required: ['id', 'description', 'dependsOn']
+              }
             }
-          }
-        }, required: ['tasks']
-      }
-    });
+          }, required: ['tasks']
+        }
+      });
 
-    try {
-      return JSON.parse(response.rawText);
-    } catch (e) {
-      throw Object.assign(new Error("Failed to parse router plan response"), { code: 'router_plan_error' });
+      try {
+        return JSON.parse(response.rawText);
+      } catch (e) {
+        if (attempt === 3) {
+          throw Object.assign(new Error("Failed to parse router plan response"), { code: 'router_plan_error' });
+        }
+        history = [
+          { role: 'user', parts: [{ text: prompt }] },
+          { role: 'model', parts: [{ text: response.rawText || '' }] },
+          { role: 'user', parts: [{ text: "The response was not valid JSON. Please fix it and output ONLY valid JSON matching the schema. Error: " + e.message }] }
+        ];
+      }
     }
   };
 
