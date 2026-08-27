@@ -187,6 +187,37 @@ class AgentRuns {
     return this.view(run);
   }
 
+  async executeTask(principal, runId, update) {
+    let run = await this.owned(principal, runId);
+    const subPrompt = typeof update?.message === 'string' ? update.message.trim() : '';
+    if (!subPrompt) {
+      throw Object.assign(new Error('Sub-task prompt is required.'), { status: 400, code: 'prompt_required' });
+    }
+
+    const subInventory = {
+      ...run.inventory,
+      intent: subPrompt,
+      messages: [{ role: 'user', content: subPrompt }]
+    };
+
+    run = await this.store.save(run, run.stateVersion);
+    try {
+      // Use the graph or orchestrator to evaluate the subPrompt
+      const outcome = await this.graph.invoke({
+        mode: 'continue', principal, inventory: subInventory, threadId: run.id,
+      });
+      this.applyDecision(run, outcome);
+      run = await this.store.save(run, run.stateVersion);
+    } catch (error) {
+      run.status = 'failed';
+      run.decision = { type: 'fallback', reason: 'The sub-task could not be completed.' };
+      this.event(run, 'failed', 'The sub-task stopped safely.');
+      try { run = await this.store.save(run, run.stateVersion); } catch {}
+      throw Object.assign(error, { run: this.view(run) });
+    }
+    return this.view(run);
+  }
+
   async owned(principal, runId) {
     const run = await this.store.read(principal.id, runId);
     if (!run) {

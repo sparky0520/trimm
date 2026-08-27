@@ -282,6 +282,41 @@ Return ONLY a JSON blueprint matching the schema.`;
     }
   };
 
+  decide.generatePlan = async ({ prompt }) => {
+    const systemPolicy = `You are the Trimm Router Agent. Your job is to break down a complex video editing request into a sequence of simpler tasks.
+Each task must be a natural language prompt that can be independently executed by a Worker Agent.
+Use the 'dependsOn' field to enforce sequential execution if a task relies on the completion of another task (e.g. adding captions must happen AFTER dead space is removed, since removing space changes timing). If tasks don't depend on each other, they can run in parallel (empty dependsOn).
+
+Return ONLY a JSON blueprint matching the schema.`;
+
+    const response = await generate({
+      systemPolicy,
+      contents: prompt,
+      temperature: 0.1,
+      purpose: 'planning',
+      tools: false,
+      responseJsonSchema: {
+        type: 'object', properties: {
+          tasks: {
+            type: 'array', items: {
+              type: 'object', properties: {
+                id: { type: 'string', description: 'Unique identifier for this task (e.g. task_1)' },
+                description: { type: 'string', description: 'The natural language sub-prompt for the worker agent' },
+                dependsOn: { type: 'array', items: { type: 'string' }, description: 'List of task ids that must finish before this one starts' }
+              }, required: ['id', 'description', 'dependsOn']
+            }
+          }
+        }, required: ['tasks']
+      }
+    });
+
+    try {
+      return JSON.parse(response.rawText);
+    } catch (e) {
+      throw Object.assign(new Error("Failed to parse router plan response"), { code: 'router_plan_error' });
+    }
+  };
+
   return decide;
 }
 

@@ -38,9 +38,10 @@ if (process.env.NODE_ENV === 'production' && !process.env.SUPABASE_DB_URL) {
 const derivativeJobs = process.env.SUPABASE_DB_URL
   ? new PostgresDerivativeJobs({ databaseUrl: process.env.SUPABASE_DB_URL })
   : new DerivativeJobs({});
+const agentDecisionProvider = createGeminiDecisionProvider();
 const layer2Orchestrator = new Layer2Orchestrator({
   derivativeJobs,
-  decide: createGeminiDecisionProvider(),
+  decide: agentDecisionProvider,
 });
 const agentRuns = new AgentRuns({
   orchestrator: layer2Orchestrator,
@@ -66,8 +67,8 @@ function policyFor(request, pathname) {
   };
   if (pathname.startsWith('/v1/transcribe')) return { scope: 'transcribe:create', action: request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'update' : 'create', resourceType: 'transcription' };
   if (pathname === '/v1/agent/runs' || pathname.startsWith('/v1/conversations') ||
-      pathname.startsWith('/v1/audio') ||
-      /^\/v1\/agent\/runs\/[0-9a-f-]{36}(?:\/continue)?$/i.test(pathname)) {
+      pathname.startsWith('/v1/audio') || pathname === '/v1/agent/plan' || pathname.startsWith('/v1/agent/execute') ||
+      /^\/v1\/agent\/runs\/[0-9a-f-]{36}(?:\/continue|\/execute)?$/i.test(pathname)) {
     return { scope: 'plan:create', action: 'create', resourceType: 'plan' };
   }
   return null;
@@ -265,6 +266,35 @@ const server = http.createServer(async (request, response) => {
     } catch (error) {
       console.error('[audio-fetch-sfx] request failed', { message: error?.message });
       return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message || 'SFX fetch failed' });
+    }
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/v1/agent/plan') {
+    try {
+      const { prompt } = await collect(request);
+      if (!prompt) throw Object.assign(new Error('Missing prompt'), { status: 400 });
+      return json(response, 200, await agentDecisionProvider.generatePlan({ prompt }));
+    } catch (error) {
+      console.error('[agent-plan] request failed', { message: error?.message, status: error?.status, code: error?.code });
+      return json(response, Number.isInteger(error?.status) ? error.status : 502, {
+        error: error?.message || 'Agent plan failed',
+        code: error?.code || 'agent_plan_failed',
+        requestId,
+      });
+    }
+  }
+
+  const agentRunExecuteMatch = requestUrl.pathname.match(/^\/v1\/agent\/runs\/([0-9a-f-]{36})\/execute$/i);
+  if (request.method === 'POST' && agentRunExecuteMatch) {
+    try {
+      return json(response, 200, await agentRuns.executeTask(principal, agentRunExecuteMatch[1], await collect(request, 16 * 1024)));
+    } catch (error) {
+      return json(response, Number.isInteger(error?.status) ? error.status : 502, {
+        error: error?.message || 'Agent sub-task could not continue',
+        code: error?.code || 'agent_run_failed',
+        ...(error?.run ? { run: error.run } : {}),
+        requestId,
+      });
     }
   }
 
