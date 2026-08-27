@@ -290,9 +290,10 @@ class AgentRunCoordinator(
                 kotlinx.coroutines.delay(2000L * planAttempt)
             }
         }
-        val tasks = planResponse?.tasks ?: emptyList()
+        var tasks = planResponse?.tasks ?: emptyList()
         if (tasks.isEmpty()) {
-            return run(request) { snapshot -> onPersist(snapshot, null) }
+            tasks = listOf(AgentTask("Execute prompt", request.intent, emptyList()))
+            planResponse = AgentPlanResponse(tasks)
         }
 
         var snapshot = PersistedAgentRun(
