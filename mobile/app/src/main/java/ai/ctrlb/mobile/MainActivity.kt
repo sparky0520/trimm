@@ -76,6 +76,7 @@ private val Muted = Color(0xFFA1A1AA)
 private val Coral = Color(0xFFFAFAFA)
 private val Lavender = Color(0xFFD4D4D8)
 private val Green = Color(0xFFE4E4E7)
+private val UserBlue = Color(0xFF1B365D)
 
 class MainActivity : ComponentActivity() {
     private val appUpdateManager by lazy { com.google.android.play.core.appupdate.AppUpdateManagerFactory.create(this) }
@@ -293,12 +294,17 @@ class MainActivity : ComponentActivity() {
             item {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     suggestions.forEach { suggestion ->
-                        SuggestionChip(onClick = { message = suggestion }, label = { Text(suggestion, fontSize = 11.sp) })
+                        SuggestionChip(
+                            onClick = { message = suggestion },
+                            label = { Text(suggestion, fontSize = 11.sp) },
+                            colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Workspace),
+                            border = null
+                        )
                     }
                 }
             }
         }
-        Surface(color = Workspace, tonalElevation = 4.dp) {
+        Surface(color = Color.Transparent) {
             Row(
                 Modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp),
                 verticalAlignment = Alignment.Bottom,
@@ -311,17 +317,18 @@ class MainActivity : ComponentActivity() {
                     placeholder = { Text("Describe the edit you want…") },
                     minLines = 1,
                     maxLines = 5,
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(24.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = CreamRaised, unfocusedTextColor = CreamRaised,
-                        focusedBorderColor = Lavender, unfocusedBorderColor = Border
+                        focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
+                        focusedContainerColor = Workspace, unfocusedContainerColor = Workspace
                     )
                 )
                 Button(
                     onClick = { createDraft(message) },
                     enabled = message.isNotBlank(),
                     modifier = Modifier.height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText),
                 ) { Text("Send", fontWeight = FontWeight.Bold) }
             }
@@ -555,7 +562,7 @@ private sealed interface ChatElement {
             }
 
         }
-        Surface(color = Workspace, tonalElevation = 4.dp) {
+        Surface(color = Color.Transparent) {
             Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp)) {
                 Row(
                     Modifier.fillMaxWidth().padding(bottom = 8.dp).horizontalScroll(rememberScrollState()),
@@ -564,7 +571,9 @@ private sealed interface ChatElement {
                     followUpSuggestions.forEach { suggestion ->
                         SuggestionChip(
                             onClick = { request = suggestion },
-                            label = { Text(suggestion, fontSize = 11.sp, color = Cream) }
+                            label = { Text(suggestion, fontSize = 11.sp, color = Cream) },
+                            colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Workspace),
+                            border = null
                         )
                     }
                 }
@@ -579,10 +588,11 @@ private sealed interface ChatElement {
                         modifier = Modifier.weight(1f),
                         placeholder = { Text("Ask Trimm for changes or edits…") },
                         maxLines = 5,
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(24.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = CreamRaised, unfocusedTextColor = CreamRaised,
-                            focusedBorderColor = Lavender, unfocusedBorderColor = Border
+                            focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
+                            focusedContainerColor = Workspace, unfocusedContainerColor = Workspace
                         )
                     )
                     Button(
@@ -593,7 +603,7 @@ private sealed interface ChatElement {
                         },
                         enabled = request.isNotBlank() && !state.isProcessing,
                         modifier = Modifier.height(56.dp),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(24.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText)
                     ) { Text("Send", fontWeight = FontWeight.Bold) }
                 }
@@ -661,9 +671,8 @@ private fun formatUserFacingError(raw: String): String {
 @Composable private fun UserChatBubble(text: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         Surface(
-            color = Raised,
+            color = UserBlue,
             shape = RoundedCornerShape(12.dp, 12.dp, 4.dp, 12.dp),
-            border = BorderStroke(1.dp, Border),
             modifier = Modifier.widthIn(max = 320.dp)
         ) {
             Text(
