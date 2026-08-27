@@ -294,6 +294,20 @@ class AgentRunCoordinator(
         if (tasks.isEmpty()) {
             tasks = listOf(AgentTask("Execute prompt", request.intent, emptyList()))
             planResponse = AgentPlanResponse(tasks)
+        } else {
+            val sortedTasks = mutableListOf<AgentTask>()
+            val visited = mutableSetOf<String>()
+            fun visit(task: AgentTask, path: Set<String> = emptySet()) {
+                if (task.id in visited) return
+                if (task.id in path) return // break cycles gracefully instead of crashing
+                task.dependsOn.forEach { depId ->
+                    tasks.find { it.id == depId }?.let { visit(it, path + task.id) }
+                }
+                visited.add(task.id)
+                sortedTasks.add(task)
+            }
+            tasks.forEach { visit(it) }
+            tasks = sortedTasks
         }
 
         var snapshot = PersistedAgentRun(
@@ -354,6 +368,19 @@ class AgentRunCoordinator(
                                 java.time.Instant.now().toString()
                             )
                         )
+                    } else if (outcome["type"]?.jsonPrimitive?.content == "clarification") {
+                        snapshot = snapshot.copy(
+                            status = AgentRunStatus.PROPOSAL_READY,
+                            decision = outcome,
+                            events = snapshot.events + AgentActivityEvent(
+                                snapshot.events.size + 1,
+                                "clarification",
+                                "Task requested clarification: ${task.description}",
+                                java.time.Instant.now().toString()
+                            )
+                        )
+                        onPersist(snapshot, planResponse)
+                        break
                     } else if (outcome["type"]?.jsonPrimitive?.content == "fallback") {
                         throw Exception(outcome["reason"]?.jsonPrimitive?.content ?: "Task failed: ${task.description}")
                     }
