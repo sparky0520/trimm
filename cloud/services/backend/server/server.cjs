@@ -286,7 +286,7 @@ const server = http.createServer(async (request, response) => {
 
   if (request.method === 'POST' && requestUrl.pathname === '/v1/agent/execute') {
     try {
-      const inventory = await collect(request, 16 * 1024);
+      const inventory = await collect(request);
       // Stateless execution using the orchestrator directly
       const decision = await layer2Orchestrator.orchestrate(principal, inventory);
       return json(response, 200, decision);

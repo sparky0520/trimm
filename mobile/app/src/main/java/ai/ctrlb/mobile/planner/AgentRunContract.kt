@@ -548,13 +548,13 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = false }
 
     override suspend fun plan(request: AgentPlanRequest): AgentPlanResponse = withContext(Dispatchers.IO) {
-        val endpoint = URI("${runsEndpoint.toString().trimEnd('/').substringBeforeLast('/')}/plan")
+        val endpoint = URI("${runsEndpoint.toString().trimEnd('/').substringBeforeLast('/')}/agent/plan")
         val responseText = postRaw(endpoint, json.encodeToString(AgentPlanRequest.serializer(), request))
         json.decodeFromString(AgentPlanResponse.serializer(), responseText)
     }
 
     override suspend fun executeStateless(request: AgentRunRequest): JsonObject = withContext(Dispatchers.IO) {
-        val endpoint = URI("${runsEndpoint.toString().trimEnd('/').substringBeforeLast('/')}/execute")
+        val endpoint = URI("${runsEndpoint.toString().trimEnd('/').substringBeforeLast('/')}/agent/execute")
         val responseText = postRaw(endpoint, json.encodeToString(AgentRunRequest.serializer(), request))
         json.parseToJsonElement(responseText).jsonObject
     }

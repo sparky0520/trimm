@@ -42,6 +42,7 @@ data class EditorState(
     val capabilityMessage: String? = null,
     val previewUri: String? = null,
     val jobMessage: String? = null,
+    val errorMessage: String? = null,
     val initialRequest: String? = null,
     /** Message submitted to the cloud agent but not yet committed as a completed turn. */
     val pendingChatMessage: String? = null,
@@ -146,6 +147,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             preferences = preferences,
             capabilityMessage = capabilityReport.userFacingSummary(),
             jobMessage = "Reading your clips and preparing a proposal…",
+            errorMessage = null,
             initialRequest = brief,
             isProcessing = true,
         )
@@ -175,7 +177,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 renderPreview(analyzed, simulatePendingProposal = analyzed.analysis.pendingProposal != null)
             }
             else mutable.value = mutable.value.copy(
-                jobMessage = info.outputData.getString("error") ?: "Video analysis failed.",
+                errorMessage = info.outputData.getString("error") ?: "Video analysis failed.",
+                jobMessage = null,
                 isProcessing = false,
             )
         }
@@ -314,7 +317,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 }
             )
         )
-        mutable.value = mutable.value.copy(project = updatedProject, isProcessing = true, jobMessage = "Retrying conversation…")
+        mutable.value = mutable.value.copy(
+            project = updatedProject,
+            isProcessing = true,
+            errorMessage = null,
+            jobMessage = "Retrying conversation…"
+        )
         viewModelScope.launch {
             store.save(updatedProject)
             if (BuildConfig.AGENT_RUNS_URL.isNotBlank()) {
@@ -536,12 +544,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             .putString("projectId", project.id)
             .putBoolean("simulatePendingProposal", simulatePendingProposal)
             .build()).addTag("preview:${project.id}").build()
-        mutable.value = mutable.value.copy(jobMessage = if (simulatePendingProposal) "Simulating revised preview…" else "Rendering edited preview…")
+        mutable.value = mutable.value.copy(
+            jobMessage = if (simulatePendingProposal) "Simulating revised preview…" else "Rendering edited preview…",
+            errorMessage = null
+        )
         manager.enqueueUniqueWork("preview:${project.id}", ExistingWorkPolicy.REPLACE, request)
         viewModelScope.launch {
             val info = awaitWork(manager, request.id)
             mutable.value = if (info.state == WorkInfo.State.SUCCEEDED) mutable.value.copy(previewUri = info.outputData.getString("previewUri"), jobMessage = info.outputData.getString("warning") ?: "Edited preview ready")
-            else mutable.value.copy(jobMessage = "Preview failed: ${info.outputData.getString("error") ?: info.state}")
+            else mutable.value.copy(errorMessage = "Preview failed: ${info.outputData.getString("error") ?: info.state}", jobMessage = null)
         }
     }
     private fun toggle(op: EditOperation): EditOperation = when (op) {

@@ -565,6 +565,20 @@ private sealed interface ChatElement {
                     }
                 }
             }
+            state.errorMessage?.let { errorMsg ->
+                item(key = "job-error") {
+                    AssistantChatBubble(accent = Coral) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text("⚠️", fontSize = 16.sp)
+                            Text(errorMsg, color = CreamRaised, modifier = Modifier.weight(1f), fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
 
         }
         Surface(color = Color.Transparent) {
