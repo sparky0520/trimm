@@ -550,6 +550,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         is AddTextOverlay -> op.copy(enabled = !op.enabled)
         is AddBgm -> op.copy(enabled = !op.enabled)
         is AddSfx -> op.copy(enabled = !op.enabled)
+        is AddSectionTransition -> op.copy(enabled = !op.enabled)
     }
     private fun processingMessage(stage: String?, percent: Int): String = when {
         stage?.startsWith("transcript-") == true -> "Preparing speech analysis…"
@@ -578,6 +579,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         is AddTextOverlay -> "Updated text overlay"
         is AddBgm -> "Added background music"
         is AddSfx -> "Added sound effect"
+        is AddSectionTransition -> "Added section transition"
     }
 
     private suspend fun awaitWork(
