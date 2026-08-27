@@ -4,175 +4,189 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="A visual explanation of how trimm turns a chat request into a private, previewable video edit.">
-  <meta name="theme-color" content="#0b0b0d">
+  <meta name="theme-color" content="#09090b">
   <title>How trimm edits a video</title>
   <link rel="icon" href="./trimm-icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./explainer.css">
+  <link rel="stylesheet" href="./styles.css">
+  <style>
+    .mermaid-container {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 32px;
+      margin: 32px 0;
+      box-shadow: 0 20px 50px rgba(0,0,0,.24);
+      overflow-x: auto;
+      width: 100%;
+    }
+    .mermaid {
+      display: flex;
+      justify-content: center;
+      min-width: 600px;
+    }
+    .section-intro { margin-bottom: 24px; }
+  </style>
 </head>
 <body>
-  <header class="topbar">
-    <a href="./" class="wordmark" aria-label="trimm home"><img src="./trimm-wordmark.svg" alt="trimm"></a>
-    <span>System explainer</span>
+  <header class="nav shell">
+    <a class="brand" href="./index.html" aria-label="Trimm home">
+      <span class="brand-mark" aria-hidden="true">T</span><span>Trimm</span>
+    </a>
+    <nav aria-label="Primary navigation">
+      <a href="#end-to-end-flow" class="button button-small button-quiet">System explainer</a>
+    </nav>
   </header>
 
   <main>
-    <section class="hero">
-      <p class="kicker">One request. A grounded edit.</p>
-      <h1>How a video becomes<br><em>“ready to publish.”</em></h1>
-      <p class="intro">trimm does not upload everything and hope for a good answer. It first maps the footage locally, sends only the useful pieces for the request, then turns the agent’s understanding into edits you can preview.</p>
-      <div class="request">
-        <span>You</span>
-        <strong>“Make this video publishable. Keep the pricing explanation.”</strong>
+    <section class="hero shell">
+      <div class="hero-copy">
+        <p class="eyebrow">One request. A grounded edit.</p>
+        <h1>How a video becomes<br><span>“ready to publish.”</span></h1>
+        <p class="lede">Trimm does not upload everything and hope for a good answer. It first maps the footage locally, sends only the useful pieces for the request, then turns the agent’s understanding into edits you can preview.</p>
+      </div>
+      
+      <div class="product-frame" aria-label="Example Trimm editing workspace">
+        <div class="frame-bar"><span class="brand-mark" aria-hidden="true">T</span><span>New edit</span><span
+            class="frame-status">Ready</span></div>
+        <div class="preview"><span>VIDEO PREVIEW</span><button aria-label="Play preview">Play</button></div>
+        <div class="timeline"><span></span><i></i><b></b><i></i><span></span></div>
+        <div class="conversation">
+          <p class="message message-user">Make this video publishable. Keep the pricing explanation.</p>
+          <div class="message message-agent"><strong>Trimm</strong>
+            <p>I found a cleaner opening and a stronger demonstration take.</p>
+            <div class="proposal"><span>Proposed edit</span><b>Remove 3 false starts · tighten 4 pauses</b><small>Review
+                before applying</small></div>
+          </div>
+        </div>
       </div>
     </section>
 
-    <section class="flow" aria-labelledby="main-flow-title">
-      <div class="section-heading">
-        <p>End-to-end flow</p>
-        <h2 id="main-flow-title">From chat to finished video</h2>
+    <section class="workflow shell" id="end-to-end-flow" style="padding-top: 40px; padding-bottom: 40px;">
+      <div class="section-intro">
+        <p class="eyebrow">End-to-end flow</p>
+        <h2>From chat to finished video</h2>
       </div>
-      <ol class="flow-grid">
-        <li>
-          <div class="step-number">01</div>
-          <div class="step-icon local">L1</div>
-          <h3>Map locally</h3>
-          <p>The app reads duration, rotation, speech timing, scenes, technical signals and uncertain moments.</p>
-          <small>Original footage stays on your device.</small>
-        </li>
-        <li>
-          <div class="step-number">02</div>
-          <div class="step-icon select">↗</div>
-          <h3>Select evidence</h3>
-          <p>It chooses broad story coverage, likely edit candidates and uncertain sections relevant to your request.</p>
-          <small>Each selected range has a reason.</small>
-        </li>
-        <li>
-          <div class="step-number">03</div>
-          <div class="step-icon agent">AI</div>
-          <h3>Watch and understand</h3>
-          <p>Gemini 3.6 Flash watches those selected ranges and connects speech, visuals and surrounding context.</p>
-          <small>It can request another precise range.</small>
-        </li>
-        <li>
-          <div class="step-number">04</div>
-          <div class="step-icon plan">✓</div>
-          <h3>Propose, don’t mutate</h3>
-          <p>The agent returns typed operations with timestamps and supporting evidence—not executable commands.</p>
-          <small>Stale or unsupported edits are rejected.</small>
-        </li>
-        <li>
-          <div class="step-number">05</div>
-          <div class="step-icon preview">▶</div>
-          <h3>Preview the result</h3>
-          <p>The same timeline powers preview and export. Approving an edit updates the preview immediately.</p>
-          <small>You can reject, revise or undo.</small>
-        </li>
-      </ol>
+      <div class="mermaid-container">
+        <div class="mermaid">
+          flowchart TD
+              A[1. Map Locally\nRead duration, rotation, speech, scenes] --> B[2. Select Evidence\nChoose story coverage & candidate clips]
+              B --> C[3. Watch & Understand\nAgent connects speech, visuals & context]
+              C --> D[4. Propose Edits\nAgent returns typed operations, no mutation]
+              D --> E[5. Preview Result\nImmediate preview in timeline]
+        </div>
+      </div>
     </section>
 
-    <section class="index-section">
-      <div class="section-heading">
-        <p>Layer 1: the private map</p>
+    <section class="workflow shell" style="padding-top: 40px; padding-bottom: 40px;">
+      <div class="section-intro">
+        <p class="eyebrow">Layer 1: the private map</p>
         <h2>A small index replaces a blind upload</h2>
       </div>
-      <div class="index-layout">
-        <div class="timeline-card">
-          <div class="timeline-labels"><span>00:00</span><span>05:00</span><span>10:00</span></div>
-          <div class="timeline" aria-label="Example indexed video timeline">
-            <button class="segment representative active" data-detail="coverage"><span>Story coverage</span></button>
-            <button class="segment candidate" data-detail="candidate"><span>Candidate</span></button>
-            <button class="segment representative" data-detail="coverage"><span>Story coverage</span></button>
-            <button class="segment uncertain" data-detail="uncertain"><span>Uncertain</span></button>
-            <button class="segment protected" data-detail="protected"><span>Keep</span></button>
-          </div>
-          <div class="legend">
-            <span><i class="dot representative"></i>Representative</span>
-            <span><i class="dot candidate"></i>Measured candidate</span>
-            <span><i class="dot uncertain"></i>Uncertainty</span>
-            <span><i class="dot protected"></i>User constraint</span>
-          </div>
+      <div class="mermaid-container">
+        <div class="mermaid">
+          flowchart LR
+              A[00:00 - 00:10<br/>Representative Context]
+              B[00:15 - 00:25<br/>Candidate Edit]
+              C[00:30 - 00:40<br/>Representative Context]
+              D[00:45 - 00:55<br/>Uncertain Moment]
+              E[01:00 - 01:20<br/>User Constraint]
+              
+              A --> B --> C --> D --> E
         </div>
-        <aside class="detail-card" id="timeline-detail" aria-live="polite">
-          <span class="detail-tag">Representative coverage</span>
-          <h3>Enough context to preserve the story</h3>
-          <p>trimm includes moments across the whole recording, not just suspected mistakes. This helps the agent understand what should stay.</p>
-        </aside>
       </div>
     </section>
 
-    <section class="loop-section">
-      <div class="section-heading">
-        <p>Layer 2: the agentic loop</p>
+    <section class="workflow shell" style="padding-top: 40px; padding-bottom: 40px;">
+      <div class="section-intro">
+        <p class="eyebrow">Layer 2: the agentic loop</p>
         <h2>Analysis continues until the edit is grounded</h2>
       </div>
-      <div class="loop-diagram">
-        <div class="loop-node agent-node">
-          <span>Gemini 3.6 Flash</span>
-          <strong>What do I know?</strong>
-          <p>Combines the request with selected video, audio and cached observations.</p>
+      <div class="mermaid-container">
+        <div class="mermaid">
+          stateDiagram-v2
+              [*] --> Agent : User Request Starts
+              Agent: Gemini 3.6 Flash
+              Agent --> Tools : needs precision
+              Tools: Inspect one gap (transcript, OCR, frame)
+              Tools --> Agent : new evidence
+              Agent --> Propose : Enough timestamped evidence
+              Agent --> Ask : Ambiguous intent
+              Agent --> Stop : Boundary reached
         </div>
-        <div class="loop-arrow"><span>needs precision</span>→</div>
-        <div class="loop-node tool-node">
-          <span>Smallest useful tool</span>
-          <strong>Inspect one gap</strong>
-          <p>Request a bounded range, transcript, exact frame, OCR result or local measurement.</p>
-        </div>
-        <div class="loop-return">New evidence returns to the same run <b>↺</b></div>
-      </div>
-      <div class="stop-grid">
-        <article><i></i><strong>Propose</strong><p>There is enough timestamped evidence.</p></article>
-        <article><i></i><strong>Ask</strong><p>Your intent is genuinely ambiguous.</p></article>
-        <article><i></i><strong>Partial result</strong><p>A cost, time or privacy boundary is reached.</p></article>
-        <article><i></i><strong>Stop safely</strong><p>You cancel or a tool cannot continue.</p></article>
       </div>
     </section>
 
-    <section class="proposal-section">
-      <div class="section-heading">
-        <p>The approval boundary</p>
+    <section class="workflow shell" style="padding-top: 40px; padding-bottom: 40px;">
+      <div class="section-intro">
+        <p class="eyebrow">The approval boundary</p>
         <h2>The agent describes edits. Your device renders them.</h2>
       </div>
-      <div class="proposal-flow">
-        <div class="proposal-card">
-          <span>Agent proposal</span>
-          <h3>A tighter first cut</h3>
-          <ul>
-            <li><b>Remove</b> false start at 00:12–00:18</li>
-            <li><b>Keep</b> pricing at 08:42–09:36</li>
-            <li><b>Use</b> successful demo take at 06:58–08:20</li>
-          </ul>
-          <p>Every operation cites observations from the selected footage.</p>
-        </div>
-        <div class="approval"><span>Review</span><b>→</b><span>Approve</span></div>
-        <div class="render-card">
-          <div class="screen">
-            <div class="play">▶</div>
-            <div class="cutbar"><i></i><i></i><i></i><i></i></div>
-          </div>
-          <h3>Preview changes now</h3>
-          <p>Android uses Media3. Desktop uses Remotion. Both consume the same approved timeline used for export.</p>
+      <div class="mermaid-container">
+        <div class="mermaid">
+          sequenceDiagram
+              participant Agent as Agent Proposal
+              participant User as You
+              participant Device as Local Device Render
+              Agent->>User: Remove false start (00:12–00:18)
+              Agent->>User: Keep pricing (08:42–09:36)
+              User->>Device: Approve changes
+              Device-->>User: Preview updated instantly
         </div>
       </div>
     </section>
 
-    <section class="privacy-section">
-      <div>
-        <p class="kicker">Default privacy boundary</p>
+    <section class="workflow shell" style="padding-top: 40px; padding-bottom: 80px;">
+      <div class="section-intro">
+        <p class="eyebrow">Default privacy boundary</p>
         <h2>What leaves your device?</h2>
       </div>
-      <div class="privacy-grid">
-        <article class="stays"><span>Stays local</span><strong>Original clips</strong><strong>Local index</strong><strong>Preview &amp; export</strong></article>
-        <div class="privacy-arrow">Only what the request needs →</div>
-        <article class="leaves"><span>Selected derivatives</span><strong>Bounded video ranges</strong><strong>Compressed audio</strong><strong>Frames or measurements</strong></article>
+      <div class="mermaid-container">
+        <div class="mermaid">
+          flowchart LR
+              subgraph LocalDevice [Stays Local]
+                  A[Original Clips]
+                  B[Local Index]
+                  C[Preview & Export]
+              end
+              
+              subgraph CloudDevice [Leaves Device]
+                  D[Bounded Video Ranges]
+                  E[Compressed Audio]
+                  F[Frames or Measurements]
+              end
+              
+              LocalDevice -->|Only what the request needs| CloudDevice
+        </div>
       </div>
-      <p class="privacy-note">A proxy or original upload requires a broader mode and clear authorization. “Selective analysis” is the default.</p>
     </section>
   </main>
 
-  <footer>
-    <img src="./trimm-wordmark.svg" alt="trimm">
+  <footer class="shell">
+    <a class="brand" href="./index.html">
+      <span class="brand-mark" aria-hidden="true">T</span><span>Trimm</span>
+    </a>
     <p>Chat → local index → selected evidence → grounded proposal → instant preview.</p>
   </footer>
-  <script src="./explainer.js" defer></script>
+
+  <script src="./scripts/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({ 
+      startOnLoad: true,
+      useMaxWidth: false,
+      theme: 'dark',
+      fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      themeVariables: {
+        primaryColor: '#18181b',
+        primaryTextColor: '#fafafa',
+        primaryBorderColor: '#3f3f46',
+        lineColor: '#fafafa',
+        secondaryColor: '#27272a',
+        tertiaryColor: '#18181b',
+        background: '#18181b',
+        clusterBkg: '#18181b',
+        clusterBorder: '#3f3f46'
+      }
+    });
+  </script>
 </body>
 </html>
