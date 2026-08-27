@@ -80,13 +80,21 @@ function createGeminiDecisionProvider({
     console.log('[DEBUG] Gemini Request:', JSON.stringify(logPayload, null, 2));
 
     let response;
-    try {
-      response = await ai.models.generateContent(requestPayload);
-      console.log('[DEBUG] Gemini Response:', JSON.stringify(response, null, 2));
-    } catch (err) {
-      console.error('[DEBUG] Gemini API Error:', err, JSON.stringify(err.details || err));
-      throw err;
+    let lastErr;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        response = await ai.models.generateContent(requestPayload);
+        console.log('[DEBUG] Gemini Response:', JSON.stringify(response, null, 2));
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err;
+        console.error(`[DEBUG] Gemini API Error (Attempt ${attempt}):`, err, JSON.stringify(err.details || err));
+        if (attempt === 3) throw err;
+        await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+      }
     }
+    if (lastErr) throw lastErr;
     const functionCalls = response.functionCalls || [];
     if (!response.text && functionCalls.length === 0) throw Object.assign(new Error('Gemini returned no decision.'), { status: 502, code: 'empty_gemini_response' });
     return {
