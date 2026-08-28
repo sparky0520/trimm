@@ -327,7 +327,7 @@ function transcriptTextForProjectRange(inventory, startMs, endMs) {
   return words.join(' ').replace(/\s+/g, ' ').trim().toLocaleLowerCase();
 }
 
-function validateEditProgram(decision, inventory, observations, evidence) {
+function validateEditProgram(decision, inventory, observations, evidence, isDraft = false) {
   if (decision.expectedRevision !== inventory.projectRevision || !Array.isArray(decision.operations)) {
     throw orchestrationError('Invalid edit program envelope.', 422, 'invalid_edit_program');
   }
@@ -339,7 +339,7 @@ function validateEditProgram(decision, inventory, observations, evidence) {
       throw orchestrationError('Planner returned an unsupported edit operation.', 422, 'invalid_edit_program');
     }
     operationIds.add(operation.id);
-    const requiresEvidence = ['set_color_grade', 'set_audio_levels', 'add_captions', 'remove_ranges'].includes(operation.type);
+    const requiresEvidence = ['set_color_grade', 'set_audio_levels', 'remove_ranges'].includes(operation.type) || (!isDraft && operation.type === 'add_captions');
     if (typeof operation.confidence !== 'number' || operation.confidence < 0 || operation.confidence > 1 ||
       (requiresEvidence && (!Array.isArray(operation.evidenceIds) || !operation.evidenceIds.length)) ||
       (Array.isArray(operation.evidenceIds) && operation.evidenceIds.some((id) => !evidenceIds.has(id)))) {
@@ -413,7 +413,7 @@ function validateEditProgram(decision, inventory, observations, evidence) {
       if (typeof operation.prompt !== 'string' || !operation.prompt.trim()) {
         throw orchestrationError('Sound effect requires a prompt.', 422, 'invalid_edit_program');
       }
-      if (typeof operation.url !== 'string' || !operation.url.trim()) {
+      if (!isDraft && (typeof operation.url !== 'string' || !operation.url.trim())) {
         throw orchestrationError('Sound effect requires a url.', 422, 'invalid_edit_program');
       }
     }
@@ -421,11 +421,11 @@ function validateEditProgram(decision, inventory, observations, evidence) {
       if (typeof operation.prompt !== 'string' || !operation.prompt.trim()) {
         throw orchestrationError('Background music requires a prompt.', 422, 'invalid_edit_program');
       }
-      if (typeof operation.url !== 'string' || !operation.url.trim()) {
+      if (!isDraft && (typeof operation.url !== 'string' || !operation.url.trim())) {
         throw orchestrationError('Background music requires a url.', 422, 'invalid_edit_program');
       }
     }
-    if (operation.type === 'add_captions') {
+    if (operation.type === 'add_captions' && !isDraft) {
       if (!Array.isArray(operation.cues) || operation.style !== 'bold-bottom' ||
         operation.cues.some((cue) => typeof cue?.text !== 'string' || !cue.text.trim() || cue.text.length > 120 ||
           !Number.isSafeInteger(cue.range?.startMs) || !Number.isSafeInteger(cue.range?.endMs) ||
@@ -478,7 +478,7 @@ function validateDecision(decision, inventory, evidence) {
   rejectPrivateOrExecutable(decision, true);
   const added = validateObservations(decision.observations, inventory, evidence);
   const observations = [...inventory.observations, ...added];
-  if (decision.type === 'edit_program') return { ...validateEditProgram(decision, inventory, observations, evidence), observations: added };
+  if (decision.type === 'edit_program') return { ...validateEditProgram(decision, inventory, observations, evidence, decision.isDraft), observations: added };
   if (decision.type === 'clarification') {
     const questions = Array.isArray(decision.questions) ? decision.questions.slice(0, 3) : [];
     if (!questions.length || questions.some((question) => typeof question?.id !== 'string' ||
@@ -602,11 +602,11 @@ class Layer2Orchestrator {
             if (ids.some((id) => !drafts.has(id)) || new Set(ids).size !== ids.length) {
               throw orchestrationError('Finalization referenced an unknown draft operation.', 422, 'invalid_edit_program');
             }
-            const decision = validateDecision({
-              type: 'edit_program', expectedRevision: call.args.expectedRevision,
-              summary: call.args.summary, operations: ids.map((id) => drafts.get(id)), observations: [],
+            const validated = validateDecision({
+              type: 'edit_program', expectedRevision: call.args?.expectedRevision, summary: call.args?.summary,
+              observations: [], operations: ids.map((id) => drafts.get(id)), isDraft: true,
             }, workingInventory, evidence);
-            yieldDecision = { ...decision, _usage: usage };
+            yieldDecision = { ...validated, _usage: usage };
             break;
           } catch (error) {
             results.push({ ok: false, code: error.code || 'invalid_tool_arguments', message: String(error.message).slice(0, 300) });
@@ -676,7 +676,7 @@ class Layer2Orchestrator {
           const operation = fineOperationFor(call, operationType, workingInventory);
           const validated = validateDecision({
             type: 'edit_program', expectedRevision: args.expectedRevision,
-            summary: args.summary, operations: [operation], observations: args.observations,
+            summary: args.summary, operations: [operation], observations: args.observations, isDraft: true,
           }, workingInventory, evidence);
           const accepted = validated.operations[0];
           drafts.set(accepted.id, accepted);
