@@ -25,7 +25,7 @@ test('new agent path is pinned to Gemini 3.6 Flash and configures tools', async 
   const decision = await decide({ systemPolicy: 'policy', inventory: { projectId: 'p' }, evidence: [] });
   assert.equal(request.model, 'gemini-3.6-flash');
   assert.deepEqual(request.config.tools[0].functionDeclarations.map((item) => item.name), [
-    'inspect_video_range', 'propose_remove_ranges',
+    'propose_remove_ranges',
     'propose_set_dialogue_loudness', 'propose_set_music_ducking',
     'propose_add_captions', 'propose_set_aspect_ratio', 'propose_add_text_overlay', 'propose_add_section_transition', 'propose_adjust_exposure', 'propose_adjust_temperature', 'propose_adjust_contrast', 'propose_adjust_saturation',
     'propose_adjust_highlights', 'propose_adjust_shadows', 'propose_adjust_skin_protection',

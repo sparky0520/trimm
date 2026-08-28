@@ -15,19 +15,7 @@ const observationSchema = {
 };
 
 
-const INSPECT_VIDEO_RANGE_TOOL = Object.freeze({
-  name: 'inspect_video_range',
-  description: 'Upload and inspect a source video range. Use LOW normally; use HIGH only when an overlapping LOW inspection left a specific uncertainty.',
-  parameters: {
-    type: 'object', additionalProperties: false,
-    required: ['sourceId', 'startMs', 'endMs', 'resolution', 'uncertainty'],
-    properties: {
-      sourceId: { type: 'string' }, startMs: { type: 'integer' },
-      endMs: { type: 'integer' }, resolution: { type: 'string', enum: ['LOW', 'HIGH'] },
-      uncertainty: { type: 'string' },
-    },
-  },
-});
+
 
 const proposedObservation = {
   type: 'object', additionalProperties: false,
@@ -236,7 +224,6 @@ const FINISH_WITHOUT_PROPOSAL_TOOL = Object.freeze({
 });
 
 const AGENT_TOOLS = Object.freeze([
-  INSPECT_VIDEO_RANGE_TOOL,
   PROPOSE_REMOVE_RANGES_TOOL,
   PROPOSE_DIALOGUE_LOUDNESS_TOOL, PROPOSE_MUSIC_DUCKING_TOOL,
   PROPOSE_CAPTIONS_TOOL, PROPOSE_ASPECT_RATIO_TOOL, PROPOSE_TEXT_OVERLAY_TOOL, PROPOSE_ADD_SECTION_TRANSITION_TOOL, ...PROPOSE_COLOR_TOOLS,
@@ -246,6 +233,6 @@ const AGENT_TOOLS = Object.freeze([
 ]);
 
 module.exports = {
-  AGENT_TOOLS, INSPECT_VIDEO_RANGE_TOOL,
+  AGENT_TOOLS,
   PROPOSE_REMOVE_RANGES_TOOL,
 };

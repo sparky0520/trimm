@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createGeminiDecisionProvider } = require('../server/gemini-agent.cjs');
-const { Layer2Orchestrator, validateDecision, validateVideoToolCall } = require('../server/layer2-orchestrator.cjs');
+const { Layer2Orchestrator, validateDecision } = require('../server/layer2-orchestrator.cjs');
 const { AgentRuns } = require('../server/agent-runs.cjs');
 
 const inventory = {
@@ -14,18 +14,18 @@ test('Gemini receives video directly and exposes evidence and focused proposal t
   let request;
   const decide = createGeminiDecisionProvider({ client: { models: { generateContent: async (value) => {
     request = value;
-    return { functionCalls: [{ name: 'inspect_video_range', args: {
-      sourceId: 'source-1', startMs: 30_000, endMs: 60_000, resolution: 'LOW', uncertainty: '',
+    return { functionCalls: [{ name: 'finalize_edit_program', args: {
+      expectedRevision: 0, summary: 'done', operationIds: [],
     } }], usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 10 } };
   } } } });
   const result = await decide({ systemPolicy: 'policy', inventory: {}, evidence: [{
     id: 'job-1', sourceId: 'source-1', startMs: 0, endMs: 30_000,
     resolution: 'LOW', bytes: Buffer.from('video'),
   }] });
-  assert.equal(result.toolCalls[0].name, 'inspect_video_range');
+  assert.equal(result.toolCalls[0].name, 'finalize_edit_program');
   assert.equal(request.contents[0].parts[0].inlineData.mimeType, 'video/mp4');
   assert.deepEqual(request.config.tools[0].functionDeclarations.map((item) => item.name), [
-    'inspect_video_range', 'propose_remove_ranges',
+    'propose_remove_ranges',
     'propose_set_dialogue_loudness', 'propose_set_music_ducking',
     'propose_add_captions', 'propose_set_aspect_ratio', 'propose_add_text_overlay', 'propose_add_section_transition', 'propose_adjust_exposure', 'propose_adjust_temperature', 'propose_adjust_contrast', 'propose_adjust_saturation',
     'propose_adjust_highlights', 'propose_adjust_shadows', 'propose_adjust_skin_protection',
@@ -54,21 +54,7 @@ test('a persisted Gemini file reference is reused after creating a new provider 
     'https://generativelanguage.googleapis.com/v1beta/files/persisted');
 });
 
-test('video ranges are at most 30 seconds and HIGH requires overlapping LOW evidence', () => {
-  const low = validateVideoToolCall({ name: 'inspect_video_range', args: {
-    sourceId: 'source-1', startMs: 0, endMs: 30_000, resolution: 'LOW', uncertainty: '',
-  } }, inventory, []);
-  assert.equal(low.resolution, 'LOW');
-  assert.throws(() => validateVideoToolCall({ name: 'inspect_video_range', args: {
-    sourceId: 'source-1', startMs: 0, endMs: 30_001, resolution: 'LOW', uncertainty: '',
-  } }, inventory, []), (error) => error.code === 'invalid_video_range');
-  assert.throws(() => validateVideoToolCall({ name: 'inspect_video_range', args: {
-    sourceId: 'source-1', startMs: 5_000, endMs: 10_000, resolution: 'HIGH', uncertainty: 'small text',
-  } }, inventory, []), (error) => error.code === 'high_resolution_not_grounded');
-  assert.equal(validateVideoToolCall({ name: 'inspect_video_range', args: {
-    sourceId: 'source-1', startMs: 5_000, endMs: 10_000, resolution: 'HIGH', uncertainty: 'small text',
-  } }, inventory, [{ sourceId: 'source-1', startMs: 0, endMs: 30_000, resolution: 'LOW' }]).resolution, 'HIGH');
-});
+
 
 test('removal proposals require source-bounded ranges covered by cited evidence', () => {
   const decisionInventory = {

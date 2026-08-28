@@ -7,7 +7,7 @@ const ALLOWED_OPERATIONS = new Set([
   'remove_ranges', 'set_color_grade', 'set_audio_levels',
   'add_sound_effect', 'set_background_music', 'add_captions', 'set_aspect_ratio', 'add_text_overlay', 'add_section_transition'
 ]);
-const MAX_VIDEO_RANGE_MS = 30_000;
+const MAX_VIDEO_RANGE_MS = 10 * 60 * 1000;
 const FORBIDDEN_KEYS = new Set([
   'systemPrompt', 'tools', 'toolSchema', 'provider', 'providerKey',
   'apiKey', 'command', 'shell', 'executable', 'sourceUri', 'renderedOutput',
@@ -23,7 +23,7 @@ You must call one supplied tool to proceed.
 You must call all necessary proposal tools AND finalize_edit_program simultaneously in a single response.
 Do not wait for tool results; generate all proposed operations and immediately finalize them in the same turn.
 Call ask_clarification when a consequential user choice is unresolved, or when their request is vague and could benefit from additional direction. Never guess merely to avoid asking.
-Use inspect_video_range when more audiovisual evidence is needed (e.g., if the transcript alone does not provide enough context to fulfill the user's request). Each range is at most 30 seconds. Use LOW normally. Use HIGH only after overlapping LOW evidence left a specific uncertainty.
+Use LOW resolution for video analysis unless the transcript alone provides enough context to fulfill the user's request.
 Never request rendered output, executable instructions, or provider credentials.
 If the transcript is empty, assume there is no speech in the video and focus exclusively on visual, structural, and background audio edits.
 Fine edit operations (like setting color grade or audio levels) must cite supplied evidence IDs. Global operations (like setting aspect ratio or background music) do not require evidence IDs. Every operation must include confidence from 0 to 1.
@@ -38,7 +38,7 @@ When the user asks for a video transition (e.g. fade, wipe, dissolve, slide), us
 When the user asks to change the video's aspect ratio (e.g. "vertical", "portrait", "landscape", "square", or "16:9"), use the propose_set_aspect_ratio tool with the appropriate ratio (PORTRAIT, LANDSCAPE, or SQUARE).
 
 Examples:
-User asks to remove a pause but no covering video is attached -> call inspect_video_range.
+User asks to remove a pause -> cite the correct evidence from the transcript or visual observations.
 User asks to make pacing better without a settled pacing preference -> call ask_clarification with Natural and Tight choices.
 User asks to make the video vertical -> call propose_set_aspect_ratio with ratio="PORTRAIT".
 A tool rejects an invented evidence ID -> correct the call using only supplied IDs; never fabricate a replacement.`;
@@ -528,7 +528,7 @@ class Layer2Orchestrator {
     const inventory = validateInventory(payload);
     if (inventory.evidenceJobIds.length) return null;
     const source = inventory.sources[0];
-    const maxAllowed = Math.min(15_000, MAX_VIDEO_RANGE_MS, inventory.budgets.maximumDurationMs);
+    const maxAllowed = Math.min(MAX_VIDEO_RANGE_MS, inventory.budgets.maximumDurationMs);
     const job = await this.authorizeVideo(principal, inventory, {
       source, startMs: 0, endMs: Math.min(source.durationMs, maxAllowed), resolution: 'LOW', uncertainty: '',
     }, 'request_selected');
@@ -564,24 +564,7 @@ class Layer2Orchestrator {
       const results = [];
 
       for (const call of calls) {
-        if (call.name === 'inspect_video_range') {
-          try {
-            const request = validateVideoToolCall(call, workingInventory, evidence);
-            const job = await this.authorizeVideo(principal, workingInventory, request);
-            if (job.reused && workingInventory.evidenceJobIds.includes(job.id)) {
-              yieldDecision = { type: 'fallback', reason: 'The requested video range is already attached.', observations: [], _usage: usage };
-              break;
-            }
-            yieldDecision = {
-              type: 'tool_request', tool: 'inspect_video_range', jobs: [job], _usage: usage,
-              _agentState: { operations: [...drafts.values()], observations: draftObservations },
-            };
-            break;
-          } catch (error) {
-            results.push({ ok: false, code: error.code || 'invalid_tool_arguments', message: String(error.message).slice(0, 300) });
-            continue;
-          }
-        }
+
 
         if (call.name === 'ask_clarification') {
           try {
