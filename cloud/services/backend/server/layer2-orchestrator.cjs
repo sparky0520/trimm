@@ -544,7 +544,11 @@ class Layer2Orchestrator {
     const draftObservations = [];
     for (let iteration = 0; iteration < 2; iteration++) {
       usage.push(raw.usage);
-      const calls = raw.toolCalls || (raw.toolCall ? [raw.toolCall] : []);
+      const calls = (raw.toolCalls || (raw.toolCall ? [raw.toolCall] : [])).sort((a, b) => {
+        if (a.name === 'finalize_edit_program' && b.name !== 'finalize_edit_program') return 1;
+        if (a.name !== 'finalize_edit_program' && b.name === 'finalize_edit_program') return -1;
+        return 0;
+      });
 
       if (calls.length === 0) {
         if (typeof this.decide !== 'function') throw orchestrationError('Planner returned no tool calls.', 502, 'invalid_planner_response');
