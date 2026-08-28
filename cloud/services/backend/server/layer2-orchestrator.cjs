@@ -327,7 +327,7 @@ function transcriptTextForProjectRange(inventory, startMs, endMs) {
   return words.join(' ').replace(/\s+/g, ' ').trim().toLocaleLowerCase();
 }
 
-function validateEditProgram(decision, inventory, observations) {
+function validateEditProgram(decision, inventory, observations, evidence) {
   if (decision.expectedRevision !== inventory.projectRevision || !Array.isArray(decision.operations)) {
     throw orchestrationError('Invalid edit program envelope.', 422, 'invalid_edit_program');
   }
@@ -478,7 +478,7 @@ function validateDecision(decision, inventory, evidence) {
   rejectPrivateOrExecutable(decision, true);
   const added = validateObservations(decision.observations, inventory, evidence);
   const observations = [...inventory.observations, ...added];
-  if (decision.type === 'edit_program') return { ...validateEditProgram(decision, inventory, observations), observations: added };
+  if (decision.type === 'edit_program') return { ...validateEditProgram(decision, inventory, observations, evidence), observations: added };
   if (decision.type === 'clarification') {
     const questions = Array.isArray(decision.questions) ? decision.questions.slice(0, 3) : [];
     if (!questions.length || questions.some((question) => typeof question?.id !== 'string' ||
