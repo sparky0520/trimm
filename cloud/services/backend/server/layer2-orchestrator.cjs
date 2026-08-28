@@ -307,7 +307,10 @@ function validateObservations(items, inventory, evidence) {
       // Allow up to a 2 second (2000ms) margin for LLM timestamp drift
       origin = evidence.find((clip) => clip.sourceId === item.sourceId && clip.startMs - 2000 <= item.startMs && clip.endMs + 2000 >= item.endMs);
     }
-    if (!origin) throw orchestrationError('Gemini observation is outside supplied video.', 422, 'ungrounded_observation');
+    if (!origin) {
+      console.error('[DEBUG] Orchestration Validation Error: Gemini observation is outside supplied video. \nItem:', JSON.stringify(item), '\nEvidence:', JSON.stringify(evidence));
+      throw orchestrationError('Gemini observation is outside supplied video.', 422, 'ungrounded_observation');
+    }
     return { ...item, description: item.description.slice(0, 500), originatingJobId: origin.id };
   });
 }
