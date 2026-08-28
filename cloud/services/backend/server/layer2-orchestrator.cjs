@@ -26,7 +26,7 @@ Call ask_clarification when a consequential user choice is unresolved, or when t
 Use inspect_video_range when more audiovisual evidence is needed (e.g., if the transcript alone does not provide enough context to fulfill the user's request). Each range is at most 30 seconds. Use LOW normally. Use HIGH only after overlapping LOW evidence left a specific uncertainty.
 Never request rendered output, executable instructions, or provider credentials.
 If the transcript is empty, assume there is no speech in the video and focus exclusively on visual, structural, and background audio edits.
-Every edit operation must cite supplied evidence IDs and include confidence from 0 to 1.
+Fine edit operations (like setting color grade or audio levels) must cite supplied evidence IDs. Global operations (like setting aspect ratio or background music) do not require evidence IDs. Every operation must include confidence from 0 to 1.
 Do not invent evidence. When evidence is missing or uncertain, request bounded evidence, clarify, or fall back.
 Use fine tools: one effect, one exact range, and one bounded parameter set per call. Never ask a tool to scan or choose its own settings.
 Supported rendered operations: remove_ranges, set_color_grade, set_audio_levels, add_captions, set_aspect_ratio, add_text_overlay.
@@ -339,9 +339,10 @@ function validateEditProgram(decision, inventory, observations) {
       throw orchestrationError('Planner returned an unsupported edit operation.', 422, 'invalid_edit_program');
     }
     operationIds.add(operation.id);
+    const requiresEvidence = ['set_color_grade', 'set_audio_levels', 'add_captions', 'remove_ranges'].includes(operation.type);
     if (typeof operation.confidence !== 'number' || operation.confidence < 0 || operation.confidence > 1 ||
-      !Array.isArray(operation.evidenceIds) || !operation.evidenceIds.length ||
-      operation.evidenceIds.some((id) => !evidenceIds.has(id))) {
+      (requiresEvidence && (!Array.isArray(operation.evidenceIds) || !operation.evidenceIds.length)) ||
+      (Array.isArray(operation.evidenceIds) && operation.evidenceIds.some((id) => !evidenceIds.has(id)))) {
       throw orchestrationError('Edit operation has missing, stale, or invented evidence.', 422, 'invalid_evidence_reference');
     }
 

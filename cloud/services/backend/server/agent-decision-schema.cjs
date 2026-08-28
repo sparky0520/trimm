@@ -90,11 +90,11 @@ const operationTool = (name, description, required, properties) => Object.freeze
   description: `${description} This tool constructs a draft operation only; it never edits the project.`,
   parameters: proposalEnvelope({
     type: 'object', additionalProperties: false,
-    required: ['id', 'enabled', 'confidence', 'evidenceIds', ...required],
+    required: ['id', 'enabled', 'confidence', ...required],
     properties: {
       id: { type: 'string' }, enabled: { type: 'boolean' },
       confidence: { type: 'number' },
-      evidenceIds: { type: 'array', items: { type: 'string' }, description: 'MUST exactly match the id of an observation you provide in the observations array.' },
+      evidenceIds: { type: 'array', items: { type: 'string' }, description: 'MUST exactly match the id of an observation you provide in the observations array, if applicable.' },
       ...properties,
     },
   }),
