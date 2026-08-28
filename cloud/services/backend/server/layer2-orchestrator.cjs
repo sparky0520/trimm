@@ -26,8 +26,8 @@ Call ask_clarification when a consequential user choice is unresolved, or when t
 Use LOW resolution for video analysis unless the transcript alone provides enough context to fulfill the user's request.
 Never request rendered output, executable instructions, or provider credentials.
 If the transcript is empty, assume there is no speech in the video and focus exclusively on visual, structural, and background audio edits.
-Fine edit operations (like setting color grade or audio levels) must cite supplied evidence IDs. Global operations (like setting aspect ratio or background music) do not require evidence IDs. Every operation must include confidence from 0 to 1.
-Do not invent evidence. When evidence is missing or uncertain, request bounded evidence, clarify, or fall back.
+Fine edit operations (like removing ranges or setting color grade) must cite the IDs of timestamped observations you generate. Global operations (like setting aspect ratio or background music) do not require evidence IDs. Every operation must include confidence from 0 to 1.
+You have the entire video available in context. Analyze it to generate your own timestamped observations for any visual or audio events you wish to edit, and include them in the observations array of your proposal tools. Do not cite the video job ID directly as evidence.
 Use fine tools: one effect, one exact range, and one bounded parameter set per call. Never ask a tool to scan or choose its own settings.
 Supported rendered operations: remove_ranges, set_color_grade, set_audio_levels, add_captions, set_aspect_ratio, add_text_overlay.
 
@@ -38,10 +38,10 @@ When the user asks for a video transition (e.g. fade, wipe, dissolve, slide), us
 When the user asks to change the video's aspect ratio (e.g. "vertical", "portrait", "landscape", "square", or "16:9"), use the propose_set_aspect_ratio tool with the appropriate ratio (PORTRAIT, LANDSCAPE, or SQUARE).
 
 Examples:
-User asks to remove a pause -> cite the correct evidence from the transcript or visual observations.
+User asks to remove a pause -> generate an observation for the pause and cite its ID in the propose_remove_ranges call.
 User asks to make pacing better without a settled pacing preference -> call ask_clarification with Natural and Tight choices.
 User asks to make the video vertical -> call propose_set_aspect_ratio with ratio="PORTRAIT".
-A tool rejects an invented evidence ID -> correct the call using only supplied IDs; never fabricate a replacement.`;
+A tool rejects an invented evidence ID -> correct the call by ensuring the ID exactly matches an observation you generated in the observations array.`;
 
 const PROPOSAL_TOOL_TYPES = Object.freeze({
   propose_remove_ranges: 'remove_ranges',
@@ -527,12 +527,21 @@ class Layer2Orchestrator {
   async bootstrap(principal, payload) {
     const inventory = validateInventory(payload);
     if (inventory.evidenceJobIds.length) return null;
-    const source = inventory.sources[0];
-    const maxAllowed = Math.min(MAX_VIDEO_RANGE_MS, inventory.budgets.maximumDurationMs);
-    const job = await this.authorizeVideo(principal, inventory, {
-      source, startMs: 0, endMs: Math.min(source.durationMs, maxAllowed), resolution: 'LOW', uncertainty: '',
-    }, 'request_selected');
-    return { type: 'tool_request', tool: 'inspect_video_range', jobs: [job], bootstrap: true };
+    const jobs = [];
+    let remainingBudget = Math.min(MAX_VIDEO_RANGE_MS, inventory.budgets.maximumDurationMs);
+
+    for (const source of inventory.sources) {
+      if (remainingBudget <= 0) break;
+      const duration = Math.min(source.durationMs, remainingBudget);
+      const job = await this.authorizeVideo(principal, inventory, {
+        source, startMs: 0, endMs: duration, resolution: 'LOW', uncertainty: '',
+      }, 'request_selected');
+      jobs.push(job);
+      remainingBudget -= duration;
+    }
+
+    if (jobs.length === 0) return null;
+    return { type: 'tool_request', tool: 'inspect_video_range', jobs, bootstrap: true };
   }
 
   async orchestrate(principal, payload) {
