@@ -328,11 +328,11 @@ class AgentRunCoordinator(
             var taskAttempt = 0
             while (taskAttempt < 3) {
                 try {
-                    val taskRequest = request.copy(
+                    var currentTaskRequest = request.copy(
                         intent = task.description,
                         existingOperations = existingOperations
                     )
-                    var outcome = gateway.executeStateless(taskRequest)
+                    var outcome = gateway.executeStateless(currentTaskRequest)
                     
                     // advance stateless
                     while (outcome["type"]?.jsonPrimitive?.content == "tool_request") {
@@ -342,10 +342,10 @@ class AgentRunCoordinator(
                         
                         // Hit continueWith on the stateless side? No, stateless doesn't have continue.
                         // We must append evidenceJobIds to the request and hit executeStateless again!
-                        val nextTaskRequest = taskRequest.copy(
-                            evidenceJobIds = taskRequest.evidenceJobIds + completed
+                        currentTaskRequest = currentTaskRequest.copy(
+                            evidenceJobIds = currentTaskRequest.evidenceJobIds + completed
                         )
-                        outcome = gateway.executeStateless(nextTaskRequest)
+                        outcome = gateway.executeStateless(currentTaskRequest)
                     }
 
                     // Once we have a final outcome for this task, append operations to our existing ones

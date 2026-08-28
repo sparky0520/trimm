@@ -100,18 +100,18 @@ function fineOperationFor(call, operationType, inventory) {
     return { ...common, ratio: raw.ratio };
   }
   if (call.name === 'propose_add_text_overlay') {
-    return { 
-      ...common, 
-      text: raw.text, 
-      description: raw.description, 
+    return {
+      ...common,
+      text: raw.text,
+      description: raw.description,
       designBlueprint: raw.designBlueprint
     };
   }
   if (call.name === 'propose_add_section_transition') {
-    return { 
-      ...common, 
+    return {
+      ...common,
       preset: raw.preset,
-      description: raw.description, 
+      description: raw.description,
       customBlueprint: raw.customBlueprint
     };
   }
@@ -545,7 +545,6 @@ class Layer2Orchestrator {
     const draftObservations = [];
     for (let iteration = 0; iteration < 8; iteration++) {
       usage.push(raw.usage);
-      usage.push(raw.usage);
       const calls = raw.toolCalls || (raw.toolCall ? [raw.toolCall] : []);
 
       if (calls.length === 0) {
@@ -635,47 +634,47 @@ class Layer2Orchestrator {
 
         try {
           const args = call.args || {};
-          
+
           if (call.name === 'propose_add_text_overlay') {
-             if (typeof this.decide.generateTextOverlayConfig !== 'function') throw orchestrationError('Text overlay subagent is not available.', 501, 'unsupported_tool_call');
-             const rawOp = args.operation || {};
-             const configResult = await this.decide.generateTextOverlayConfig({
-               description: rawOp.description,
-               text: rawOp.text
-             });
-             args.operation = { 
-               ...rawOp, 
-               designBlueprint: JSON.stringify(configResult)
-             };
+            if (typeof this.decide.generateTextOverlayConfig !== 'function') throw orchestrationError('Text overlay subagent is not available.', 501, 'unsupported_tool_call');
+            const rawOp = args.operation || {};
+            const configResult = await this.decide.generateTextOverlayConfig({
+              description: rawOp.description,
+              text: rawOp.text
+            });
+            args.operation = {
+              ...rawOp,
+              designBlueprint: JSON.stringify(configResult)
+            };
           }
           if (call.name === 'propose_add_section_transition') {
-             const rawOp = args.operation || {};
-             if (rawOp.preset === 'custom') {
-               if (typeof this.decide.generateTransitionConfig !== 'function') throw orchestrationError('Transition subagent is not available.', 501, 'unsupported_tool_call');
-               const configResult = await this.decide.generateTransitionConfig({
-                 description: rawOp.description
-               });
-               args.operation = { 
-                 ...rawOp, 
-                 customBlueprint: JSON.stringify(configResult)
-               };
-             } else {
-               args.operation = {
-                 ...rawOp,
-                 customBlueprint: "{}"
-               };
-             }
+            const rawOp = args.operation || {};
+            if (rawOp.preset === 'custom') {
+              if (typeof this.decide.generateTransitionConfig !== 'function') throw orchestrationError('Transition subagent is not available.', 501, 'unsupported_tool_call');
+              const configResult = await this.decide.generateTransitionConfig({
+                description: rawOp.description
+              });
+              args.operation = {
+                ...rawOp,
+                customBlueprint: JSON.stringify(configResult)
+              };
+            } else {
+              args.operation = {
+                ...rawOp,
+                customBlueprint: "{}"
+              };
+            }
           }
           if (call.name === 'propose_add_bgm') {
-             const rawOp = args.operation || {};
-             const durationSecs = Math.ceil(workingInventory.sources.reduce((sum, s) => sum + s.durationMs, 0) / 1000);
-             const result = await audioGeneration.generateBgm(rawOp.prompt || 'background music', durationSecs);
-             args.operation = { ...rawOp, url: result.url };
+            const rawOp = args.operation || {};
+            const durationSecs = Math.ceil(workingInventory.sources.reduce((sum, s) => sum + s.durationMs, 0) / 1000);
+            const result = await audioGeneration.generateBgm(rawOp.prompt || 'background music', durationSecs);
+            args.operation = { ...rawOp, url: result.url };
           }
           if (call.name === 'propose_add_sfx') {
-             const rawOp = args.operation || {};
-             const result = await audioGeneration.fetchSfx(rawOp.prompt || 'sound effect');
-             args.operation = { ...rawOp, url: result.url };
+            const rawOp = args.operation || {};
+            const result = await audioGeneration.fetchSfx(rawOp.prompt || 'sound effect');
+            args.operation = { ...rawOp, url: result.url };
           }
 
           const operation = fineOperationFor(call, operationType, workingInventory);
@@ -704,7 +703,7 @@ class Layer2Orchestrator {
       if (typeof this.decide.toolResults !== 'function' && typeof this.decide.toolResult !== 'function') {
         throw orchestrationError('The model provider cannot continue after tool execution.', 500, 'agent_loop_unavailable');
       }
-      
+
       // Fallback for single tool result if toolResults isn't implemented (tests might only mock decide.toolResult)
       if (typeof this.decide.toolResults === 'function') {
         raw = await this.decide.toolResults({
