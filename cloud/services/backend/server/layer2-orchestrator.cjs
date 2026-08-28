@@ -20,9 +20,8 @@ const DEFAULT_BUDGETS = Object.freeze({
 const SYSTEM_POLICY = `You are trimm's private video-editing agent.
 Follow the latest user message while retaining relevant context from earlier messages.
 You must call one supplied tool to proceed.
-Use proposal tools for operations they cover; their descriptions contain the operation-specific editorial policy.
-Proposal tools build a private draft. After every successful tool result, continue until all necessary operations are present, then call finalize_edit_program.
-You may call multiple proposal tools simultaneously if they are independent. If an operation depends on the outcome of another (e.g., inspecting video before editing), call them sequentially over multiple steps.
+You must call all necessary proposal tools AND finalize_edit_program simultaneously in a single response.
+Do not wait for tool results; generate all proposed operations and immediately finalize them in the same turn.
 Call ask_clarification when a consequential user choice is unresolved, or when their request is vague and could benefit from additional direction. Never guess merely to avoid asking.
 Use inspect_video_range when more audiovisual evidence is needed (e.g., if the transcript alone does not provide enough context to fulfill the user's request). Each range is at most 30 seconds. Use LOW normally. Use HIGH only after overlapping LOW evidence left a specific uncertainty.
 Never request rendered output, executable instructions, or provider credentials.
@@ -543,7 +542,7 @@ class Layer2Orchestrator {
     const usage = [];
     const drafts = new Map((workingInventory.agentDraft?.operations || []).map((operation) => [operation.id, operation]));
     const draftObservations = [];
-    for (let iteration = 0; iteration < 8; iteration++) {
+    for (let iteration = 0; iteration < 2; iteration++) {
       usage.push(raw.usage);
       const calls = raw.toolCalls || (raw.toolCall ? [raw.toolCall] : []);
 

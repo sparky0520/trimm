@@ -27,8 +27,9 @@ test('Gemini receives video directly and exposes evidence and focused proposal t
   assert.deepEqual(request.config.tools[0].functionDeclarations.map((item) => item.name), [
     'inspect_video_range', 'propose_remove_ranges',
     'propose_set_dialogue_loudness', 'propose_set_music_ducking',
-    'propose_add_captions', 'propose_set_aspect_ratio', 'propose_add_text_overlay', 'propose_adjust_exposure', 'propose_adjust_temperature', 'propose_adjust_contrast', 'propose_adjust_saturation',
+    'propose_add_captions', 'propose_set_aspect_ratio', 'propose_add_text_overlay', 'propose_add_section_transition', 'propose_adjust_exposure', 'propose_adjust_temperature', 'propose_adjust_contrast', 'propose_adjust_saturation',
     'propose_adjust_highlights', 'propose_adjust_shadows', 'propose_adjust_skin_protection',
+    'propose_add_bgm', 'propose_add_sfx',
     'ask_clarification', 'finalize_edit_program', 'remove_draft_operation', 'finish_without_proposal',
   ]);
 });
@@ -77,6 +78,7 @@ test('removal proposals require source-bounded ranges covered by cited evidence'
       id: 'silence-1', sourceId: 'source-1', startMs: 10_000, endMs: 14_000,
       description: 'An awkward pause between clauses.', confidence: 0.9, resolution: 'LOW',
     }],
+    evidenceJobIds: [],
   };
   const valid = validateDecision({
     type: 'edit_program', expectedRevision: 3, summary: 'Tighten one awkward pause.', observations: [],
@@ -102,6 +104,7 @@ test('fine operations require an exact source interval covered by their cited ev
     projectRevision: 2, sources: [{ id: 'source-1', durationMs: 20_000 }],
     transcript: [], observations: [{ id: 'noise-1', sourceId: 'source-1', startMs: 2_000, endMs: 8_000,
       description: 'Dialogue is too quiet.', confidence: .9, resolution: 'LOW' }],
+    evidenceJobIds: [],
   };
   const operation = { id: 'noise-op', type: 'set_audio_levels', enabled: true, confidence: .9,
     evidenceIds: ['noise-1'], target: { sourceId: 'source-1', startMs: 3_000, endMs: 7_000 },

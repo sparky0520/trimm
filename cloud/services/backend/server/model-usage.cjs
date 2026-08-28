@@ -25,7 +25,7 @@ function geminiUsage(response, { purpose, model = 'gemini-3.6-flash', callId, me
   const estimatedCostMicros = Math.ceil(
     Math.max(0, inputTokens - cachedTokens) * GEMINI_36_FLASH_MICROS_PER_TOKEN.input +
     cachedTokens * GEMINI_36_FLASH_MICROS_PER_TOKEN.cached +
-    (outputTokens + thinkingTokens) * GEMINI_36_FLASH_MICROS_PER_TOKEN.output
+    (outputTokens) * GEMINI_36_FLASH_MICROS_PER_TOKEN.output
   );
   return {
     callId: String(callId || response?.responseId || crypto.randomUUID()).slice(0, 200),

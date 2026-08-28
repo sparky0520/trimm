@@ -108,7 +108,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        checkForAppUpdates()
+        if (!BuildConfig.DEBUG) {
+            checkForAppUpdates()
+        }
         Log.i("DeviceCapability", DeviceCapability.report(this).diagnosticSummary())
         if (BuildConfig.FORCE_4K_EXPORT) {
             intent.getStringExtra("forceExportProjectId")?.takeIf(String::isNotBlank)?.let { projectId ->

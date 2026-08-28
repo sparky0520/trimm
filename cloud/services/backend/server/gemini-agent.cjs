@@ -49,7 +49,7 @@ function createGeminiDecisionProvider({
   }
   async function generate({
     systemPolicy, contents, temperature, purpose = 'planning',
-    responseJsonSchema = null, tools = true, usageMedia,
+    responseJsonSchema = null, tools = true, usageMedia, cachedContent = null,
   }) {
     if (!ai) throw Object.assign(new Error('GEMINI_API_KEY is not configured'), { status: 503, code: 'gemini_unconfigured' });
     const requestPayload = {
@@ -64,6 +64,7 @@ function createGeminiDecisionProvider({
         ...(tools ? { tools: [{ functionDeclarations: JSON.parse(JSON.stringify(AGENT_TOOLS)).map(t => ({ ...t, parametersJsonSchema: t.parameters, parameters: undefined })) }] } : {}),
         temperature,
         maxOutputTokens: 4096,
+        ...(cachedContent ? { cachedContent } : {}),
       },
     };
 
@@ -111,19 +112,68 @@ function createGeminiDecisionProvider({
       usage: geminiUsage(response, { purpose, model, media: usageMedia }),
     };
   }
-  const decide = async ({ systemPolicy, inventory, evidence, history }) => generate({
-    systemPolicy,
-    contents: history || [{ role: 'user', parts: [
-      ...(await Promise.all(evidence.map(videoPart))),
-      { text: JSON.stringify({ inventory, evidence: evidence.map(({ bytes, providerFile, persistProviderFile, ...item }) => item) }) },
-    ] }],
-    temperature: 0.2,
-    purpose: 'planning',
-    usageMedia: evidence.length ? {
-      sourceId: evidence.at(-1).sourceId, startMs: evidence.at(-1).startMs,
-      endMs: evidence.at(-1).endMs, resolution: evidence.at(-1).resolution,
-    } : {},
-  });
+  const decide = async ({ systemPolicy, inventory, evidence, history }) => {
+    const totalDurationMs = evidence.reduce((sum, item) => sum + (item.endMs - item.startMs), 0);
+    const videoParts = await Promise.all(evidence.map(videoPart));
+    let cachedContentName = null;
+    let finalContents = null;
+
+    if (totalDurationMs >= 115000 && ai?.caches?.create) {
+      const cacheKey = evidence.map(e => `${e.id}:${e.startMs}-${e.endMs}`).join(',');
+      const cached = fileCache.get(`ctx_${cacheKey}`);
+      if (cached && cached.expiresAt > Date.now()) {
+        cachedContentName = cached.name;
+      } else {
+        try {
+          const cache = await ai.caches.create({
+            model,
+            config: {
+              contents: [{ role: 'user', parts: videoParts }],
+              ttl: '3600s'
+            }
+          });
+          if (cache && cache.name) {
+            cachedContentName = cache.name;
+            fileCache.set(`ctx_${cacheKey}`, { name: cache.name, expiresAt: Date.now() + 60 * 60 * 1000 });
+          }
+        } catch (error) {
+          console.warn('[DEBUG] Failed to create context cache:', error.message);
+        }
+      }
+    }
+
+    if (history) {
+      if (cachedContentName) {
+        finalContents = history.map((msg, index) => {
+          if (index === 0 && msg.role === 'user') {
+            return { ...msg, parts: msg.parts.filter(p => p.text) };
+          }
+          return msg;
+        });
+      } else {
+        finalContents = history;
+      }
+    } else {
+      const textPart = { text: JSON.stringify({ inventory, evidence: evidence.map(({ bytes, providerFile, persistProviderFile, ...item }) => item) }) };
+      if (cachedContentName) {
+        finalContents = [{ role: 'user', parts: [textPart] }];
+      } else {
+        finalContents = [{ role: 'user', parts: [...videoParts, textPart] }];
+      }
+    }
+
+    return generate({
+      systemPolicy,
+      contents: finalContents,
+      temperature: 0.2,
+      purpose: 'planning',
+      cachedContent: cachedContentName,
+      usageMedia: evidence.length ? {
+        sourceId: evidence.at(-1).sourceId, startMs: evidence.at(-1).startMs,
+        endMs: evidence.at(-1).endMs, resolution: evidence.at(-1).resolution,
+      } : {},
+    });
+  };
   decide.toolResult = async ({ systemPolicy, inventory, evidence = [], history = [], toolCall, result }) => decide({
     systemPolicy, inventory, evidence,
     history: [...(history || []), { role: 'user', parts: [{ functionResponse: {
