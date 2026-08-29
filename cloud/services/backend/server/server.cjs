@@ -257,7 +257,7 @@ const server = http.createServer(async (request, response) => {
   if (request.method === 'POST' && requestUrl.pathname === '/v1/agent/plan') {
     try {
       const body = await collect(request, 1024 * 1024);
-      const { prompt } = JSON.parse(body.toString());
+      const { prompt } = body;
       return json(response, 200, await agentDecisionProvider.generatePlan({ prompt }));
     } catch (error) {
       console.error('[agent-plan] request failed', { message: error?.message, status: error?.status, code: error?.code });
@@ -271,8 +271,7 @@ const server = http.createServer(async (request, response) => {
 
   if (request.method === 'POST' && requestUrl.pathname === '/v1/agent/execute') {
     try {
-      const body = await collect(request, 5 * 1024 * 1024);
-      const payload = JSON.parse(body.toString());
+      const payload = await collect(request, 5 * 1024 * 1024);
       return json(response, 200, await agentDecisionProvider.executeTask(payload));
     } catch (error) {
       console.error('[agent-execute] request failed', { message: error?.message, status: error?.status, code: error?.code });
