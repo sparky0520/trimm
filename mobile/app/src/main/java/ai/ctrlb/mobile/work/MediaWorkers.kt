@@ -40,7 +40,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
         val words = mutableListOf<TranscriptWord>()
         val analysisWarnings = mutableListOf<String>()
         var transcriptionFailed = false
-        val cloudConversationEnabled = BuildConfig.AGENT_RUNS_URL.isNotBlank()
+        val cloudConversationEnabled = BuildConfig.PLANNER_URL.isNotBlank()
         
         if (!cloudConversationEnabled) {
             return Result.failure(Data.Builder().putString("error", "Local analysis is no longer supported.").build())
@@ -113,14 +113,14 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
             progress("agent-run", 94)
             val deviceSessionId = "android-${project.id}"
             val uploadClient = DerivativeUploadClient(
-                BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken, project.id, deviceSessionId
+                BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken, project.id, deviceSessionId
             )
             val preparer = SelectiveDerivativePreparer(
                 java.io.File(applicationContext.cacheDir, "agent-derivatives"),
                 AndroidDerivativeWriter(applicationContext)
             )
             val coordinator = AgentRunCoordinator(
-                AgentRunClient(BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken),
+                AgentRunClient(BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken),
                 AgentEvidenceFulfiller { job ->
                     val derivative = preparer.prepare(DerivativeAuthorization(job), project.orderedSources)
                     try { uploadClient.upload(derivative) } finally { java.io.File(derivative.localPath).delete() }

@@ -1,7 +1,6 @@
 'use strict';
 
 const { GoogleGenAI } = require('@google/genai');
-const { AGENT_TOOLS } = require('./agent-decision-schema.cjs');
 const { geminiUsage } = require('./model-usage.cjs');
 
 function createGeminiDecisionProvider({
@@ -11,42 +10,7 @@ function createGeminiDecisionProvider({
 } = {}) {
   if (model !== 'gemini-3.6-flash') throw new Error('The video agent is pinned to gemini-3.6-flash.');
   const ai = client || (apiKey ? new GoogleGenAI({ apiKey }) : null);
-  const fileCache = new Map();
-  async function videoPart(item) {
-    if (item.providerFile?.expiresAt > Date.now()) {
-      fileCache.set(item.id, { uri: item.providerFile.uri, expiresAt: item.providerFile.expiresAt });
-    }
-    const cached = fileCache.get(item.id);
-    if (cached && (!cached.expiresAt || cached.expiresAt > Date.now())) {
-      return { fileData: { fileUri: cached.uri, mimeType: 'video/mp4' } };
-    }
-    if (ai?.files?.upload && item.bytes && item.bytes.length > 0) {
-      try {
-        let file = await ai.files.upload({ file: new Blob([item.bytes], { type: 'video/mp4' }), config: { mimeType: 'video/mp4' } });
-        for (let attempt = 0; file?.state && String(file.state) !== 'ACTIVE' && attempt < 60; attempt++) {
-          if (String(file.state) === 'FAILED') throw new Error('Gemini file processing failed.');
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          file = await ai.files.get({ name: file.name });
-        }
-        if (file?.uri) {
-          const expiresAt = Number.isFinite(Date.parse(file.expirationTime))
-            ? Date.parse(file.expirationTime) : Date.now() + 47 * 60 * 60 * 1000;
-          fileCache.set(item.id, { uri: file.uri, expiresAt });
-          if (typeof item.persistProviderFile === 'function') {
-            await item.persistProviderFile({ provider: 'google-gemini', uri: file.uri, name: file.name, expiresAt });
-          }
-          return { fileData: { fileUri: file.uri, mimeType: file.mimeType || 'video/mp4' } };
-        }
-      } catch (error) {
-        throw Object.assign(new Error('Video upload failed: ' + (error.message || error.toString())), { status: 502, code: 'upload_failed' });
-      }
-    }
-    if (!item.bytes) {
-      throw Object.assign(new Error('Video evidence media bytes are missing or expired.'), { status: 409, code: 'evidence_bytes_missing' });
-    }
-    const data = Buffer.isBuffer(item.bytes) ? item.bytes.toString('base64') : Buffer.from(item.bytes).toString('base64');
-    return { inlineData: { mimeType: 'video/mp4', data } };
-  }
+
   async function generate({
     systemPolicy, contents, temperature, purpose = 'planning',
     responseJsonSchema = null, tools = true, usageMedia, cachedContent = null,
@@ -61,7 +25,6 @@ function createGeminiDecisionProvider({
           responseMimeType: 'application/json',
           responseJsonSchema: JSON.parse(JSON.stringify(responseJsonSchema)) 
         } : {}),
-        ...(tools ? { tools: [{ functionDeclarations: JSON.parse(JSON.stringify(AGENT_TOOLS)).map(t => ({ ...t, parametersJsonSchema: t.parameters, parameters: undefined })) }] } : {}),
         temperature,
         maxOutputTokens: 4096,
         ...(cachedContent ? { cachedContent } : {}),
@@ -112,97 +75,7 @@ function createGeminiDecisionProvider({
       usage: geminiUsage(response, { purpose, model, media: usageMedia }),
     };
   }
-  const decide = async ({ systemPolicy, inventory, evidence, history }) => {
-    const totalDurationMs = evidence.reduce((sum, item) => sum + (item.endMs - item.startMs), 0);
-    const videoParts = await Promise.all(evidence.map(videoPart));
-    let cachedContentName = null;
-    let finalContents = null;
-
-    if (totalDurationMs >= 115000 && ai?.caches?.create) {
-      const cacheKey = evidence.map(e => `${e.id}:${e.startMs}-${e.endMs}`).join(',');
-      const cached = fileCache.get(`ctx_${cacheKey}`);
-      if (cached && cached.expiresAt > Date.now()) {
-        cachedContentName = cached.name;
-      } else {
-        try {
-          const cache = await ai.caches.create({
-            model,
-            config: {
-              contents: [{ role: 'user', parts: videoParts }],
-              ttl: '3600s'
-            }
-          });
-          if (cache && cache.name) {
-            cachedContentName = cache.name;
-            fileCache.set(`ctx_${cacheKey}`, { name: cache.name, expiresAt: Date.now() + 60 * 60 * 1000 });
-          }
-        } catch (error) {
-          console.warn('[DEBUG] Failed to create context cache:', error.message);
-        }
-      }
-    }
-
-    if (history) {
-      if (cachedContentName) {
-        finalContents = history.map((msg, index) => {
-          if (index === 0 && msg.role === 'user') {
-            return { ...msg, parts: msg.parts.filter(p => p.text) };
-          }
-          return msg;
-        });
-      } else {
-        finalContents = history;
-      }
-    } else {
-      const textPart = { text: JSON.stringify({ inventory, evidence: evidence.map(({ bytes, providerFile, persistProviderFile, ...item }) => item) }) };
-      if (cachedContentName) {
-        finalContents = [{ role: 'user', parts: [textPart] }];
-      } else {
-        finalContents = [{ role: 'user', parts: [...videoParts, textPart] }];
-      }
-    }
-
-    return generate({
-      systemPolicy,
-      contents: finalContents,
-      temperature: 0.2,
-      purpose: 'planning',
-      cachedContent: cachedContentName,
-      usageMedia: evidence.length ? {
-        sourceId: evidence.at(-1).sourceId, startMs: evidence.at(-1).startMs,
-        endMs: evidence.at(-1).endMs, resolution: evidence.at(-1).resolution,
-      } : {},
-    });
-  };
-  decide.toolResult = async ({ systemPolicy, inventory, evidence = [], history = [], toolCall, result }) => decide({
-    systemPolicy, inventory, evidence,
-    history: [...(history || []), { role: 'user', parts: [{ functionResponse: {
-      name: toolCall.name,
-      ...(toolCall.id ? { id: toolCall.id } : {}),
-      response: result,
-    } }] }],
-  });
-  decide.toolResults = async ({ systemPolicy, inventory, evidence = [], history = [], toolCalls, results }) => decide({
-    systemPolicy, inventory, evidence,
-    history: [...(history || []), { role: 'user', parts: toolCalls.map((toolCall, i) => ({ functionResponse: {
-      name: toolCall.name,
-      ...(toolCall.id ? { id: toolCall.id } : {}),
-      response: results[i],
-    } })) }],
-  });
-  decide.capabilities = Object.freeze({
-    nativeVideoAudio: true,
-    timestampGrounding: true,
-    toolUse: true,
-    structuredOutput: true,
-    reusableCachedContext: false,
-    primaryModel: model,
-  });
-
-
-
-
-  decide.generateTextOverlayConfig = async ({ description, text }) => {
+  const generateTextOverlayConfig = async ({ description, text }) => {
     const prompt = `You are an AI video editor designing a native text overlay with vector graphics.
 Your goal is to parse the user's description and generate a JSON blueprint (Generative Canvas DSL).
 This blueprint defines the background shapes (rectangles, circles, starbursts), text styling, and layout.
@@ -295,7 +168,7 @@ Return ONLY a JSON blueprint matching the schema.`;
     }
   };
 
-  decide.generateTransitionConfig = async ({ description }) => {
+  const generateTransitionConfig = async ({ description }) => {
     const prompt = `You are an AI video editor designing a custom Canvas-based video transition.
 Your goal is to parse the user's description and generate a JSON blueprint (Generative Canvas DSL).
 This blueprint defines simple shapes that animate to cover the screen and act as a transition wipe.
@@ -356,7 +229,7 @@ Return ONLY a JSON blueprint matching the schema.`;
     }
   };
 
-  decide.generatePlan = async ({ prompt }) => {
+  const generatePlan = async ({ prompt }) => {
     const systemPolicy = `You are the Trimm Router Agent. Your job is to break down a complex video editing request into a sequence of simpler tasks.
 Each task must be a natural language prompt that can be independently executed by a Worker Agent.
 Use the 'dependsOn' field to enforce sequential execution if a task relies on the completion of another task (e.g. adding captions must happen AFTER dead space is removed, since removing space changes timing). If tasks don't depend on each other, they can run in parallel (empty dependsOn).
@@ -401,7 +274,7 @@ Return ONLY a JSON blueprint matching the schema.`;
     }
   };
 
-  return decide;
+  return { generateTextOverlayConfig, generateTransitionConfig, generatePlan };
 }
 
 module.exports = { createGeminiDecisionProvider };

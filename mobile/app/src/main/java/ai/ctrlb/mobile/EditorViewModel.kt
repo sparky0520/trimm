@@ -61,18 +61,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         WorkManager.getInstance(getApplication()).cancelAllWorkByTag("analysis:${project.id}")
         val run = project.analysis.agentRun
         mutable.value = mutable.value.copy(isProcessing = false, jobMessage = "Cancelling video analysis…")
-        if (run == null || BuildConfig.AGENT_RUNS_URL.isBlank()) return
+        if (run == null || BuildConfig.PLANNER_URL.isBlank()) return
+        val cancelled = run.copy(status = AgentRunStatus.CANCELLED)
         viewModelScope.launch {
-            runCatching { AgentRunClient(BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken).cancel(run.runId) }
-                .onSuccess { cancelled ->
-                    val latest = store.load(project.id)
-                    val updated = latest.copy(analysis = latest.analysis.copy(agentRun = PersistedAgentRun(
-                        cancelled.contractVersion, cancelled.runId, cancelled.projectId, cancelled.projectRevision,
-                        cancelled.status, cancelled.events, cancelled.decision, run.fulfilledEvidenceJobIds, run.recovery, cancelled.usage
-                    )))
-                    store.save(updated)
-                    mutable.value = mutable.value.copy(project = updated, jobMessage = "Video analysis cancelled")
-                }
+            val latest = store.load(project.id)
+            val updated = latest.copy(analysis = latest.analysis.copy(agentRun = cancelled))
+            store.save(updated)
+            mutable.value = mutable.value.copy(project = updated, jobMessage = "Video analysis cancelled")
         }
     }
 
@@ -270,7 +265,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         )
         viewModelScope.launch {
             store.save(updatedProject)
-            if (BuildConfig.AGENT_RUNS_URL.isNotBlank()) {
+            if (BuildConfig.PLANNER_URL.isNotBlank()) {
                 continueAgentConversation(updatedProject, turnId, text)
             } else {
                 when (val result = ConversationalRevisionEngine.revise(updatedProject, text)) {
@@ -325,7 +320,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         )
         viewModelScope.launch {
             store.save(updatedProject)
-            if (BuildConfig.AGENT_RUNS_URL.isNotBlank()) {
+            if (BuildConfig.PLANNER_URL.isNotBlank()) {
                 continueAgentConversation(updatedProject, turnId, turn.request)
             } else {
                 reviseStory(turn.request)
@@ -340,14 +335,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val deviceSessionId = "android-${project.id}"
             val uploadClient = DerivativeUploadClient(
-                BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken, project.id, deviceSessionId
+                BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken, project.id, deviceSessionId
             )
             val preparer = SelectiveDerivativePreparer(
                 java.io.File(getApplication<Application>().cacheDir, "agent-derivatives"),
                 AndroidDerivativeWriter(getApplication())
             )
             val coordinator = AgentRunCoordinator(
-                AgentRunClient(BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken),
+                AgentRunClient(BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken),
                 AgentEvidenceFulfiller { job ->
                     val derivative = preparer.prepare(DerivativeAuthorization(job), project.orderedSources)
                     try { uploadClient.upload(derivative) }
@@ -366,15 +361,28 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         source.width, source.height, source.hasAudio
                     )
                 },
-                transcript = sourceTranscript(project.analysis.words, project.orderedSources)
+                transcript = sourceTranscript(project.analysis.words, project.orderedSources),
+                existingOperations = project.operations.map { operation ->
+                    val json = Json { encodeDefaults = true }
+                    json.encodeToJsonElement(EditOperation.serializer(), operation).jsonObject
+                }
             )
             runCatching {
-                coordinator.recover(previous, request, action) { snapshot ->
-                    val latest = store.load(project.id)
-                    val updated = latest.copy(analysis = latest.analysis.copy(agentRun = snapshot))
-                    store.save(updated)
-                    mutable.value = mutable.value.copy(project = updated)
-                }
+                coordinator.orchestrateStateless(
+                    request = request,
+                    onProgress = { stage, percent ->
+                        mutable.value = mutable.value.copy(jobMessage = processingMessage(stage, percent))
+                    },
+                    onPersist = { snapshot, plan ->
+                        val latest = store.load(project.id)
+                        val updated = latest.copy(analysis = latest.analysis.copy(
+                            agentRun = snapshot,
+                            agentPlan = plan ?: latest.analysis.agentPlan
+                        ))
+                        store.save(updated)
+                        mutable.value = mutable.value.copy(project = updated)
+                    }
+                )
             }.onSuccess { snapshot ->
                 AgentDecisionMapper.pendingProposal(snapshot)?.let { proposal ->
                     val latest = store.load(project.id)
@@ -404,8 +412,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val previous = project.analysis.agentRun
         viewModelScope.launch {
             val deviceSessionId = "android-${project.id}"
-            val client = AgentRunClient(BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken)
-            val uploadClient = DerivativeUploadClient(BuildConfig.AGENT_RUNS_URL, AuthTokenProvider::currentToken, project.id, deviceSessionId)
+            val client = AgentRunClient(BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken)
+            val uploadClient = DerivativeUploadClient(BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken, project.id, deviceSessionId)
             val preparer = SelectiveDerivativePreparer(
                 java.io.File(getApplication<Application>().cacheDir, "agent-derivatives"), AndroidDerivativeWriter(getApplication())
             )
@@ -413,30 +421,35 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 val derivative = preparer.prepare(DerivativeAuthorization(job), project.orderedSources)
                 try { uploadClient.upload(derivative) } finally { java.io.File(derivative.localPath).delete() }
             })
+            val json = Json { encodeDefaults = true }
+            val existingOperations = project.operations.map { operation ->
+                json.encodeToJsonElement(EditOperation.serializer(), operation).jsonObject
+            }
             val request = AgentRunRequest(
                 projectId = project.id, deviceSessionId = deviceSessionId, projectRevision = project.revision,
                 intent = message,
                 sources = project.orderedSources.mapIndexed { index, source -> Layer2SourceInventory(
                     "${source.fingerprint}-$index", source.fingerprint, source.durationMs, source.width, source.height, source.hasAudio
                 ) },
-                transcript = sourceTranscript(project.analysis.words, project.orderedSources)
+                transcript = sourceTranscript(project.analysis.words, project.orderedSources),
+                existingOperations = existingOperations
             )
-            val json = Json { encodeDefaults = true }
-            val existingOperations = project.operations.map { operation ->
-                json.encodeToJsonElement(EditOperation.serializer(), operation).jsonObject
-            }
             runCatching {
-                val persist: suspend (PersistedAgentRun) -> Unit = { snapshot ->
-                    val latest = store.load(project.id)
-                    val updated = latest.copy(analysis = latest.analysis.copy(agentRun = snapshot))
-                    store.save(updated)
-                    mutable.value = mutable.value.copy(project = updated)
-                }
-                if (previous == null || previous.status in setOf(AgentRunStatus.FAILED, AgentRunStatus.CANCELLED)) {
-                    coordinator.run(request, persist)
-                } else {
-                    coordinator.message(previous, request, message, existingOperations, persist)
-                }
+                coordinator.orchestrateStateless(
+                    request = request,
+                    onProgress = { stage, percent ->
+                        mutable.value = mutable.value.copy(jobMessage = processingMessage(stage, percent))
+                    },
+                    onPersist = { snapshot, plan ->
+                        val latest = store.load(project.id)
+                        val updated = latest.copy(analysis = latest.analysis.copy(
+                            agentRun = snapshot,
+                            agentPlan = plan ?: latest.analysis.agentPlan
+                        ))
+                        store.save(updated)
+                        mutable.value = mutable.value.copy(project = updated)
+                    }
+                )
             }.onSuccess { snapshot ->
                 val latest = store.load(project.id)
                 val proposal = AgentDecisionMapper.pendingProposal(snapshot)

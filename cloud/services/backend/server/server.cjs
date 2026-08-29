@@ -14,10 +14,7 @@ const { fromEnvironment: authenticationFromEnvironment } = require('./authentica
 const { IdentityRateLimiter, auditEvent, correlationId, requireScope } = require('./authorization.cjs');
 const { DerivativeJobs } = require('./derivative-jobs.cjs');
 const { PostgresDerivativeJobs } = require('./postgres-derivative-jobs.cjs');
-const { Layer2Orchestrator } = require('./layer2-orchestrator.cjs');
-const { AgentRuns } = require('./agent-runs.cjs');
-const { Conversations } = require('./conversations.cjs');
-const { PostgresAgentRunStore, VolatileAgentRunStore } = require('./agent-run-store.cjs');
+
 const { createGeminiDecisionProvider } = require('./gemini-agent.cjs');
 const { AudioGeneration } = require('./audio-generation.cjs');
 
@@ -33,23 +30,13 @@ uploadCleanupTimer.unref();
 const authentication = authenticationFromEnvironment();
 const rateLimiter = new IdentityRateLimiter({ limit: Number(process.env.TRIMM_RATE_LIMIT_PER_MINUTE) || 120 });
 if (process.env.NODE_ENV === 'production' && !process.env.SUPABASE_DB_URL) {
-  throw new Error('Production database is not configured; agent run persistence requires it.');
+  throw new Error('Production database is not configured; derivative jobs persistence requires it.');
 }
 const derivativeJobs = process.env.SUPABASE_DB_URL
   ? new PostgresDerivativeJobs({ databaseUrl: process.env.SUPABASE_DB_URL })
   : new DerivativeJobs({});
 const agentDecisionProvider = createGeminiDecisionProvider();
-const layer2Orchestrator = new Layer2Orchestrator({
-  derivativeJobs,
-  decide: agentDecisionProvider,
-});
-const agentRuns = new AgentRuns({
-  orchestrator: layer2Orchestrator,
-  store: process.env.SUPABASE_DB_URL
-    ? new PostgresAgentRunStore({ databaseUrl: process.env.SUPABASE_DB_URL })
-    : new VolatileAgentRunStore(),
-});
-const conversations = new Conversations({ agentRuns });
+
 const audioGeneration = new AudioGeneration();
 const derivativeCleanupTimer = setInterval(() => {
   Promise.resolve(derivativeJobs.cleanup()).catch((error) => {
@@ -66,9 +53,7 @@ function policyFor(request, pathname) {
     resourceType: 'derivative_job',
   };
   if (pathname.startsWith('/v1/transcribe')) return { scope: 'transcribe:create', action: request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'update' : 'create', resourceType: 'transcription' };
-  if (pathname === '/v1/agent/runs' || pathname.startsWith('/v1/conversations') ||
-      pathname.startsWith('/v1/audio') || pathname === '/v1/agent/plan' || pathname === '/v1/agent/execute' ||
-      /^\/v1\/agent\/runs\/[0-9a-f-]{36}(?:\/continue)?$/i.test(pathname)) {
+  if (pathname.startsWith('/v1/audio') || pathname === '/v1/agent/plan') {
     return { scope: 'plan:create', action: 'create', resourceType: 'plan' };
   }
   return null;
@@ -284,84 +269,7 @@ const server = http.createServer(async (request, response) => {
     }
   }
 
-  if (request.method === 'POST' && requestUrl.pathname === '/v1/agent/execute') {
-    try {
-      const inventory = await collect(request);
-      // Stateless execution using the orchestrator directly
-      const decision = await layer2Orchestrator.orchestrate(principal, inventory);
-      return json(response, 200, decision);
-    } catch (error) {
-      console.error('[agent-execute] request failed', { message: error?.message, status: error?.status, code: error?.code });
-      return json(response, Number.isInteger(error?.status) ? error.status : 502, {
-        error: error?.message || 'Agent stateless execution failed',
-        code: error?.code || 'agent_run_failed',
-        requestId,
-      });
-    }
-  }
 
-  if (request.method === 'POST' && requestUrl.pathname === '/v1/agent/runs') {
-    try {
-      return json(response, 201, await agentRuns.start(principal, await collect(request)));
-    } catch (error) {
-      console.error('[agent-run] request failed', { message: error?.message, status: error?.status, code: error?.code });
-      return json(response, Number.isInteger(error?.status) ? error.status : 502, {
-        error: error?.message || 'Agent run failed',
-        code: error?.code || 'agent_run_failed',
-        ...(error?.run ? { run: error.run } : {}),
-        requestId,
-      });
-    }
-  }
-  if (request.method === 'POST' && requestUrl.pathname === '/v1/conversations') {
-    try { return json(response, 201, await conversations.create(principal, await collect(request))); }
-    catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 502, { error: error?.message || 'Conversation failed', code: error?.code || 'conversation_failed', requestId }); }
-  }
-  const conversationMessageMatch = requestUrl.pathname.match(/^\/v1\/conversations\/([0-9a-f-]{36})\/messages$/i);
-  if (request.method === 'POST' && conversationMessageMatch) {
-    try { return json(response, 200, await conversations.message(principal, conversationMessageMatch[1], await collect(request, 64 * 1024))); }
-    catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 502, { error: error?.message || 'Conversation could not continue', code: error?.code || 'conversation_failed', requestId }); }
-  }
-  const proposalReviewMatch = requestUrl.pathname.match(/^\/v1\/conversations\/([0-9a-f-]{36})\/proposals\/([^/]+)\/(accept|reject)$/i);
-  if (request.method === 'POST' && proposalReviewMatch) {
-    try { return json(response, 200, await conversations.review(principal, proposalReviewMatch[1], proposalReviewMatch[2], proposalReviewMatch[3], await collect(request, 64 * 1024))); }
-    catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 502, { error: error?.message || 'Proposal review failed', code: error?.code || 'proposal_review_failed', requestId }); }
-  }
-  const conversationMatch = requestUrl.pathname.match(/^\/v1\/conversations\/([0-9a-f-]{36})$/i);
-  if (request.method === 'GET' && conversationMatch) {
-    try { return json(response, 200, await conversations.read(principal, conversationMatch[1])); }
-    catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message || 'Conversation not found', code: error?.code || 'conversation_not_found', requestId }); }
-  }
-  if (request.method === 'DELETE' && conversationMatch) {
-    try { return json(response, 200, await conversations.cancel(principal, conversationMatch[1])); }
-    catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message || 'Conversation not found', code: error?.code || 'conversation_not_found', requestId }); }
-  }
-  const agentRunContinueMatch = requestUrl.pathname.match(/^\/v1\/agent\/runs\/([0-9a-f-]{36})\/continue$/i);
-  if (request.method === 'POST' && agentRunContinueMatch) {
-    try {
-      return json(response, 200, await agentRuns.continue(principal, agentRunContinueMatch[1], await collect(request, 16 * 1024)));
-    } catch (error) {
-      return json(response, Number.isInteger(error?.status) ? error.status : 502, {
-        error: error?.message || 'Agent run could not continue',
-        code: error?.code || 'agent_run_failed',
-        ...(error?.run ? { run: error.run } : {}),
-        requestId,
-      });
-    }
-  }
-  const agentRunMatch = requestUrl.pathname.match(/^\/v1\/agent\/runs\/([0-9a-f-]{36})$/i);
-  if (request.method === 'DELETE' && agentRunMatch) {
-    try { return json(response, 200, await agentRuns.cancel(principal, agentRunMatch[1])); }
-    catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message, code: error?.code, requestId }); }
-  }
-  if (request.method === 'GET' && agentRunMatch) {
-    try { return json(response, 200, await agentRuns.read(principal, agentRunMatch[1])); }
-    catch (error) {
-      return json(response, Number.isInteger(error?.status) ? error.status : 404, {
-        error: error?.message || 'Agent run not found', code: error?.code || 'agent_run_not_found', requestId,
-      });
-    }
-  }
   return json(response, 404, { error: 'Not found' });
 });
 
