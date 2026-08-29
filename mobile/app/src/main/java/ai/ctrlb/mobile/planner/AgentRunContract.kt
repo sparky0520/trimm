@@ -377,7 +377,7 @@ class AgentRunCoordinator(
                             }
                             if (hasLongSilence) {
                                 semanticRetry = true
-                                currentIntent = task.description + "\n\nNote: The user explicitly requested removing dead space, and there is a pause of >= 2.0 seconds in the transcript. Are you absolutely sure no dead space should be removed? If so, explain why using finish_without_proposal."
+                                currentIntent = task.description + "\n\nNote: There is a pause of >= 2.0 seconds in the transcript. If this pause is intentional or dramatic, you should keep it (just call finish_without_proposal and explain why). But if it is unintentional dead space, please remove it."
                                 throw Exception("Semantic retry: dead space potentially missed")
                             }
                         }
