@@ -119,19 +119,21 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val customBlueprint: String = "{}"
 ) : EditOperation
 
-@Serializable @SerialName("set_background_music") data class AddBgm(
+@Serializable @SerialName("add_bgm") data class AddBgm(
     override val id: String = java.util.UUID.randomUUID().toString(),
     override val enabled: Boolean = true,
     val prompt: String,
-    val url: String
+    val reason: String = "",
+    val url: String = ""
 ) : EditOperation
 
-@Serializable @SerialName("add_sound_effect") data class AddSfx(
+@Serializable @SerialName("add_sfx") data class AddSfx(
     override val id: String = java.util.UUID.randomUUID().toString(),
     override val enabled: Boolean = true,
     val target: OperationTarget? = null,
     val prompt: String,
-    val url: String
+    val reason: String = "",
+    val url: String = ""
 ) : EditOperation
 
 @Serializable data class ColorGrade(val exposure: Float = 0f, val temperature: Float = 0f, val contrast: Float = 1f, val saturation: Float = 1f, val highlights: Float = 0f, val shadows: Float = 0f, val skinProtection: Float = .8f) {

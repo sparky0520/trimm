@@ -349,8 +349,27 @@ ${JSON.stringify(transcript)}
         // Strip the propose_ prefix for the client operation name
         const operationName = tc.name.startsWith('propose_') ? tc.name.replace('propose_', '') : tc.name;
         // Unwrap the proposal envelope to provide flattened attributes with a 'type' discriminator
-        const payload = tc.args.operation || tc.args;
-        return { type: operationName, ...payload };
+        let payload = tc.args.operation || tc.args;
+        
+        let target = undefined;
+        if (payload.sourceId !== undefined && payload.startMs !== undefined && payload.endMs !== undefined) {
+          target = { sourceId: payload.sourceId, startMs: payload.startMs, endMs: payload.endMs };
+          const { sourceId, startMs, endMs, ...rest } = payload;
+          payload = rest;
+        }
+
+        if (operationName === 'set_dialogue_loudness') {
+          return { type: 'set_audio_levels', dialogueLufs: payload.targetLufs, reason: payload.reason, target };
+        }
+        if (operationName === 'set_music_ducking') {
+          return { type: 'set_audio_levels', musicDuckDb: payload.duckDb, attackMs: payload.attackMs, releaseMs: payload.releaseMs, reason: payload.reason, target };
+        }
+        if (operationName.startsWith('adjust_')) {
+          const param = operationName.replace('adjust_', '');
+          return { type: 'set_color_grade', parameter: param, value: payload.value, reason: payload.reason, target };
+        }
+
+        return { type: operationName, target, ...payload };
       })
     };
   };
