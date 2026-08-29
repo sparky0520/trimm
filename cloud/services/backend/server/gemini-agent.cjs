@@ -302,7 +302,7 @@ Return ONLY a JSON blueprint matching the schema.`;
     const systemPolicy = `You are a specialized Worker Agent for a video editor.
 Your job is to execute the user's specific editing intent by calling the appropriate tool(s).
 DO NOT use the ask_clarification tool.
-If you cannot execute the task, you MUST call the finish_without_proposal tool with a reason. Do not just reply with text.
+If you decide no edits are needed, or if you cannot execute the task, you MUST call the finish_without_proposal tool and thoroughly explain WHY in the reason field (e.g., "I found a 2-second pause at 0:45, but it felt like a natural dramatic pause, so I left it"). Do not just reply with text.
 
 Available Sources:
 ${JSON.stringify(sources)}

@@ -114,11 +114,23 @@ fun sourceTranscript(words: List<TranscriptWord>, sources: List<SourceMedia>): L
     val result = mutableListOf<Layer2TranscriptWord>()
     sources.forEachIndexed { index, source ->
         val sourceEnd = offset + source.durationMs
+        var lastWordEndMs = offset
+        val sourceId = "${source.fingerprint}-$index"
         words.filter { it.text.isNotBlank() && it.range.startMs in offset until sourceEnd }.forEach { word ->
+            val startMs = word.range.startMs
+            if (startMs - lastWordEndMs > 1000L) {
+                val gapSecs = String.format(java.util.Locale.US, "%.1f", (startMs - lastWordEndMs) / 1000f)
+                result += Layer2TranscriptWord(sourceId, "[SILENCE: $gapSecs seconds]", lastWordEndMs - offset, startMs - offset, 1.0f, null)
+            }
             result += Layer2TranscriptWord(
-                "${source.fingerprint}-$index", word.text, word.range.startMs - offset, word.range.endMs.coerceAtMost(sourceEnd) - offset,
+                sourceId, word.text, startMs - offset, word.range.endMs.coerceAtMost(sourceEnd) - offset,
                 word.confidence, word.speakerId
             )
+            lastWordEndMs = word.range.endMs.coerceAtLeast(lastWordEndMs)
+        }
+        if (sourceEnd - lastWordEndMs > 1000L) {
+            val gapSecs = String.format(java.util.Locale.US, "%.1f", (sourceEnd - lastWordEndMs) / 1000f)
+            result += Layer2TranscriptWord(sourceId, "[SILENCE: $gapSecs seconds]", lastWordEndMs - offset, sourceEnd - offset, 1.0f, null)
         }
         offset = sourceEnd
     }
@@ -318,10 +330,12 @@ class AgentRunCoordinator(
         tasks.forEachIndexed { index, task ->
             onProgress("agent-task: ${index + 1} of ${tasks.size}: ${task.description}", (index * 100) / tasks.size)
             var taskAttempt = 0
+            var currentIntent = task.description
+            var semanticRetry = false
             while (taskAttempt < 3) {
                 try {
                     var currentTaskRequest = request.copy(
-                        intent = task.description,
+                        intent = currentIntent,
                         existingOperations = existingOperations
                     )
                     var outcome = gateway.executeStateless(currentTaskRequest)
@@ -354,7 +368,23 @@ class AgentRunCoordinator(
                             }
                             json.encodeToJsonElement(EditOperation.serializer(), op).jsonObject
                         } ?: emptyList()
+                        
+                        if (newOps.isEmpty() && !semanticRetry && task.description.contains(Regex("(silence|dead space|pause|gap|quiet)", RegexOption.IGNORE_CASE))) {
+                            val silenceRegex = Regex("\\[SILENCE: (\\d+\\.\\d+) seconds\\]")
+                            val hasLongSilence = request.transcript.any { word ->
+                                val match = silenceRegex.matchEntire(word.text)
+                                match != null && match.groupValues[1].toFloat() >= 2.0f
+                            }
+                            if (hasLongSilence) {
+                                semanticRetry = true
+                                currentIntent = task.description + "\n\nNote: The user explicitly requested removing dead space, and there is a pause of >= 2.0 seconds in the transcript. Are you absolutely sure no dead space should be removed? If so, explain why using finish_without_proposal."
+                                throw Exception("Semantic retry: dead space potentially missed")
+                            }
+                        }
+                        
                         existingOperations = existingOperations + newOps
+                        
+                        val msg = if (newOps.isEmpty()) "Completed task: ${task.description} (No edits needed)" else "Completed task: ${task.description}"
                         
                         snapshot = snapshot.copy(
                             status = if (index == tasks.size - 1) AgentRunStatus.PROPOSAL_READY else AgentRunStatus.PARTIAL,
@@ -367,7 +397,7 @@ class AgentRunCoordinator(
                             events = snapshot.events + AgentActivityEvent(
                                 snapshot.events.size + 1,
                                 "partial",
-                                "Completed task: ${task.description}",
+                                msg,
                                 java.time.Instant.now().toString()
                             )
                         )
