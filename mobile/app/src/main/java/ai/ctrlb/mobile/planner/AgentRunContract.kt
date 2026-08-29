@@ -152,7 +152,7 @@ data class Layer2ContractVersions(
     val editPrograms: List<Int> = listOf(2)
 )
 
-@Serializable data class AgentPlanRequest(val prompt: String)
+@Serializable data class AgentPlanRequest(val prompt: String, val existingOperations: List<JsonObject> = emptyList())
 @Serializable data class AgentTask(val id: String, val description: String, val dependsOn: List<String> = emptyList())
 @Serializable data class AgentPlanResponse(
     val tasks: List<AgentTask>? = null,
@@ -273,7 +273,7 @@ class AgentRunCoordinator(
         var planAttempt = 0
         while (planAttempt < 3) {
             try {
-                planResponse = gateway.plan(AgentPlanRequest(request.intent))
+                planResponse = gateway.plan(AgentPlanRequest(request.intent, request.existingOperations))
                 break
             } catch (e: Exception) {
                 planAttempt++
@@ -382,7 +382,9 @@ class AgentRunCoordinator(
                             }
                         }
                         
-                        existingOperations = existingOperations + newOps
+                        val newOpIds = newOps.mapNotNull { it["id"]?.jsonPrimitive?.content }.toSet()
+                        val filteredExisting = existingOperations.filter { it["id"]?.jsonPrimitive?.content !in newOpIds }
+                        existingOperations = filteredExisting + newOps
                         
                         val msg = if (newOps.isEmpty()) "Completed task: ${task.description} (No edits needed)" else "Completed task: ${task.description}"
                         
