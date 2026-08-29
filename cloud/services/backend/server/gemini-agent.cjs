@@ -305,6 +305,12 @@ DO NOT use the ask_clarification tool.
 
 Available Sources:
 ${JSON.stringify(sources)}
+
+Existing Operations (current project state):
+${JSON.stringify(existingOperations)}
+
+Transcript Data (use this to detect dead space, silences, and timings):
+${JSON.stringify(transcript)}
 `;
 
     const contents = `Task Intent: ${intent}`;
