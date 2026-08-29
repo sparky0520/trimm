@@ -54,7 +54,7 @@ const PROPOSE_DIALOGUE_LOUDNESS_TOOL = operationTool(
   'propose_set_dialogue_loudness',
   'Set the dialogue loudness target for one exact source interval.',
   ['sourceId', 'startMs', 'endMs', 'targetLufs', 'reason'], {
-  ...targetRangeProperties, targetLufs: { type: 'number' },
+  ...targetRangeProperties, targetLufs: { type: 'number', minimum: -24, maximum: -12 },
 },
 );
 const PROPOSE_MUSIC_DUCKING_TOOL = operationTool(
@@ -62,9 +62,9 @@ const PROPOSE_MUSIC_DUCKING_TOOL = operationTool(
   'Duck background music by an exact amount during one exact project interval.',
   ['sourceId', 'startMs', 'endMs', 'duckDb', 'attackMs', 'releaseMs', 'reason'], {
   ...targetRangeProperties,
-  duckDb: { type: 'number' },
-  attackMs: { type: 'integer' },
-  releaseMs: { type: 'integer' },
+  duckDb: { type: 'number', minimum: -18, maximum: -3 },
+  attackMs: { type: 'integer', minimum: 0, maximum: 2000 },
+  releaseMs: { type: 'integer', minimum: 0, maximum: 5000 },
 },
 );
 

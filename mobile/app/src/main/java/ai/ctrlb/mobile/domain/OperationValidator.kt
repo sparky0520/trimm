@@ -87,8 +87,8 @@ object OperationValidator {
 
             is AddCaptions -> { require(op.cues.isNotEmpty()); op.cues.forEach { require(it.range.endMs <= project.durationMs); require(it.text.isNotBlank() && it.text.length <= 120) } }
             is AddTextOverlay -> { require(op.text.isNotBlank()); validateTarget(project, op.target) }
-            is AddBgm -> { require(op.url.isNotBlank()) }
-            is AddSfx -> { require(op.url.isNotBlank()); validateTarget(project, op.target) }
+            is AddBgm -> { require(op.prompt.isNotBlank()) }
+            is AddSfx -> { require(op.prompt.isNotBlank()); validateTarget(project, op.target) }
             is AddSectionTransition -> { require(op.preset.isNotBlank()); validateTarget(project, op.target) }
         } }
         return resolved
