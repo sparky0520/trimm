@@ -912,7 +912,7 @@ private fun reviewPercent(value: Float) = "${(value * 100).toInt()}%"
     AssistantChatBubble(accent = Coral) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Execution Plan", color = CreamRaised, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            plan.tasks.forEach { task ->
+            plan.tasks?.forEach { task ->
                 val succeeded = run?.events?.any { it.message == "Completed task: ${task.description}" } == true
                 val failed = run?.events?.any { it.message.startsWith("Task failed: ${task.description}") } == true
                 

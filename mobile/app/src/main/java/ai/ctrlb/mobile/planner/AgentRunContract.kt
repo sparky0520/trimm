@@ -156,7 +156,10 @@ data class RecoverAgentRunRequest(val action: String, val clarification: String?
 
 @Serializable data class AgentPlanRequest(val prompt: String)
 @Serializable data class AgentTask(val id: String, val description: String, val dependsOn: List<String> = emptyList())
-@Serializable data class AgentPlanResponse(val tasks: List<AgentTask>)
+@Serializable data class AgentPlanResponse(
+    val tasks: List<AgentTask>? = null,
+    val clarification: ClarificationDecision? = null
+)
 
 interface AgentRunGateway {
     suspend fun plan(request: AgentPlanRequest): AgentPlanResponse = error("Planning is not implemented by this gateway.")
@@ -277,6 +280,19 @@ class AgentRunCoordinator(
                 kotlinx.coroutines.delay(2000L * planAttempt)
             }
         }
+        if (planResponse?.clarification != null) {
+            val snapshot = PersistedAgentRun(
+                runId = java.util.UUID.randomUUID().toString(),
+                projectId = request.projectId,
+                projectRevision = request.projectRevision,
+                status = AgentRunStatus.WAITING_FOR_USER,
+                events = listOf(AgentActivityEvent(1, "clarification", "Agent requested clarification", java.time.Instant.now().toString())),
+                decision = json.encodeToJsonElement(ClarificationDecision.serializer(), planResponse!!.clarification!!).jsonObject
+            )
+            onPersist(snapshot, planResponse)
+            return snapshot
+        }
+
         var tasks = planResponse?.tasks ?: emptyList()
         if (tasks.isEmpty()) {
             tasks = listOf(AgentTask("Execute prompt", request.intent, emptyList()))

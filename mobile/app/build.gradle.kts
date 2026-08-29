@@ -32,7 +32,7 @@ android {
             .orElse(rootLocalEnv["TRIMM_BACKEND_URL"] ?: "")
             .get().trimEnd('/')
         val plannerUrl = providers.gradleProperty("TRIMM_PLANNER_URL").orElse(
-            backendUrl.takeIf { it.isNotEmpty() }?.let { "$it/v1/mobile/plan" } ?: ""
+            backendUrl.takeIf { it.isNotEmpty() }?.let { "$it/v1" } ?: ""
         ).get()
 
         val transcriptionUrl = providers.gradleProperty("TRIMM_TRANSCRIPTION_URL").orElse(

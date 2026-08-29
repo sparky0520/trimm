@@ -2,6 +2,7 @@
 
 const { GoogleGenAI } = require('@google/genai');
 const { geminiUsage } = require('./model-usage.cjs');
+const { AGENT_TOOLS } = require('./agent-decision-schema.cjs');
 
 function createGeminiDecisionProvider({
   apiKey = process.env.GEMINI_API_KEY,
@@ -28,6 +29,7 @@ function createGeminiDecisionProvider({
         temperature,
         maxOutputTokens: 4096,
         ...(cachedContent ? { cachedContent } : {}),
+        ...(tools ? { tools: [{ functionDeclarations: JSON.parse(JSON.stringify(AGENT_TOOLS)).map(t => ({ ...t, parametersJsonSchema: t.parameters, parameters: undefined })) }] } : {}),
       },
     };
 
@@ -233,6 +235,7 @@ Return ONLY a JSON blueprint matching the schema.`;
     const systemPolicy = `You are the Trimm Router Agent. Your job is to break down a complex video editing request into a sequence of simpler tasks.
 Each task must be a natural language prompt that can be independently executed by a Worker Agent.
 Use the 'dependsOn' field to enforce sequential execution if a task relies on the completion of another task (e.g. adding captions must happen AFTER dead space is removed, since removing space changes timing). If tasks don't depend on each other, they can run in parallel (empty dependsOn).
+If the request is too vague or ambiguous to confidently break down into tasks, you MUST return a clarification object instead of tasks to ask the user to choose a direction.
 
 Return ONLY a JSON blueprint matching the schema.`;
 
@@ -254,8 +257,29 @@ Return ONLY a JSON blueprint matching the schema.`;
                   dependsOn: { type: 'array', items: { type: 'string' }, description: 'List of task ids that must finish before this one starts' }
                 }, required: ['id', 'description', 'dependsOn']
               }
+            },
+            clarification: {
+              type: 'object', properties: {
+                type: { type: 'string' },
+                questions: {
+                  type: 'array', items: {
+                    type: 'object', properties: {
+                      id: { type: 'string' },
+                      prompt: { type: 'string' },
+                      options: {
+                        type: 'array', items: {
+                          type: 'object', properties: {
+                            id: { type: 'string' }, label: { type: 'string' }, description: { type: 'string' }
+                          }, required: ['id', 'label', 'description']
+                        }
+                      },
+                      recommendedOptionId: { type: 'string' }
+                    }, required: ['id', 'prompt', 'options']
+                  }
+                }
+              }, required: ['type', 'questions']
             }
-          }, required: ['tasks']
+          }
         }
       });
 
@@ -274,7 +298,40 @@ Return ONLY a JSON blueprint matching the schema.`;
     }
   };
 
-  return { generateTextOverlayConfig, generateTransitionConfig, generatePlan };
+  const executeTask = async ({ intent, sources = [], transcript = [], existingOperations = [] }) => {
+    const systemPolicy = `You are a specialized Worker Agent for a video editor.
+Your job is to execute the user's specific editing intent by calling the appropriate tool(s).
+DO NOT use the ask_clarification tool.
+
+Available Sources:
+${JSON.stringify(sources)}
+`;
+
+    const contents = `Task Intent: ${intent}`;
+
+    const response = await generate({
+      systemPolicy,
+      contents,
+      temperature: 0.1,
+      purpose: 'execution',
+      tools: true,
+    });
+
+    if (!response.toolCalls || response.toolCalls.length === 0) {
+      throw Object.assign(new Error("Worker agent did not return any operations."), { code: 'worker_execution_error' });
+    }
+
+    return {
+      type: "edit_program",
+      operations: response.toolCalls.map(tc => {
+        // Strip the propose_ prefix for the client operation name
+        const operationName = tc.name.startsWith('propose_') ? tc.name.replace('propose_', '') : tc.name;
+        return { name: operationName, args: tc.args };
+      })
+    };
+  };
+
+  return { generateTextOverlayConfig, generateTransitionConfig, generatePlan, executeTask };
 }
 
 module.exports = { createGeminiDecisionProvider };

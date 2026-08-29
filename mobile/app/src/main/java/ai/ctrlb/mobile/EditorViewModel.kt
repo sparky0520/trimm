@@ -497,6 +497,22 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
+
+    fun answerClarification(turnId: String, optionId: String, label: String) {
+        val project = mutable.value.project ?: return
+        val turn = project.analysis.revisionConversation.firstOrNull { it.id == turnId } ?: return
+        val updatedProject = project.copy(
+            analysis = project.analysis.copy(
+                revisionConversation = project.analysis.revisionConversation.map {
+                    if (it.id == turnId) it.copy(response = "Choice: $label", isPending = false, isError = false) else it
+                }
+            )
+        )
+        viewModelScope.launch { store.save(updatedProject) }
+        mutable.value = mutable.value.copy(project = updatedProject)
+        reviseStory("${turn.request}\n\nDirection chosen: $label")
+    }
+
     fun recordCreatorPreference(kind: CreatorPreferenceKind, value: String) {
         val current = mutable.value
         val profile = (current.project?.creatorPreferences ?: current.creatorPreferences)

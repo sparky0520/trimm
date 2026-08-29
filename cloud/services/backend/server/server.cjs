@@ -53,7 +53,7 @@ function policyFor(request, pathname) {
     resourceType: 'derivative_job',
   };
   if (pathname.startsWith('/v1/transcribe')) return { scope: 'transcribe:create', action: request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'update' : 'create', resourceType: 'transcription' };
-  if (pathname.startsWith('/v1/audio') || pathname === '/v1/agent/plan') {
+  if (pathname.startsWith('/v1/audio') || pathname === '/v1/agent/plan' || pathname === '/v1/agent/execute') {
     return { scope: 'plan:create', action: 'create', resourceType: 'plan' };
   }
   return null;
@@ -256,14 +256,29 @@ const server = http.createServer(async (request, response) => {
 
   if (request.method === 'POST' && requestUrl.pathname === '/v1/agent/plan') {
     try {
-      const { prompt } = await collect(request);
-      if (!prompt) throw Object.assign(new Error('Missing prompt'), { status: 400 });
+      const body = await collect(request, 1024 * 1024);
+      const { prompt } = JSON.parse(body.toString());
       return json(response, 200, await agentDecisionProvider.generatePlan({ prompt }));
     } catch (error) {
       console.error('[agent-plan] request failed', { message: error?.message, status: error?.status, code: error?.code });
-      return json(response, Number.isInteger(error?.status) ? error.status : 502, {
-        error: error?.message || 'Agent plan failed',
+      return json(response, Number.isInteger(error?.status) ? error.status : 500, {
+        error: error?.message || 'Failed to generate plan.',
         code: error?.code || 'agent_plan_failed',
+        requestId,
+      });
+    }
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/v1/agent/execute') {
+    try {
+      const body = await collect(request, 5 * 1024 * 1024);
+      const payload = JSON.parse(body.toString());
+      return json(response, 200, await agentDecisionProvider.executeTask(payload));
+    } catch (error) {
+      console.error('[agent-execute] request failed', { message: error?.message, status: error?.status, code: error?.code });
+      return json(response, Number.isInteger(error?.status) ? error.status : 500, {
+        error: error?.message || 'Failed to execute task.',
+        code: error?.code || 'agent_execute_failed',
         requestId,
       });
     }
