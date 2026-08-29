@@ -119,13 +119,16 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val customBlueprint: String = "{}"
 ) : EditOperation
 
+@Serializable data class TimingCue(val sourceTimeMs: Long, val description: String)
+
 @Serializable @SerialName("add_bgm") data class AddBgm(
     override val id: String = java.util.UUID.randomUUID().toString(),
     override val enabled: Boolean = true,
     val target: OperationTarget? = null,
     val prompt: String,
     val reason: String = "",
-    val url: String = ""
+    val url: String = "",
+    val timingCues: List<TimingCue> = emptyList()
 ) : EditOperation
 
 @Serializable @SerialName("add_sfx") data class AddSfx(
@@ -134,7 +137,8 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val target: OperationTarget? = null,
     val prompt: String,
     val reason: String = "",
-    val url: String = ""
+    val url: String = "",
+    val timingCues: List<TimingCue> = emptyList()
 ) : EditOperation
 
 @Serializable data class ColorGrade(val exposure: Float = 0f, val temperature: Float = 0f, val contrast: Float = 1f, val saturation: Float = 1f, val highlights: Float = 0f, val shadows: Float = 0f, val skinProtection: Float = .8f) {

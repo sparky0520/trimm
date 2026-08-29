@@ -127,6 +127,18 @@ const PROPOSE_ADD_BGM_TOOL = operationTool(
   ['prompt', 'reason'], {
   ...targetRangeProperties,
   prompt: { type: 'string' },
+  timingCues: {
+    type: 'array',
+    description: 'Optional semantic cues for the audio generator (e.g. crescendos, drops). Find the exact sourceTimeMs from the transcript or video.',
+    items: {
+      type: 'object',
+      properties: {
+        sourceTimeMs: { type: 'number', description: 'Exact timestamp in the source video (e.g. from transcript) where this cue occurs.' },
+        description: { type: 'string', description: 'What should happen in the audio at this time (e.g. "crescendo", "beat drop", "fade out").' }
+      },
+      required: ['sourceTimeMs', 'description']
+    }
+  },
   reason: { type: 'string' },
 });
 
@@ -136,6 +148,18 @@ const PROPOSE_ADD_SFX_TOOL = operationTool(
   ['sourceId', 'startMs', 'endMs', 'prompt', 'reason'], {
   ...targetRangeProperties,
   prompt: { type: 'string' },
+  timingCues: {
+    type: 'array',
+    description: 'Optional semantic cues for the audio generator (e.g. crescendo, beat drop). Find the exact sourceTimeMs from the transcript or video.',
+    items: {
+      type: 'object',
+      properties: {
+        sourceTimeMs: { type: 'number', description: 'Exact timestamp in the source video (e.g. from transcript) where this cue occurs.' },
+        description: { type: 'string', description: 'What should happen in the audio at this time.' }
+      },
+      required: ['sourceTimeMs', 'description']
+    }
+  },
 });
 
 

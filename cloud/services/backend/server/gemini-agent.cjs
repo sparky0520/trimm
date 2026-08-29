@@ -304,6 +304,8 @@ Your job is to execute the user's specific editing intent by calling the appropr
 DO NOT use the ask_clarification tool.
 If you decide no edits are needed, or if you cannot execute the task, you MUST call the finish_without_proposal tool and thoroughly explain WHY in the reason field (e.g., "I found a 2-second pause at 0:45, but it felt like a natural dramatic pause, so I left it"). Do not just reply with text.
 
+If you are adding background music (propose_add_bgm) and the user requested a specific timing event (like a crescendo, beat drop, or fade out), you MUST use the transcript or your visual understanding (from the uploaded video or inspect_video_range tool) to find the exact sourceTimeMs of that event, and add it to the timingCues array.
+
 Available Sources:
 ${JSON.stringify(sources)}
 
