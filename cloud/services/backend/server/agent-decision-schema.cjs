@@ -1,49 +1,6 @@
 'use strict';
 
-const observationSchema = {
-  type: 'object', additionalProperties: false,
-  required: ['id', 'sourceId', 'startMs', 'endMs', 'description', 'confidence', 'resolution'],
-  properties: {
-    id: { type: 'string' },
-    sourceId: { type: 'string' },
-    startMs: { type: 'integer' },
-    endMs: { type: 'integer' },
-    description: { type: 'string' },
-    confidence: { type: 'number' },
-    resolution: { type: 'string', enum: ['LOW', 'HIGH'] },
-  },
-};
 
-
-
-
-const proposedObservation = {
-  type: 'object', additionalProperties: false,
-  required: ['id', 'sourceId', 'startMs', 'endMs', 'description', 'confidence', 'resolution'],
-  properties: observationSchema.properties,
-};
-
-const proposalEnvelope = (operation) => ({
-  type: 'object', additionalProperties: false,
-  required: ['expectedRevision', 'summary', 'operation', 'observations'],
-  properties: {
-    expectedRevision: { type: 'integer' },
-    summary: { type: 'string' },
-    operation,
-    observations: { type: 'array', items: proposedObservation },
-  },
-});
-
-const range = {
-  type: 'object', additionalProperties: false,
-  required: ['sourceId', 'startMs', 'endMs', 'evidenceIds'],
-  properties: {
-    sourceId: { type: 'string' },
-    startMs: { type: 'integer' },
-    endMs: { type: 'integer' },
-    evidenceIds: { type: 'array', items: { type: 'string' } },
-  },
-};
 
 const targetRangeProperties = {
   sourceId: { type: 'string' },
@@ -54,38 +11,42 @@ const targetRangeProperties = {
 
 const PROPOSE_REMOVE_RANGES_TOOL = Object.freeze({
   name: 'propose_remove_ranges',
-  description: `Propose removal of specific time ranges (such as speech fumbles, awkward silences, retakes, or unneeded content). Every range must be supported by supplied evidence artifacts. This tool constructs a proposal draft only; it never edits the project directly.`,
-  parameters: proposalEnvelope({
+  description: `Propose removal of specific time ranges (such as speech fumbles, awkward silences, retakes, or unneeded content). Determine ranges based on the provided transcript timings.`,
+  parameters: {
     type: 'object', additionalProperties: false,
-    required: ['id', 'enabled', 'confidence', 'evidenceIds', 'ranges', 'reason'],
+    required: ['id', 'enabled', 'confidence', 'ranges', 'reason'],
     properties: {
       id: { type: 'string' }, enabled: { type: 'boolean' },
       confidence: { type: 'number' },
-      evidenceIds: { type: 'array', items: { type: 'string' }, description: 'MUST exactly match the id of an observation you provide in the observations array.' },
-      ranges: { type: 'array', items: range },
+      ranges: {
+        type: 'array',
+        items: {
+          type: 'object', additionalProperties: false,
+          required: ['startMs', 'endMs'],
+          properties: {
+            startMs: { type: 'integer' },
+            endMs: { type: 'integer' },
+          }
+        }
+      },
       reason: { type: 'string' },
       pacing: { type: 'string' },
     },
-  }),
+  },
 });
-
-
-
-
 
 const operationTool = (name, description, required, properties) => Object.freeze({
   name,
-  description: `${description} This tool constructs a draft operation only; it never edits the project.`,
-  parameters: proposalEnvelope({
+  description,
+  parameters: {
     type: 'object', additionalProperties: false,
     required: ['id', 'enabled', 'confidence', ...required],
     properties: {
       id: { type: 'string' }, enabled: { type: 'boolean' },
       confidence: { type: 'number' },
-      evidenceIds: { type: 'array', items: { type: 'string' }, description: 'MUST exactly match the id of an observation you provide in the observations array, if applicable.' },
       ...properties,
     },
-  }),
+  },
 });
 
 
