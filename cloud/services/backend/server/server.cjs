@@ -272,7 +272,51 @@ const server = http.createServer(async (request, response) => {
   if (request.method === 'POST' && requestUrl.pathname === '/v1/agent/execute') {
     try {
       const payload = await collect(request, 5 * 1024 * 1024);
-      return json(response, 200, await agentDecisionProvider.executeTask(payload));
+      
+      if (payload.uploadInitialVideoContext === true && (!payload.evidenceJobIds || payload.evidenceJobIds.length === 0) && payload.sources && payload.sources.length > 0) {
+        const source = payload.sources[0];
+        const durationMs = Math.min(15000, source.durationMs);
+        const authPayload = {
+          projectId: payload.projectId,
+          deviceSessionId: payload.deviceSessionId,
+          purpose: 'video-inspection',
+          type: 'video',
+          acceptedFormat: 'video/mp4',
+          maximumBytes: 25 * 1024 * 1024,
+          maximumDurationMs: 15000,
+          maximumCount: 1,
+          estimatedCostMicros: 0,
+          mediaMode: 'video_analysis',
+          consent: { mode: 'video_analysis', disclosureVersion: 'v1' },
+          providerDisclosures: [ { provider: 'google-gemini', purpose: 'agent-processing', dataClasses: ['video'] } ],
+          sourceFingerprint: source.fingerprint,
+          timelineReferences: [ { sourceId: source.id, startMs: 0, endMs: durationMs } ],
+          retentionMs: 15 * 60 * 1000,
+          resolution: 'LOW',
+          idempotencyKey: `init-ctx-${payload.projectRevision}-${source.id}`
+        };
+        const authorized = await derivativeJobs.authorize(principal, authPayload);
+        return json(response, 200, {
+          type: 'tool_request',
+          tool: 'inspect_video_range',
+          jobs: [ authorized.job ]
+        });
+      }
+
+      let videoFiles = [];
+      if (payload.uploadInitialVideoContext === true && payload.evidenceJobIds && payload.evidenceJobIds.length > 0) {
+        for (const jobId of payload.evidenceJobIds) {
+          const job = derivativeJobs.jobs ? derivativeJobs.jobs.get(jobId) : null;
+          if (job && job.status === 'completed' && job.userId === principal.id) {
+            const localPath = derivativeJobs.mediaPath ? derivativeJobs.mediaPath(job.id) : null;
+            if (localPath && require('fs').existsSync(localPath)) {
+              videoFiles.push({ path: localPath, mimeType: job.acceptedFormat });
+            }
+          }
+        }
+      }
+
+      return json(response, 200, await agentDecisionProvider.executeTask({ ...payload, videoFiles }));
     } catch (error) {
       console.error('[agent-execute] request failed', { message: error?.message, status: error?.status, code: error?.code });
       return json(response, Number.isInteger(error?.status) ? error.status : 500, {

@@ -365,7 +365,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 existingOperations = project.operations.map { operation ->
                     val json = Json { encodeDefaults = true }
                     json.encodeToJsonElement(EditOperation.serializer(), operation).jsonObject
-                }
+                },
+                uploadInitialVideoContext = false
             )
             runCatching {
                 coordinator.orchestrateStateless(
@@ -433,7 +434,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     "${source.fingerprint}-$index", source.fingerprint, source.durationMs, source.width, source.height, source.hasAudio
                 ) },
                 transcript = sourceTranscript(project.analysis.words, project.orderedSources),
-                existingOperations = existingOperations
+                existingOperations = existingOperations,
+                uploadInitialVideoContext = false
             )
             runCatching {
                 coordinator.orchestrateStateless(

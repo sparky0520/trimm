@@ -104,6 +104,7 @@ data class AgentRunRequest(
     val transcript: List<Layer2TranscriptWord> = emptyList(),
     val evidenceJobIds: List<String> = emptyList(),
     val existingOperations: List<JsonObject> = emptyList(),
+    val uploadInitialVideoContext: Boolean = false,
     val budgets: Layer2Budgets = Layer2Budgets(),
     val mediaConsent: Layer2MediaConsent = Layer2MediaConsent(),
     val supportedContractVersions: Layer2ContractVersions = Layer2ContractVersions()

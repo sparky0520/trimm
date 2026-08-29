@@ -139,7 +139,8 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                                 source.width, source.height, source.hasAudio
                             )
                         },
-                        transcript = sourceTranscript(analyzed.analysis.words, project.orderedSources)
+                        transcript = sourceTranscript(analyzed.analysis.words, project.orderedSources),
+                        uploadInitialVideoContext = false
                     ),
                     projectDurationMs = project.durationMs,
                     onProgress = { stage, percent ->

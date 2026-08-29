@@ -298,7 +298,7 @@ Return ONLY a JSON blueprint matching the schema.`;
     }
   };
 
-  const executeTask = async ({ intent, sources = [], transcript = [], existingOperations = [] }) => {
+  const executeTask = async ({ intent, sources = [], transcript = [], existingOperations = [], videoFiles = [] }) => {
     const systemPolicy = `You are a specialized Worker Agent for a video editor.
 Your job is to execute the user's specific editing intent by calling the appropriate tool(s).
 DO NOT use the ask_clarification tool.
@@ -316,7 +316,23 @@ Transcript Data (use this to detect dead space, silences, and timings):
 ${JSON.stringify(transcript)}
 `;
 
-    const contents = `Task Intent: ${intent}`;
+    let parts = [{ text: `Task Intent: ${intent}` }];
+    
+    if (videoFiles && videoFiles.length > 0) {
+      const fs = require('fs');
+      for (const file of videoFiles) {
+        if (file.path && fs.existsSync(file.path)) {
+          parts.unshift({
+            inlineData: {
+              data: fs.readFileSync(file.path).toString('base64'),
+              mimeType: file.mimeType || 'video/mp4'
+            }
+          });
+        }
+      }
+    }
+
+    const contents = [{ role: 'user', parts }];
 
     const response = await generate({
       systemPolicy,
