@@ -302,6 +302,7 @@ Return ONLY a JSON blueprint matching the schema.`;
     const systemPolicy = `You are a specialized Worker Agent for a video editor.
 Your job is to execute the user's specific editing intent by calling the appropriate tool(s).
 DO NOT use the ask_clarification tool.
+If you cannot execute the task, you MUST call the finish_without_proposal tool with a reason. Do not just reply with text.
 
 Available Sources:
 ${JSON.stringify(sources)}
@@ -324,6 +325,9 @@ ${JSON.stringify(transcript)}
     });
 
     if (!response.toolCalls || response.toolCalls.length === 0) {
+      if (response.rawText) {
+        return { type: "fallback", reason: response.rawText };
+      }
       throw Object.assign(new Error("Worker agent did not return any operations."), { code: 'worker_execution_error' });
     }
 
