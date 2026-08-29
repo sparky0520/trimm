@@ -141,6 +141,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                         },
                         transcript = sourceTranscript(analyzed.analysis.words, project.orderedSources)
                     ),
+                    projectDurationMs = project.durationMs,
                     onProgress = { stage, percent ->
                         progress(stage, percent)
                     },

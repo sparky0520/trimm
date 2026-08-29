@@ -150,6 +150,8 @@ data class Layer2ContractVersions(
 interface AgentRunGateway {
     suspend fun plan(request: AgentPlanRequest): AgentPlanResponse = error("Planning is not implemented by this gateway.")
     suspend fun executeStateless(request: AgentRunRequest): JsonObject = error("Stateless execution is not implemented by this gateway.")
+    suspend fun generateBgm(prompt: String, durationSecs: Float): String = error("BGM generation is not implemented by this gateway.")
+    suspend fun generateSfx(prompt: String): String = error("SFX generation is not implemented by this gateway.")
 }
 
 fun interface AgentEvidenceFulfiller {
@@ -251,6 +253,7 @@ class AgentRunCoordinator(
 
     suspend fun orchestrateStateless(
         request: AgentRunRequest,
+        projectDurationMs: Long,
         onProgress: suspend (String, Int) -> Unit,
         onPersist: suspend (PersistedAgentRun, AgentPlanResponse?) -> Unit
     ): PersistedAgentRun {
@@ -339,7 +342,18 @@ class AgentRunCoordinator(
 
                     // Once we have a final outcome for this task, append operations to our existing ones
                     if (outcome["type"]?.jsonPrimitive?.content == "edit_program") {
-                        val newOps = outcome["operations"]?.jsonArray?.map { it.jsonObject } ?: emptyList()
+                        val newOps = outcome["operations"]?.jsonArray?.map { element ->
+                            var op = json.decodeFromJsonElement(EditOperation.serializer(), element)
+                            if (op is ai.ctrlb.mobile.domain.AddBgm && op.url.isBlank()) {
+                                onProgress("Generating background music...", (index * 100) / tasks.size)
+                                val durationMs = if (op.target != null) (op.target.endMs - op.target.startMs) else projectDurationMs
+                                op = op.copy(url = gateway.generateBgm(op.prompt, durationMs / 1000f))
+                            } else if (op is ai.ctrlb.mobile.domain.AddSfx && op.url.isBlank()) {
+                                onProgress("Generating sound effect...", (index * 100) / tasks.size)
+                                op = op.copy(url = gateway.generateSfx(op.prompt))
+                            }
+                            json.encodeToJsonElement(EditOperation.serializer(), op).jsonObject
+                        } ?: emptyList()
                         existingOperations = existingOperations + newOps
                         
                         snapshot = snapshot.copy(
@@ -423,6 +437,23 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
         val endpoint = URI("${runsEndpoint.toString().trimEnd('/')}/agent/execute")
         val responseText = postRaw(endpoint, json.encodeToString(AgentRunRequest.serializer(), request))
         json.parseToJsonElement(responseText).jsonObject
+    }
+
+    @Serializable private data class BgmRequest(val prompt: String, val durationSecs: Float, val beats: List<Float> = emptyList())
+    @Serializable private data class BgmResponse(val url: String)
+    @Serializable private data class SfxRequest(val prompt: String)
+    @Serializable private data class SfxResponse(val url: String)
+
+    override suspend fun generateBgm(prompt: String, durationSecs: Float): String = withContext(Dispatchers.IO) {
+        val endpoint = URI("${runsEndpoint.toString().trimEnd('/')}/audio/generate-bgm")
+        val responseText = postRaw(endpoint, json.encodeToString(BgmRequest.serializer(), BgmRequest(prompt, durationSecs)))
+        json.decodeFromString(BgmResponse.serializer(), responseText).url
+    }
+
+    override suspend fun generateSfx(prompt: String): String = withContext(Dispatchers.IO) {
+        val endpoint = URI("${runsEndpoint.toString().trimEnd('/')}/audio/fetch-sfx")
+        val responseText = postRaw(endpoint, json.encodeToString(SfxRequest.serializer(), SfxRequest(prompt)))
+        json.decodeFromString(SfxResponse.serializer(), responseText).url
     }
 
     private suspend fun postRaw(endpoint: URI, body: String): String {

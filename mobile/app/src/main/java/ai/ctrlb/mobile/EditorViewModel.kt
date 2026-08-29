@@ -370,6 +370,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             runCatching {
                 coordinator.orchestrateStateless(
                     request = request,
+                    projectDurationMs = project.durationMs,
                     onProgress = { stage, percent ->
                         mutable.value = mutable.value.copy(jobMessage = processingMessage(stage, percent))
                     },
@@ -437,6 +438,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             runCatching {
                 coordinator.orchestrateStateless(
                     request = request,
+                    projectDurationMs = project.durationMs,
                     onProgress = { stage, percent ->
                         mutable.value = mutable.value.copy(jobMessage = processingMessage(stage, percent))
                     },

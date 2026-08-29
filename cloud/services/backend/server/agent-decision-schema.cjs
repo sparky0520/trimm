@@ -123,8 +123,9 @@ const PROPOSE_COLOR_TOOLS = [
 
 const PROPOSE_ADD_BGM_TOOL = operationTool(
   'propose_add_bgm',
-  'Generate and add background music to the entire video based on a descriptive prompt (e.g. "cyberpunk synthwave").',
+  'Generate and add background music to the entire video or a specific interval based on a descriptive prompt (e.g. "cyberpunk synthwave").',
   ['prompt', 'reason'], {
+  ...targetRangeProperties,
   prompt: { type: 'string' },
   reason: { type: 'string' },
 });

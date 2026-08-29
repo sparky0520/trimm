@@ -122,6 +122,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
 @Serializable @SerialName("add_bgm") data class AddBgm(
     override val id: String = java.util.UUID.randomUUID().toString(),
     override val enabled: Boolean = true,
+    val target: OperationTarget? = null,
     val prompt: String,
     val reason: String = "",
     val url: String = ""
