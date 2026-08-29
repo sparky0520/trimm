@@ -23,7 +23,12 @@ class DerivativeUploadClient(
             offset = 0L
         }
         file.inputStream().use { input ->
-            input.skipNBytes(offset)
+            var remaining = offset
+            while (remaining > 0) {
+                val skipped = input.skip(remaining)
+                if (skipped <= 0L) throw java.io.EOFException()
+                remaining -= skipped
+            }
             val buffer = ByteArray(4 * 1024 * 1024)
             while (offset < file.length()) {
                 val count = input.read(buffer)

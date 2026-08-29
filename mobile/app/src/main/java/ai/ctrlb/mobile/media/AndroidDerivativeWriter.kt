@@ -17,12 +17,16 @@ import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
+import androidx.media3.common.util.UnstableApi
+import androidx.annotation.OptIn
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+
+@OptIn(UnstableApi::class)
 
 class AndroidDerivativeWriter(private val context: Context) : DerivativeWriter {
     override suspend fun write(

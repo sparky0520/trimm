@@ -140,20 +140,6 @@ data class Layer2ContractVersions(
     val editPrograms: List<Int> = listOf(2)
 )
 
-@Serializable
-data class ToolArtifactResult(val toolCallId: String, val artifactId: String)
-
-@Serializable
-data class ContinueAgentRunRequest(
-    val toolArtifacts: List<ToolArtifactResult> = emptyList(),
-    val message: String? = null,
-    val projectRevision: Long? = null,
-    val existingOperations: List<JsonObject> = emptyList()
-)
-
-@Serializable
-data class RecoverAgentRunRequest(val action: String, val clarification: String? = null)
-
 @Serializable data class AgentPlanRequest(val prompt: String)
 @Serializable data class AgentTask(val id: String, val description: String, val dependsOn: List<String> = emptyList())
 @Serializable data class AgentPlanResponse(
@@ -528,12 +514,3 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
     val reused: Boolean,
     val toolCallId: String = id
 )
-@Serializable sealed interface Layer2Response
-@Serializable @SerialName("tool_request") data class Layer2EvidenceRequest(val tool: String, val jobs: List<AuthorizedEvidenceJob>) : Layer2Response
-@Serializable @SerialName("edit_program") data class Layer2EditProgram(
-    val expectedRevision: Long,
-    val summary: String,
-    val operations: List<JsonObject>
-) : Layer2Response
-@Serializable @SerialName("clarification") data class Layer2Clarification(val question: String, val options: List<String>) : Layer2Response
-@Serializable @SerialName("fallback") data class Layer2Fallback(val reason: String) : Layer2Response
