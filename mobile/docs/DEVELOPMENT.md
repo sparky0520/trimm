@@ -25,11 +25,7 @@ The accepted cloud versions are pinned in
 `app/src/test/resources/contracts/cloud-contract.lock.json`. Do not add a
 handwritten cloud field without a matching canonical cloud contract change.
 
-The active cloud-agent path uses `/v1/conversations`: the full transcript and
-the initial authorized video window go to Gemini, later media is prepared only
-for an `inspect_video_range` tool call, and ordinary chat messages resume the
-same conversation. Legacy Layer 1 data remains decodable for existing projects
-but is not generated for this path.
+The active cloud-agent path uses `/v1/mobile/plan`: the Android client statelessly requests a plan from the backend, and then executes tasks by repeatedly calling the stateless `/v1/agent/execute` endpoint. State and conversation history are managed locally on the device, rather than on the cloud. Legacy Layer 1 data remains decodable for existing projects but is not generated for this path.
 
 ## Device capability tiers
 
