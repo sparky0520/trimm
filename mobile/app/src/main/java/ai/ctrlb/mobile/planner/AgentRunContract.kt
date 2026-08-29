@@ -357,11 +357,17 @@ class AgentRunCoordinator(
 
                     // Once we have a final outcome for this task, append operations to our existing ones
                     if (outcome["type"]?.jsonPrimitive?.content == "edit_program") {
-                        val removals = existingOperations.mapNotNull { opElem ->
+                        val existingRemovals = existingOperations.mapNotNull { opElem ->
                             val decoded = json.decodeFromJsonElement(EditOperation.serializer(), opElem)
                             if (decoded is ai.ctrlb.mobile.domain.RemoveRanges) decoded.ranges else null
                         }.flatten()
-                        val mapper = ai.ctrlb.mobile.domain.TimelineMapper(removals)
+                        
+                        val newRemovals = outcome["operations"]?.jsonArray?.mapNotNull { element ->
+                            val decoded = json.decodeFromJsonElement(EditOperation.serializer(), element)
+                            if (decoded is ai.ctrlb.mobile.domain.RemoveRanges) decoded.ranges else null
+                        }?.flatten() ?: emptyList()
+
+                        val mapper = ai.ctrlb.mobile.domain.TimelineMapper(existingRemovals + newRemovals)
 
                         val newOps = outcome["operations"]?.jsonArray?.map { element ->
                             var op = json.decodeFromJsonElement(EditOperation.serializer(), element)
@@ -371,24 +377,15 @@ class AgentRunCoordinator(
                                 val bgmEndOutputMs = mapper.sourceToOutput(op.target?.endMs ?: projectDurationMs)
                                 val durationMs = bgmEndOutputMs - bgmStartOutputMs
                                 
-                                var finalPrompt = op.prompt
-                                if (op.timingCues.isNotEmpty()) {
-                                    val cueStrings = op.timingCues.map { cue ->
-                                        val cueOutputMs = mapper.sourceToOutput(cue.sourceTimeMs)
-                                        val relativeSecs = String.format(java.util.Locale.US, "%.1f", (cueOutputMs - bgmStartOutputMs) / 1000f)
-                                        "${cue.description} at ${relativeSecs}s"
-                                    }
-                                    finalPrompt += " [Timing Instructions: ${cueStrings.joinToString(", ")}]"
-                                }
-                                op = op.copy(url = gateway.generateBgm(finalPrompt, durationMs / 1000f))
+                                op = op.copy(url = gateway.generateBgm(op.prompt, durationMs / 1000f))
                             } else if (op is ai.ctrlb.mobile.domain.AddSfx && op.url.isBlank()) {
                                 onProgress("Generating sound effect...", (index * 100) / tasks.size)
+                                val sfxStartOutputMs = mapper.sourceToOutput(op.target?.startMs ?: 0L)
                                 var finalPrompt = op.prompt
                                 if (op.timingCues.isNotEmpty()) {
-                                    val bgmStartOutputMs = mapper.sourceToOutput(op.target?.startMs ?: 0L)
                                     val cueStrings = op.timingCues.map { cue ->
                                         val cueOutputMs = mapper.sourceToOutput(cue.sourceTimeMs)
-                                        val relativeSecs = String.format(java.util.Locale.US, "%.1f", (cueOutputMs - bgmStartOutputMs) / 1000f)
+                                        val relativeSecs = String.format(java.util.Locale.US, "%.1f", (cueOutputMs - sfxStartOutputMs) / 1000f)
                                         "${cue.description} at ${relativeSecs}s"
                                     }
                                     finalPrompt += " [Timing Instructions: ${cueStrings.joinToString(", ")}]"

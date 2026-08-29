@@ -127,8 +127,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val target: OperationTarget? = null,
     val prompt: String,
     val reason: String = "",
-    val url: String = "",
-    val timingCues: List<TimingCue> = emptyList()
+    val url: String = ""
 ) : EditOperation
 
 @Serializable @SerialName("add_sfx") data class AddSfx(

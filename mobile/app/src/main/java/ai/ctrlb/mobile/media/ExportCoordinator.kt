@@ -197,9 +197,22 @@ object ExportCoordinator {
             if (isPreview) {
                 val totalVideoDurationMs = timelineMapper.sourceToOutput(project.orderedSources.sumOf { it.durationMs })
                 val repeats = if (audioDurationMs > 0) {
-                    (totalVideoDurationMs / audioDurationMs).toInt() + 1
+                    Math.ceil(totalVideoDurationMs.toDouble() / audioDurationMs).toInt()
                 } else 1
-                val items = List(repeats) { edited }
+                val items = buildList {
+                    for (i in 0 until repeats) {
+                        if (i == repeats - 1) {
+                            val remainingMs = totalVideoDurationMs - (i * audioDurationMs)
+                            if (remainingMs > 0) {
+                                val clipping = MediaItem.ClippingConfiguration.Builder().setEndPositionMs(remainingMs).build()
+                                val lastItem = MediaItem.Builder().setUri(Uri.parse(bgm.url)).setClippingConfiguration(clipping).build()
+                                add(EditedMediaItem.Builder(lastItem).setDurationUs(remainingMs * 1000L).setEffects(Effects(effects, emptyList())).build())
+                            }
+                        } else {
+                            add(edited)
+                        }
+                    }
+                }
                 sequences += EditedMediaItemSequence.Builder(items).build()
             } else {
                 val builder = EditedMediaItemSequence.Builder(listOf(edited))
