@@ -324,9 +324,14 @@ ${JSON.stringify(transcript)}
       tools: true,
     });
 
+    const failure = response.toolCalls.find(tc => tc.name === 'finish_without_proposal');
+    if (failure) {
+      return { type: "edit_program", operations: [] };
+    }
+
     if (!response.toolCalls || response.toolCalls.length === 0) {
       if (response.rawText) {
-        return { type: "fallback", reason: response.rawText };
+        return { type: "edit_program", operations: [] };
       }
       throw Object.assign(new Error("Worker agent did not return any operations."), { code: 'worker_execution_error' });
     }
@@ -334,11 +339,6 @@ ${JSON.stringify(transcript)}
     const clarification = response.toolCalls.find(tc => tc.name === 'ask_clarification');
     if (clarification) {
       return { type: "clarification", questions: clarification.args.questions };
-    }
-
-    const failure = response.toolCalls.find(tc => tc.name === 'finish_without_proposal');
-    if (failure) {
-      return { type: "fallback", reason: failure.args.reason || "Task could not be completed." };
     }
 
     const validOperations = response.toolCalls.filter(tc => tc.name.startsWith('propose_') || !['ask_clarification', 'finalize_edit_program', 'finish_without_proposal', 'remove_draft_operation'].includes(tc.name));
