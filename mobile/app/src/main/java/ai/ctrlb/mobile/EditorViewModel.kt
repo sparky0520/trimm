@@ -184,22 +184,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             isProcessing = true,
         )
         viewModelScope.launch { 
-            var updatedProject = project
-            if (words.isNotEmpty()) {
-                try {
-                    val transcript = words.joinToString(" ") { it.text }
-                    val response = ai.ctrlb.mobile.network.ChatApiService.create().generateTitle(
-                        ai.ctrlb.mobile.network.ChatTitleRequest(transcript)
-                    )
-                    updatedProject = updatedProject.copy(title = response.title)
-                    if (mutable.value.project?.id == project.id) {
-                        mutable.value = mutable.value.copy(project = updatedProject)
-                    }
-                } catch (e: Exception) {
-                    // Fallback to "New Edit"
-                }
-            }
-            store.save(updatedProject) 
+            store.save(project) 
         }
         val request = OneTimeWorkRequestBuilder<AnalysisWorker>().setInputData(
             Data.Builder().putString("projectId", project.id).putString("prompt", brief).build()

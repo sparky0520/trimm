@@ -392,14 +392,7 @@ ${JSON.stringify(transcript)}
     };
   };
 
-  const generateTitle = async (transcript) => {
-    const systemPolicy = { role: 'system', parts: [{ text: "You generate very short, concise, and creative titles (max 6 words) for video editing sessions based on the transcript." }] };
-    const contents = [{ role: 'user', parts: [{ text: `Generate a short title for a video editing session with this transcript: ${transcript.substring(0, 5000)}` }] }];
-    const response = await generate({ systemPolicy, contents, temperature: 0.7, tools: false });
-    return response?.text?.trim().replace(/^["']|["']$/g, '') || "Video Edit";
-  };
-
-  return { generateTextOverlayConfig, generateTransitionConfig, generatePlan, executeTask, generateTitle };
+  return { generateTextOverlayConfig, generateTransitionConfig, generatePlan, executeTask };
 }
 
 module.exports = { createGeminiDecisionProvider };
