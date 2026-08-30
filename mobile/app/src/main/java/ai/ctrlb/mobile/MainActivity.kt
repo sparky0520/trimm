@@ -319,7 +319,7 @@ class MainActivity : ComponentActivity() {
         Box(Modifier.fillMaxSize().padding(12.dp)) {
             Column(Modifier.align(Alignment.Center).padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Image(
-                    painter = painterResource(id = R.mipmap.ic_launcher),
+                    painter = painterResource(id = R.drawable.trimm_launcher),
                     contentDescription = "Trimm Logo",
                     modifier = Modifier.size(72.dp)
                 )
