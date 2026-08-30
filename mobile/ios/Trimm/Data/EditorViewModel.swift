@@ -1,9 +1,11 @@
 import Foundation
 import Observation
+import AVFoundation
 
 @Observable
 public class EditorViewModel {
     public var state: EditorState = EditorState()
+    public var player: AVPlayer?
     
     public init() {
         // Load past chats on init if SwiftData is integrated
@@ -56,6 +58,8 @@ public class EditorViewModel {
         self.state.project = project
         
         Task {
+            await refreshPlayer(project: project)
+            
             // Simulate network delay
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             
@@ -63,6 +67,22 @@ public class EditorViewModel {
                 self.state.jobMessage = "Analysis complete"
                 self.state.isProcessing = false
             }
+        }
+    }
+    
+    private func refreshPlayer(project: MobileProject) async {
+        do {
+            let item = try await VideoProcessor.shared.createPreviewComposition(project: project)
+            await MainActor.run {
+                if let p = self.player {
+                    p.replaceCurrentItem(with: item)
+                } else {
+                    self.player = AVPlayer(playerItem: item)
+                }
+                self.player?.play()
+            }
+        } catch {
+            print("Failed to create preview composition: \(error)")
         }
     }
     

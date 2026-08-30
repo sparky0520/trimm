@@ -15,9 +15,12 @@ public struct EditorScreen: View {
             ZStack {
                 Color.black.ignoresSafeArea()
                 if let _ = viewModel.state.project?.source {
-                    // Placeholder for Video Player
-                    Text("Video Player Placeholder")
-                        .foregroundColor(.white)
+                    if let player = viewModel.player {
+                        VideoPlayer(player: player)
+                    } else {
+                        ProgressView("Loading Video...")
+                            .foregroundColor(.white)
+                    }
                 }
             }
             .frame(height: UIScreen.main.bounds.height * 0.4)
