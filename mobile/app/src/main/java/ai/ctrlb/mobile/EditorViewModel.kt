@@ -102,10 +102,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
             val reconnected = project.replaceSources(updatedSources)
-            mutable.value = EditorState(
+            mutable.value = mutable.value.copy(
                 project = reconnected,
-                creatorPreferences = mutable.value.creatorPreferences,
-                pastChats = mutable.value.pastChats
+                sources = reconnected.sources,
+                errorMessage = null,
+                jobMessage = null,
+                isProcessing = false
             )
         } catch (e: Exception) {
             mutable.value = mutable.value.copy(errorMessage = "Failed to load chat: ${e.message}")
