@@ -1,0 +1,19 @@
+name: Trimm
+options:
+  bundleIdPrefix: ai.ctrlb.mobile
+packages:
+  Supabase:
+    url: https://github.com/supabase-community/supabase-swift.git
+    from: 2.0.0
+targets:
+  Trimm:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources: [Trimm]
+    info:
+      path: Trimm/Info.plist
+      properties:
+        UILaunchScreen: {}
+    dependencies:
+      - package: Supabase
