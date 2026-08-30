@@ -10,3 +10,4 @@ DerivedData/
 
 # Custom Build Directory
 build/
+build_device/
