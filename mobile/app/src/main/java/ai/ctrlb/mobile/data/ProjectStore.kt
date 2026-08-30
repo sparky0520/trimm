@@ -33,6 +33,13 @@ class ProjectStore(context: Context) {
         }
     }
 
+    suspend fun listAll(): List<MobileProject> = withContext(Dispatchers.IO) {
+        val files = root.listFiles { _, name -> name.endsWith(".json") } ?: return@withContext emptyList()
+        files.sortedByDescending { it.lastModified() }.take(20).mapNotNull { file ->
+            runCatching { json.decodeFromString(MobileProject.serializer(), file.readText()) }.getOrNull()
+        }
+    }
+
     suspend fun saveCreatorPreferences(profile: CreatorPreferenceProfile) = withContext(Dispatchers.IO) {
         val temporary = File(creatorProfile.parentFile, "${creatorProfile.name}.partial")
         temporary.writeText(json.encodeToString(CreatorPreferenceProfile.serializer(), profile))

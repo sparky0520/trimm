@@ -15,6 +15,7 @@ import java.util.UUID
 
 @Serializable data class EditorialConversationTurn(
     val id: String = UUID.randomUUID().toString(),
+    val parentId: String? = null,
     val request: String,
     val response: String,
     val evidenceIds: List<String> = emptyList(),

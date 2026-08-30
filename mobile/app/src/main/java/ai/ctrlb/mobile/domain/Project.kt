@@ -161,8 +161,40 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val appliedEditCheckpoints: List<AppliedEditCheckpoint> = emptyList(),
     val settledConstraints: List<SettledEditorialConstraint> = emptyList(),
     val warnings: List<String> = emptyList(),
-    val completedAtEpochMs: Long? = null
-)
+    val completedAtEpochMs: Long? = null,
+    val activeTurnId: String? = null,
+    val activeCheckpointId: String? = null
+) {
+    val activeConversationPath: List<EditorialConversationTurn> get() {
+        val path = mutableListOf<EditorialConversationTurn>()
+        var currentId = activeTurnId ?: revisionConversation.lastOrNull()?.id
+        while (currentId != null) {
+            val turn = revisionConversation.firstOrNull { it.id == currentId }
+            if (turn != null) {
+                path.add(0, turn)
+                currentId = turn.parentId
+            } else {
+                break
+            }
+        }
+        return path
+    }
+    
+    val activeCheckpointPath: List<AppliedEditCheckpoint> get() {
+        val path = mutableListOf<AppliedEditCheckpoint>()
+        var currentId = activeCheckpointId ?: appliedEditCheckpoints.lastOrNull()?.id
+        while (currentId != null) {
+            val cp = appliedEditCheckpoints.firstOrNull { it.id == currentId }
+            if (cp != null) {
+                path.add(0, cp)
+                currentId = cp.parentId
+            } else {
+                break
+            }
+        }
+        return path
+    }
+}
 @Serializable data class EvidenceGraphReference(val sourceFingerprint: String, val schemaVersion: Int = 1, val relativeCachePath: String, val analyzerVersions: Map<String, String>, val partial: Boolean)
 @Serializable data class FumbleCandidate(
     val range: TimeRange,
@@ -179,6 +211,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
 )
 @Serializable data class AppliedEditCheckpoint(
     val id: String = UUID.randomUUID().toString(),
+    val parentId: String? = null,
     val summary: String,
     val changes: List<String>,
     val revisionBefore: Long,

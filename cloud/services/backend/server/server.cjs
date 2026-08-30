@@ -17,6 +17,7 @@ const { PostgresDerivativeJobs } = require('./postgres-derivative-jobs.cjs');
 
 const { createGeminiDecisionProvider } = require('./gemini-agent.cjs');
 const { AudioGeneration } = require('./audio-generation.cjs');
+const { ChatService } = require('./chat-service.cjs');
 
 const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.MOONSHOT_API_KEY;
@@ -36,6 +37,7 @@ const derivativeJobs = process.env.SUPABASE_DB_URL
   ? new PostgresDerivativeJobs({ databaseUrl: process.env.SUPABASE_DB_URL })
   : new DerivativeJobs({});
 const agentDecisionProvider = createGeminiDecisionProvider();
+const chatService = new ChatService();
 
 const audioGeneration = new AudioGeneration();
 const derivativeCleanupTimer = setInterval(() => {
@@ -324,6 +326,46 @@ const server = http.createServer(async (request, response) => {
         code: error?.code || 'agent_execute_failed',
         requestId,
       });
+    }
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/v1/chats/edit') {
+    try {
+      // Create a background job for chat editing
+      const { chat_id, parent_id, prompt } = await collect(request);
+      if (!chat_id || !prompt) {
+        throw Object.assign(new Error('Missing chat_id or prompt'), { status: 400 });
+      }
+
+      // 1. Create Checkpoint as 'pending'
+      const { createClient } = require('@supabase/supabase-js');
+      const supabase = createClient(
+        process.env.SUPABASE_URL || '',
+        process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+      );
+      
+      const { data, error } = await supabase.from('checkpoints')
+        .insert({
+          chat_id,
+          parent_id: parent_id || null,
+          status: 'pending',
+          prompt
+        })
+        .select()
+        .single();
+        
+      if (error) throw Object.assign(new Error(error.message), { status: 500 });
+      const checkpointId = data.id;
+
+      // 2. Start Background processing
+      // We pass null for audioBuffer for now, as in this basic version we are testing JSON generation
+      chatService.processEditJob(checkpointId, chat_id, parent_id, null, prompt)
+        .catch(e => console.error('[v1/chats/edit] Background processing error:', e));
+
+      return json(response, 202, { checkpoint_id: checkpointId, status: 'pending' });
+    } catch (error) {
+      console.error('[chats-edit] request failed', { message: error?.message });
+      return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message || 'Chat edit initiation failed' });
     }
   }
 

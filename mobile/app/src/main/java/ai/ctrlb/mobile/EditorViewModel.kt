@@ -32,6 +32,11 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import ai.ctrlb.mobile.network.ChatApiService
+import ai.ctrlb.mobile.network.ChatRepository
+import ai.ctrlb.mobile.network.ChatEditRequest
+import ai.ctrlb.mobile.network.supabase
+import io.github.jan.supabase.storage.storage
 import java.security.MessageDigest
 
 data class EditorState(
@@ -44,9 +49,9 @@ data class EditorState(
     val jobMessage: String? = null,
     val errorMessage: String? = null,
     val initialRequest: String? = null,
-    /** Message submitted to the cloud agent but not yet committed as a completed turn. */
     val pendingChatMessage: String? = null,
     val isProcessing: Boolean = false,
+    val pastChats: List<MobileProject> = emptyList()
 ) {
     val source: SourceMedia? get() = sources.firstOrNull()
 }
@@ -73,7 +78,37 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     init {
         viewModelScope.launch {
-            mutable.value = mutable.value.copy(creatorPreferences = store.loadCreatorPreferences())
+            mutable.value = mutable.value.copy(
+                creatorPreferences = store.loadCreatorPreferences(),
+                pastChats = store.listAll()
+            )
+        }
+    }
+
+    fun loadProject(id: String) = viewModelScope.launch {
+        try {
+            val project = store.load(id)
+            val updatedSources = project.orderedSources.map { source ->
+                val localUri = Uri.parse(source.uri)
+                val exists = runCatching { 
+                    getApplication<Application>().contentResolver.openInputStream(localUri)?.close() 
+                    true 
+                }.getOrDefault(false)
+                
+                if (exists) {
+                    source
+                } else {
+                    source.copy(uri = "") // Or mark as disconnected
+                }
+            }
+            val reconnected = project.replaceSources(updatedSources)
+            mutable.value = EditorState(
+                project = reconnected,
+                creatorPreferences = mutable.value.creatorPreferences,
+                pastChats = mutable.value.pastChats
+            )
+        } catch (e: Exception) {
+            mutable.value = mutable.value.copy(errorMessage = "Failed to load chat: ${e.message}")
         }
     }
 
@@ -246,8 +281,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (text.isBlank() || mutable.value.isProcessing) return
         val currentProject = mutable.value.project ?: return
         val turnId = java.util.UUID.randomUUID().toString()
+        val parentId = currentProject.analysis.activeTurnId ?: currentProject.analysis.revisionConversation.lastOrNull()?.id
         val pendingTurn = EditorialConversationTurn(
             id = turnId,
+            parentId = parentId,
             request = text,
             response = "Trimm is thinking…",
             isPending = true,
@@ -255,7 +292,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         )
         val updatedProject = currentProject.copy(
             analysis = currentProject.analysis.copy(
-                revisionConversation = (currentProject.analysis.revisionConversation + pendingTurn).takeLast(50)
+                revisionConversation = (currentProject.analysis.revisionConversation + pendingTurn).takeLast(50),
+                activeTurnId = turnId
             )
         )
         mutable.value = mutable.value.copy(
@@ -266,7 +304,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             store.save(updatedProject)
             if (BuildConfig.PLANNER_URL.isNotBlank()) {
-                continueAgentConversation(updatedProject, turnId, text)
+                continueChatConversation(updatedProject, turnId, text)
             } else {
                 when (val result = ConversationalRevisionEngine.revise(updatedProject, text)) {
                     is ConversationalRevisionResult.Answer -> {
@@ -302,6 +340,17 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun switchBranch(turnId: String) {
+        val project = mutable.value.project ?: return
+        val updatedProject = project.copy(
+            analysis = project.analysis.copy(
+                activeTurnId = turnId
+            )
+        )
+        viewModelScope.launch { store.save(updatedProject) }
+        mutable.value = mutable.value.copy(project = updatedProject)
+    }
+
     fun retryTurn(turnId: String) {
         val project = mutable.value.project ?: return
         val turn = project.analysis.revisionConversation.firstOrNull { it.id == turnId } ?: return
@@ -321,7 +370,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             store.save(updatedProject)
             if (BuildConfig.PLANNER_URL.isNotBlank()) {
-                continueAgentConversation(updatedProject, turnId, turn.request)
+                continueChatConversation(updatedProject, turnId, turn.request)
             } else {
                 reviseStory(turn.request)
             }
@@ -410,97 +459,78 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private fun continueAgentConversation(project: MobileProject, turnId: String, message: String) {
-        val previous = project.analysis.agentRun
+    private var chatListenJob: kotlinx.coroutines.Job? = null
+    private val uploadVideoContext = false // Boolean flag to control video upload
+
+    private fun continueChatConversation(project: MobileProject, turnId: String, message: String) {
+        val preparer = SelectiveDerivativePreparer(
+            java.io.File(getApplication<Application>().cacheDir, "agent-derivatives"), AndroidDerivativeWriter(getApplication())
+        )
+        val transcript = sourceTranscript(project.analysis.words, project.orderedSources)
+        val apiService = ChatApiService.create()
+        val repository = ChatRepository()
+
         viewModelScope.launch {
-            val deviceSessionId = "android-${project.id}"
-            val client = AgentRunClient(BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken)
-            val uploadClient = DerivativeUploadClient(BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken, project.id, deviceSessionId)
-            val preparer = SelectiveDerivativePreparer(
-                java.io.File(getApplication<Application>().cacheDir, "agent-derivatives"), AndroidDerivativeWriter(getApplication())
-            )
-            val coordinator = AgentRunCoordinator(client, AgentEvidenceFulfiller { job ->
-                val derivative = preparer.prepare(DerivativeAuthorization(job), project.orderedSources)
-                try { uploadClient.upload(derivative) } finally { java.io.File(derivative.localPath).delete() }
-            })
-            val json = Json { encodeDefaults = true }
-            val existingOperations = project.operations.map { operation ->
-                json.encodeToJsonElement(EditOperation.serializer(), operation).jsonObject
-            }
-            val request = AgentRunRequest(
-                projectId = project.id, deviceSessionId = deviceSessionId, projectRevision = project.revision,
-                intent = message,
-                sources = project.orderedSources.mapIndexed { index, source -> Layer2SourceInventory(
-                    "${source.fingerprint}-$index", source.fingerprint, source.durationMs, source.width, source.height, source.hasAudio
-                ) },
-                transcript = sourceTranscript(project.analysis.words, project.orderedSources),
-                existingOperations = existingOperations,
-                uploadInitialVideoContext = false
-            )
-            runCatching {
-                coordinator.orchestrateStateless(
-                    request = request,
-                    projectDurationMs = project.durationMs,
-                    onProgress = { stage, percent ->
-                        mutable.value = mutable.value.copy(jobMessage = processingMessage(stage, percent))
-                    },
-                    onPersist = { snapshot, plan ->
-                        val latest = store.load(project.id)
-                        val updated = latest.copy(analysis = latest.analysis.copy(
-                            agentRun = snapshot,
-                            agentPlan = plan ?: latest.analysis.agentPlan
-                        ))
-                        store.save(updated)
-                        mutable.value = mutable.value.copy(project = updated)
+            var videoStorageUrl: String? = null
+            if (uploadVideoContext) {
+                mutable.value = mutable.value.copy(jobMessage = "Preparing video context...")
+                val job = ai.ctrlb.mobile.planner.AuthorizedEvidenceJob(
+                    id = java.util.UUID.randomUUID().toString(),
+                    sourceId = project.orderedSources.firstOrNull()?.fingerprint ?: "",
+                    type = "video",
+                    purpose = "video-inspection",
+                    range = ai.ctrlb.mobile.planner.EvidenceRange(0, 15000), // First 15 seconds
+                    acceptedFormat = "video/mp4",
+                    maximumBytes = 25_000_000,
+                    maximumDurationMs = 15000,
+                    resolution = "original",
+                    expiresAt = java.time.Instant.now().plusSeconds(3600).toString(),
+                    reused = false
+                )
+                try {
+                    val derivative = preparer.prepare(DerivativeAuthorization(job), project.orderedSources)
+                    val file = java.io.File(derivative.localPath)
+                    val bucket = supabase.storage.from("assets")
+                    val path = "video-context/${project.id}/${java.util.UUID.randomUUID()}.mp4"
+                    bucket.upload(path, file.readBytes()) {
+                        upsert = true
                     }
-                )
-            }.onSuccess { snapshot ->
-                val latest = store.load(project.id)
-                val proposal = AgentDecisionMapper.pendingProposal(snapshot)
-                val response = when (snapshot.decision["type"]?.jsonPrimitive?.content) {
-                    "clarification" -> AgentDecisionMapper.clarification(snapshot).firstOrNull()?.prompt ?: "I need one choice before continuing."
-                    "edit_program" -> snapshot.decision["summary"]?.jsonPrimitive?.content ?: "Updated proposal ready to review."
-                    else -> snapshot.decision["reason"]?.jsonPrimitive?.content ?: "Conversation updated."
+                    videoStorageUrl = bucket.publicUrl(path)
+                    file.delete()
+                } catch (e: Exception) {
+                    android.util.Log.e("EditorViewModel", "Failed to upload video context", e)
                 }
-                val updatedConversation = latest.analysis.revisionConversation.map { turn ->
-                    if (turn.id == turnId) turn.copy(
-                        response = response,
-                        evidenceIds = proposal?.evidenceIds.orEmpty(),
-                        isPending = false,
-                        isError = false
-                    ) else turn
+            }
+
+            mutable.value = mutable.value.copy(jobMessage = "Thinking...")
+            
+            val request = ChatEditRequest(
+                prompt = message,
+                parentId = project.analysis.appliedEditCheckpoints.lastOrNull()?.id,
+                chatId = project.id,
+                transcript = transcript.joinToString(" ") { it.text }
+            )
+            
+            try {
+                val response = apiService.submitEdit(request)
+                // Start listening to the realtime updates for this checkpoint
+                chatListenJob?.cancel()
+                chatListenJob = launch {
+                    repository.listenForCheckpoints(project.id).collect { checkpointData ->
+                        // Once we receive the completed status, we process the JSON edits
+                        mutable.value = mutable.value.copy(jobMessage = "Applying edits...")
+                        // TODO: Apply edits
+                    }
                 }
-                val updated = latest.copy(analysis = latest.analysis.copy(
-                    agentRun = snapshot,
-                    pendingProposal = proposal ?: latest.analysis.pendingProposal,
-                    revisionConversation = updatedConversation
-                ))
-                store.save(updated)
+            } catch (e: Exception) {
                 mutable.value = mutable.value.copy(
-                    project = updated, isProcessing = false, jobMessage = response, pendingChatMessage = null
-                )
-                if (proposal != null) renderPreview(updated, simulatePendingProposal = true)
-            }.onFailure { error ->
-                val latest = store.load(project.id)
-                val errorMsg = error.message ?: "Unable to continue conversation. Please try again."
-                val updatedConversation = latest.analysis.revisionConversation.map { turn ->
-                    if (turn.id == turnId) turn.copy(
-                        response = errorMsg,
-                        isPending = false,
-                        isError = true
-                    ) else turn
-                }
-                val updated = latest.copy(analysis = latest.analysis.copy(revisionConversation = updatedConversation))
-                store.save(updated)
-                mutable.value = mutable.value.copy(
-                    project = updated,
-                    isProcessing = false,
-                    pendingChatMessage = null,
-                    jobMessage = "Conversation error"
+                    jobMessage = "Could not reach Trimm: ${e.message}",
+                    isProcessing = false
                 )
             }
         }
     }
+
 
     fun answerClarification(turnId: String, optionId: String, label: String) {
         val project = mutable.value.project ?: return

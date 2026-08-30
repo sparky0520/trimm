@@ -127,7 +127,7 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch { Clerk.auth.handle(intent.data) }
         }
         enableEdgeToEdge()
-        setContent { TrimmTheme { Surface(Modifier.fillMaxSize(), color = Ink) { TrimmApp() } } }
+        setContent { TrimmTheme { Surface(Modifier.fillMaxSize(), color = Ink) { AppWithDrawer() } } }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -139,14 +139,71 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable private fun TrimmApp(vm: EditorViewModel = viewModel()) {
+@Composable private fun AppWithDrawer(vm: EditorViewModel = viewModel()) {
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet(
+                drawerContainerColor = Color(0xFF171717),
+                drawerContentColor = Cream,
+                modifier = Modifier.width(300.dp)
+            ) {
+                Column(Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp).statusBarsPadding(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Chats", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Cream)
+                        IconButton(onClick = { /* TODO: New Chat */ }) { Text("+", fontSize = 24.sp, color = Cream) }
+                    }
+                    val state by vm.state.collectAsStateWithLifecycle()
+                    LazyColumn(Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                        item { Text("Past Chats", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(8.dp)) }
+                        items(state.pastChats.size) { index ->
+                            val pastChat = state.pastChats[index]
+                            TextButton(
+                                onClick = { 
+                                    vm.loadProject(pastChat.id)
+                                    scope.launch { drawerState.close() }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                            ) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                                    Text(pastChat.title.takeIf { it.isNotBlank() } ?: "Untitled Chat", color = Cream)
+                                }
+                            }
+                        }
+                    }
+                    HorizontalDivider(color = Color.DarkGray)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp).navigationBarsPadding(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        AccountControl()
+                        TextButton(onClick = { scope.launch { Clerk.auth.signOut() } }) { Text("Sign Out", color = Coral) }
+                    }
+                }
+            }
+        }
+    ) {
+        TrimmApp(vm, onOpenDrawer = { scope.launch { drawerState.open() } })
+    }
+}
+
+@Composable private fun TrimmApp(vm: EditorViewModel, onOpenDrawer: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     when {
         state.source == null -> ImportScreen(vm::import)
         state.project != null -> EditorScreen(
             state, vm::undo, vm::export, vm::applyProposal, vm::rejectProposal,
             vm::undoCheckpoint,
-            vm::reviseStory, vm::retryTurn, vm::recoverAgent, vm::cancelAnalysis
+            vm::reviseStory, vm::retryTurn, vm::switchBranch, vm::recoverAgent, vm::cancelAnalysis
         )
         else -> NewEditChatScreen(state, vm::generateDraft, vm::moveClip)
     }
@@ -158,6 +215,7 @@ class MainActivity : ComponentActivity() {
     onAction: (() -> Unit)? = null,
     secondaryLabel: String? = null,
     onSecondary: (() -> Unit)? = null,
+    onOpenDrawer: (() -> Unit)? = null
 ) {
     Row(
         Modifier
@@ -168,6 +226,11 @@ class MainActivity : ComponentActivity() {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        if (onOpenDrawer != null) {
+            IconButton(onClick = onOpenDrawer) {
+                Text("☰", fontSize = 24.sp, color = Cream)
+            }
+        }
         Text(
             "Trimm",
             color = Cream,
@@ -370,6 +433,7 @@ private sealed interface ChatElement {
     undoCheckpoint: (String) -> Unit,
     reviseStory: (String) -> Unit,
     retryTurn: (String) -> Unit,
+    switchBranch: (String) -> Unit,
     recoverAgent: (AgentRecoveryAction) -> Unit,
     cancelAnalysis: () -> Unit,
 ) {
@@ -428,11 +492,11 @@ private sealed interface ChatElement {
                     }
                 }
 
-                project.analysis.revisionConversation.forEach { turn ->
+                project.analysis.activeConversationPath.forEach { turn ->
                     add(ChatElement.Turn(turn.createdAtEpochMs, turn))
                 }
                 
-                project.analysis.appliedEditCheckpoints.forEach { checkpoint ->
+                project.analysis.activeCheckpointPath.forEach { checkpoint ->
                     add(ChatElement.Checkpoint(checkpoint.createdAtEpochMs, checkpoint))
                 }
             }.sortedBy { it.timestamp }
@@ -447,8 +511,29 @@ private sealed interface ChatElement {
                     }
                     is ChatElement.Turn -> {
                         val turn = element.turn
+                        val siblings = project.analysis.revisionConversation.filter { it.parentId == turn.parentId }
+                        val index = siblings.indexOf(turn)
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            UserChatBubble(turn.request)
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                Box(modifier = Modifier.weight(1f)) {
+                                    UserChatBubble(turn.request)
+                                }
+                                if (siblings.size > 1) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 8.dp)) {
+                                        TextButton(
+                                            onClick = { if (index > 0) switchBranch(siblings[index - 1].id) },
+                                            enabled = index > 0,
+                                            contentPadding = PaddingValues(0.dp)
+                                        ) { Text("<", color = if (index > 0) Cream else Muted, fontSize = 12.sp) }
+                                        Text("${index + 1} / ${siblings.size}", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 4.dp))
+                                        TextButton(
+                                            onClick = { if (index < siblings.size - 1) switchBranch(siblings[index + 1].id) },
+                                            enabled = index < siblings.size - 1,
+                                            contentPadding = PaddingValues(0.dp)
+                                        ) { Text(">", color = if (index < siblings.size - 1) Cream else Muted, fontSize = 12.sp) }
+                                    }
+                                }
+                            }
                             AssistantChatBubble(accent = if (turn.isError) Color(0xFFE4E4E7) else Lavender) {
                                 when {
                                     turn.isPending -> {
@@ -797,11 +882,37 @@ private fun formatUserFacingError(raw: String): String {
     }
 }
 
-@Composable private fun ConversationalRevisionCard(project: MobileProject, revise: (String) -> Unit) {
+@Composable private fun ConversationalRevisionCard(
+    project: MobileProject, 
+    revise: (String) -> Unit,
+    switchBranch: (String) -> Unit
+) {
     var request by rememberSaveable { mutableStateOf("") }
     ReviewSurface("REVISE", "Keep editing conversationally") {
-        project.analysis.revisionConversation.takeLast(3).forEach { turn ->
-            Text(turn.request, color = CreamRaised, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+        project.analysis.activeConversationPath.takeLast(3).forEach { turn ->
+            val siblings = project.analysis.revisionConversation.filter { it.parentId == turn.parentId }
+            val index = siblings.indexOf(turn)
+            
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(turn.request, color = CreamRaised, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                if (siblings.size > 1) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(
+                            onClick = { if (index > 0) switchBranch(siblings[index - 1].id) },
+                            enabled = index > 0,
+                            contentPadding = PaddingValues(0.dp)
+                        ) { Text("<", color = if (index > 0) Cream else Muted, fontSize = 12.sp) }
+                        
+                        Text("${index + 1} / ${siblings.size}", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 4.dp))
+                        
+                        TextButton(
+                            onClick = { if (index < siblings.size - 1) switchBranch(siblings[index + 1].id) },
+                            enabled = index < siblings.size - 1,
+                            contentPadding = PaddingValues(0.dp)
+                        ) { Text(">", color = if (index < siblings.size - 1) Cream else Muted, fontSize = 12.sp) }
+                    }
+                }
+            }
             Text(turn.response, color = Muted, fontSize = 11.sp)
             Spacer(Modifier.height(6.dp))
         }

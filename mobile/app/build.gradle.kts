@@ -24,7 +24,7 @@ android {
         applicationId = "ai.ctrlb.mobile"
         minSdk = 31
         targetSdk = 37
-        versionCode = 13
+        versionCode = 14
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         val backendUrl = providers.gradleProperty("TRIMM_BACKEND_URL")
@@ -47,6 +47,16 @@ android {
         buildConfigField("String", "TRANSCRIPTION_URL", "\"${transcriptionUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "AUDIO_CATALOG_URL", "\"${catalogUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "CLERK_PUBLISHABLE_KEY", "\"${clerkPublishableKey.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+        
+        val supabaseUrl = providers.gradleProperty("SUPABASE_URL")
+            .orElse(providers.environmentVariable("SUPABASE_URL"))
+            .orElse(rootLocalEnv["SUPABASE_URL"] ?: "").get()
+        val supabasePublishableKey = providers.gradleProperty("SUPABASE_PUBLISHABLE_KEY")
+            .orElse(providers.environmentVariable("SUPABASE_PUBLISHABLE_KEY"))
+            .orElse(rootLocalEnv["SUPABASE_PUBLISHABLE_KEY"] ?: "").get()
+            
+        buildConfigField("String", "SUPABASE_URL", "\"${supabaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+        buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${supabasePublishableKey.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
     }
     signingConfigs {
         create("release") {
@@ -114,6 +124,13 @@ dependencies {
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("dev.ffmpegkit-maintained:ffmpeg-kit-audio:+")
+
+    // Supabase
+    implementation(platform("io.github.jan-tennert.supabase:bom:3.0.0"))
+    implementation("io.github.jan-tennert.supabase:postgrest-kt")
+    implementation("io.github.jan-tennert.supabase:realtime-kt")
+    implementation("io.github.jan-tennert.supabase:storage-kt")
+    implementation("io.ktor:ktor-client-okhttp:3.0.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
