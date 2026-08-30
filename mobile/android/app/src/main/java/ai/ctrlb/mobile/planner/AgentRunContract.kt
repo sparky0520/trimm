@@ -380,17 +380,7 @@ class AgentRunCoordinator(
                                 op = op.copy(url = gateway.generateBgm(op.prompt, durationMs / 1000f))
                             } else if (op is ai.ctrlb.mobile.domain.AddSfx && op.url.isBlank()) {
                                 onProgress("Generating sound effect...", (index * 100) / tasks.size)
-                                val sfxStartOutputMs = mapper.sourceToOutput(op.target?.startMs ?: 0L)
-                                var finalPrompt = op.prompt
-                                if (op.timingCues.isNotEmpty()) {
-                                    val cueStrings = op.timingCues.map { cue ->
-                                        val cueOutputMs = mapper.sourceToOutput(cue.sourceTimeMs)
-                                        val relativeSecs = String.format(java.util.Locale.US, "%.1f", (cueOutputMs - sfxStartOutputMs) / 1000f)
-                                        "${cue.description} at ${relativeSecs}s"
-                                    }
-                                    finalPrompt += " [Timing Instructions: ${cueStrings.joinToString(", ")}]"
-                                }
-                                op = op.copy(url = gateway.generateSfx(finalPrompt))
+                                op = op.copy(url = gateway.generateSfx(op.prompt))
                             }
                             json.encodeToJsonElement(EditOperation.serializer(), op).jsonObject
                         } ?: emptyList()

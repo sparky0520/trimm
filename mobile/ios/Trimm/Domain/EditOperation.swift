@@ -20,11 +20,6 @@ public struct ColorGrade: Codable, Equatable {
     }
 }
 
-public struct TimingCue: Codable, Equatable {
-    public let sourceTimeMs: Int64
-    public let description: String
-}
-
 public enum EditOperation: Codable, Equatable {
     case removeRanges(id: String, enabled: Bool, ranges: [TimeRange], confidence: Float, reason: String, pacing: String)
     case setColorGrade(id: String, enabled: Bool, grade: ColorGrade?, target: OperationTarget?, parameter: String?, value: Float?)
@@ -35,13 +30,13 @@ public enum EditOperation: Codable, Equatable {
     case addCaptions(id: String, enabled: Bool, cues: [CaptionCue], target: OperationTarget?, speakerId: String?, style: String)
     case addSectionTransition(id: String, enabled: Bool, target: OperationTarget?, preset: String, customBlueprint: String)
     case addBgm(id: String, enabled: Bool, target: OperationTarget?, prompt: String, reason: String, url: String)
-    case addSfx(id: String, enabled: Bool, target: OperationTarget?, prompt: String, reason: String, url: String, timingCues: [TimingCue])
+    case addSfx(id: String, enabled: Bool, target: OperationTarget?, prompt: String, reason: String, url: String)
     
     private enum CodingKeys: String, CodingKey {
         case type, id, enabled, ranges, confidence, reason, pacing
         case grade, target, parameter, value, dialogueLufs, musicDuckDb, attackMs, releaseMs
         case ratio, text, designBlueprint, range, preset, intensity, cues, speakerId, style
-        case customBlueprint, prompt, url, timingCues
+        case customBlueprint, prompt, url
     }
     
     public init(from decoder: Decoder) throws {
@@ -125,8 +120,7 @@ public enum EditOperation: Codable, Equatable {
                 target: try container.decodeIfPresent(OperationTarget.self, forKey: .target),
                 prompt: try container.decode(String.self, forKey: .prompt),
                 reason: try container.decodeIfPresent(String.self, forKey: .reason) ?? "",
-                url: try container.decodeIfPresent(String.self, forKey: .url) ?? "",
-                timingCues: try container.decodeIfPresent([TimingCue].self, forKey: .timingCues) ?? []
+                url: try container.decodeIfPresent(String.self, forKey: .url) ?? ""
             )
         default:
             throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Unknown edit operation type: \(type)")
@@ -204,7 +198,7 @@ public enum EditOperation: Codable, Equatable {
             try container.encode(prompt, forKey: .prompt)
             try container.encode(reason, forKey: .reason)
             try container.encode(url, forKey: .url)
-        case .addSfx(let id, let enabled, let target, let prompt, let reason, let url, let timingCues):
+        case .addSfx(let id, let enabled, let target, let prompt, let reason, let url):
             try container.encode("add_sfx", forKey: .type)
             try container.encode(id, forKey: .id)
             try container.encode(enabled, forKey: .enabled)
@@ -212,7 +206,6 @@ public enum EditOperation: Codable, Equatable {
             try container.encode(prompt, forKey: .prompt)
             try container.encode(reason, forKey: .reason)
             try container.encode(url, forKey: .url)
-            try container.encode(timingCues, forKey: .timingCues)
         }
     }
 }
