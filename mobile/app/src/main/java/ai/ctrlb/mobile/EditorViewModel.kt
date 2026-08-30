@@ -479,7 +479,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private var chatListenJob: kotlinx.coroutines.Job? = null
-    private val uploadVideoContext = false // Boolean flag to control video upload
+    private val uploadVideoContext = true // Boolean flag to control video upload
 
     private fun continueChatConversation(project: MobileProject, turnId: String, message: String) {
         val preparer = SelectiveDerivativePreparer(
