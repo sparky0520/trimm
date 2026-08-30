@@ -512,22 +512,40 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 prompt = message,
                 parentId = project.analysis.appliedEditCheckpoints.lastOrNull()?.id,
                 chatId = project.id,
-                transcript = transcript.joinToString(" ") { it.text }
+                transcript = transcript.joinToString(" ") { it.text },
+                videoUrl = videoStorageUrl
             )
             
             try {
-                val response = apiService.submitEdit(request)
+                val token = ai.ctrlb.mobile.auth.AuthTokenProvider.currentToken()
+                val response = apiService.submitEdit("Bearer $token", request)
                 // Start listening to the realtime updates for this checkpoint
                 chatListenJob?.cancel()
                 chatListenJob = launch {
                     repository.listenForCheckpoints(project.id).collect { checkpointData ->
                         // Once we receive the completed status, we process the JSON edits
-                        mutable.value = mutable.value.copy(jobMessage = "Applying edits...")
+                        val currentProject = mutable.value.project ?: return@collect
+                        val finished = currentProject.copy(analysis = currentProject.analysis.copy(
+                            revisionConversation = currentProject.analysis.revisionConversation.map {
+                                if (it.id == turnId) it.copy(response = "Revised proposal ready to review", isPending = false, isError = false) else it
+                            }
+                        ))
+                        store.save(finished)
+                        mutable.value = mutable.value.copy(project = finished, jobMessage = "Applying edits...", isProcessing = false)
+                        
                         // TODO: Apply edits
                     }
                 }
             } catch (e: Exception) {
+                val currentProject = mutable.value.project ?: return@launch
+                val finished = currentProject.copy(analysis = currentProject.analysis.copy(
+                    revisionConversation = currentProject.analysis.revisionConversation.map {
+                        if (it.id == turnId) it.copy(response = "Error: ${e.message}", isPending = false, isError = true) else it
+                    }
+                ))
+                store.save(finished)
                 mutable.value = mutable.value.copy(
+                    project = finished,
                     jobMessage = "Could not reach Trimm: ${e.message}",
                     isProcessing = false
                 )

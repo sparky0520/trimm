@@ -1,18 +1,42 @@
 import Foundation
 import Supabase
+import ClerkKit
 
 public class ChatRepository {
     public static let shared = ChatRepository()
     
+    // Pointing to cloud backend from android .env.local
+    private let executeEndpoint = URL(string: "https://ctrlb-backend.onrender.com/v1/agent/execute")!
+    
     private init() {}
     
-    public func submitAgentRun(request: AgentRunRequest) async throws -> PersistedAgentRun {
-        // In the future this will use supabase.functions.invoke("agent-run", options: ...)
-        // For now, this just defines the interface for the EditorViewModel
-        fatalError("Not yet implemented - requires AnyCodable for dynamic JSON")
-    }
-    
-    public func fetchProjectHistory(projectId: String) async throws -> [PersistedAgentRun] {
-        fatalError("Not yet implemented - database schema pending")
+    public func executeAgentTask(request: AgentRunRequest) async throws -> AgentExecuteResponse {
+        var urlRequest = URLRequest(url: executeEndpoint)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        guard let token = try await Clerk.shared.session?.getToken() else {
+            throw URLError(.userAuthenticationRequired)
+        }
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        let encoder = JSONEncoder()
+        urlRequest.httpBody = try encoder.encode(request)
+        
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+        
+        guard (200...299).contains(httpResponse.statusCode) else {
+            if let errorMsg = String(data: data, encoding: .utf8) {
+                print("Agent API Error: \(errorMsg)")
+            }
+            throw URLError(.badServerResponse)
+        }
+        
+        let decoder = JSONDecoder()
+        return try decoder.decode(AgentExecuteResponse.self, from: data)
     }
 }

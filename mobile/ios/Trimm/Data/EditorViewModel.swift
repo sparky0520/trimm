@@ -11,34 +11,48 @@ public class EditorViewModel {
         // Load past chats on init if SwiftData is integrated
     }
     
-    public func importSources(urls: [URL]) {
-        // Mocking the video property extraction for now
-        let sources = urls.map { url in
-            SourceMedia(
-                uri: url.absoluteString,
-                fingerprint: UUID().uuidString,
-                durationMs: 15000,
-                width: 1920,
-                height: 1080,
-                rotation: 0,
-                hasAudio: true
-            )
+    @MainActor
+    public func importSources(urls: [URL]) async {
+        var newSources: [SourceMedia] = []
+        for url in urls {
+            let asset = AVURLAsset(url: url)
+            do {
+                let duration = try await asset.load(.duration)
+                let durationMs = Int64(duration.seconds * 1000)
+                let videoTracks = try await asset.loadTracks(withMediaType: .video)
+                let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+                let hasAudio = audioTracks.count > 0
+                
+                var width = 1920
+                var height = 1080
+                if let videoTrack = videoTracks.first {
+                    let size = try await videoTrack.load(.naturalSize)
+                    width = Int(size.width)
+                    height = Int(size.height)
+                }
+                
+                newSources.append(SourceMedia(
+                    uri: url.absoluteString,
+                    fingerprint: UUID().uuidString,
+                    durationMs: durationMs,
+                    width: width,
+                    height: height,
+                    rotation: 0,
+                    hasAudio: hasAudio
+                ))
+            } catch {
+                print("Failed to load asset properties: \(error)")
+            }
         }
-        state.sources = sources
+        self.state.sources = newSources
     }
     
-    public func generateDraft(prompt: String) {
-        state.initialRequest = prompt
-        state.isProcessing = true
-        state.jobMessage = "Reading your clips and preparing a proposal…"
-        
+    public func initializeProject() {
         guard let firstSource = state.sources.first else {
             state.errorMessage = "Please import a video first."
-            state.isProcessing = false
             return
         }
         
-        // Mock project generation
         let project = MobileProject(
             schemaVersion: 1,
             id: UUID().uuidString,
@@ -56,16 +70,47 @@ public class EditorViewModel {
         )
         
         self.state.project = project
+        self.state.messages = []
         
         Task {
             await refreshPlayer(project: project)
             
-            // Simulate network delay
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            
-            await MainActor.run {
-                self.state.jobMessage = "Analysis complete"
-                self.state.isProcessing = false
+            if let url = URL(string: firstSource.uri) {
+                do {
+                    let words = try await TranscriptionService.shared.transcribe(url: url)
+                    await MainActor.run {
+                        if let currentProject = self.state.project {
+                            let updatedAnalysis = Analysis(
+                                words: words,
+                                captions: currentProject.analysis.captions,
+                                speechHints: currentProject.analysis.speechHints,
+                                lowConfidenceFumbles: currentProject.analysis.lowConfidenceFumbles,
+                                takeGroups: currentProject.analysis.takeGroups,
+                                warnings: currentProject.analysis.warnings,
+                                completedAtEpochMs: Int64(Date().timeIntervalSince1970 * 1000)
+                            )
+                            
+                            let updatedProject = MobileProject(
+                                schemaVersion: currentProject.schemaVersion,
+                                id: currentProject.id,
+                                title: currentProject.title,
+                                source: currentProject.source,
+                                sources: currentProject.sources,
+                                proxyUri: currentProject.proxyUri,
+                                preferences: currentProject.preferences,
+                                analysis: updatedAnalysis,
+                                evidenceGraphs: currentProject.evidenceGraphs,
+                                operations: currentProject.operations,
+                                undo: currentProject.undo,
+                                export: currentProject.export,
+                                revision: currentProject.revision
+                            )
+                            self.state.project = updatedProject
+                        }
+                    }
+                } catch {
+                    print("Transcription failed: \(error)")
+                }
             }
         }
     }
@@ -87,18 +132,80 @@ public class EditorViewModel {
     }
     
     public func reviseStory(request: String) {
-        guard !request.isEmpty, !state.isProcessing, let _ = state.project else { return }
+        guard !request.isEmpty, !state.isProcessing, let project = state.project else { return }
         
         state.isProcessing = true
+        state.messages.append(ChatMessage(text: request, isUser: true))
         state.jobMessage = "Continuing the conversation…"
+        state.messages.append(ChatMessage(text: state.jobMessage!, isUser: false))
         
         Task {
-            // Simulate network/agent run delay
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            let layer2Sources = state.sources.map {
+                Layer2SourceInventory(id: $0.uri, fingerprint: $0.fingerprint, durationMs: $0.durationMs, width: $0.width, height: $0.height, hasAudio: $0.hasAudio)
+            }
+            let transcriptWords = project.analysis.words.map {
+                Layer2TranscriptWord(
+                    sourceId: project.source.uri,
+                    text: $0.text,
+                    startMs: $0.range.startMs,
+                    endMs: $0.range.endMs,
+                    confidence: $0.confidence,
+                    speakerId: $0.speakerId
+                )
+            }
             
-            await MainActor.run {
-                self.state.jobMessage = "Revised proposal ready to review"
-                self.state.isProcessing = false
+            let agentRequest = AgentRunRequest(
+                projectId: project.id,
+                deviceSessionId: UUID().uuidString,
+                projectRevision: project.revision,
+                intent: request,
+                sources: layer2Sources,
+                transcript: transcriptWords,
+                evidenceJobIds: [],
+                existingOperations: project.operations,
+                uploadInitialVideoContext: false,
+                budgets: Layer2Budgets(maximumBytes: 100_000_000, maximumDurationMs: 60000, retentionMs: 86400000)
+            )
+            
+            do {
+                let response = try await ChatRepository.shared.executeAgentTask(request: agentRequest)
+                await MainActor.run {
+                    if response.type == "edit_program", let operations = response.operations {
+                        let snapshot = ProjectSnapshot(operations: project.operations, sources: project.sources, analysis: project.analysis)
+                        var undoHistory = project.undo
+                        undoHistory.append(snapshot)
+                        
+                        let updatedProject = MobileProject(
+                            schemaVersion: 1,
+                            id: project.id,
+                            title: project.title,
+                            source: project.source,
+                            sources: project.sources,
+                            proxyUri: project.proxyUri,
+                            preferences: project.preferences,
+                            analysis: project.analysis,
+                            evidenceGraphs: project.evidenceGraphs,
+                            operations: operations,
+                            undo: undoHistory,
+                            export: project.export,
+                            revision: project.revision + 1
+                        )
+                        self.state.project = updatedProject
+                        self.state.jobMessage = "Revised proposal ready to review"
+                        self.state.messages.append(ChatMessage(text: "Revised proposal ready to review", isUser: false))
+                    }
+                    self.state.isProcessing = false
+                }
+                
+                if let updatedProject = await MainActor.run(resultType: MobileProject?.self, body: { self.state.project }) {
+                    await refreshPlayer(project: updatedProject)
+                }
+                
+            } catch {
+                await MainActor.run {
+                    self.state.jobMessage = "Failed to revise"
+                    self.state.isProcessing = false
+                }
             }
         }
     }

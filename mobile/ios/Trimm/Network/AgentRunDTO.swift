@@ -98,20 +98,26 @@ public struct AgentRunRequest: Codable {
     public let sources: [Layer2SourceInventory]
     public let transcript: [Layer2TranscriptWord]
     public let evidenceJobIds: [String]
-    // In iOS we can encode the existing operations to Data/AnyCodable
-    // public let existingOperations: [AnyCodable]
+    public let existingOperations: [EditOperation]
     public let uploadInitialVideoContext: Bool
     public let budgets: Layer2Budgets
+    
+    public init(projectId: String, deviceSessionId: String, projectRevision: Int64, intent: String, sources: [Layer2SourceInventory], transcript: [Layer2TranscriptWord], evidenceJobIds: [String], existingOperations: [EditOperation], uploadInitialVideoContext: Bool, budgets: Layer2Budgets) {
+        self.projectId = projectId
+        self.deviceSessionId = deviceSessionId
+        self.projectRevision = projectRevision
+        self.intent = intent
+        self.sources = sources
+        self.transcript = transcript
+        self.evidenceJobIds = evidenceJobIds
+        self.existingOperations = existingOperations
+        self.uploadInitialVideoContext = uploadInitialVideoContext
+        self.budgets = budgets
+    }
 }
 
-public struct PersistedAgentRun: Codable, Equatable {
-    public let contractVersion: Int
-    public let runId: String
-    public let projectId: String
-    public let projectRevision: Int64
-    public let status: AgentRunStatus
-    public let events: [AgentActivityEvent]
-    // public let decision: [String: AnyCodable] // Handled custom or using AnyCodable
-    public let fulfilledEvidenceJobIds: [String]
-    public let usage: AgentUsageSummary
+public struct AgentExecuteResponse: Codable, Equatable {
+    public let type: String
+    public let operations: [EditOperation]?
+    public let questions: [ClarificationQuestion]?
 }

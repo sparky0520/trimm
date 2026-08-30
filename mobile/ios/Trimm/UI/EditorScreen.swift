@@ -31,19 +31,8 @@ public struct EditorScreen: View {
                 
                 ScrollView {
                     VStack(spacing: 16) {
-                        if let initial = viewModel.state.initialRequest {
-                            ChatBubble(message: initial, isUser: true)
-                        }
-                        
-                        if let project = viewModel.state.project {
-                            let analysis = project.analysis
-                            if let _ = analysis.completedAtEpochMs {
-                                 ChatBubble(message: "Analysis complete. Proposal ready.", isUser: false)
-                            }
-                        }
-                        
-                        if let job = viewModel.state.jobMessage {
-                            ChatBubble(message: job, isUser: false)
+                        ForEach(viewModel.state.messages) { msg in
+                            ChatBubble(message: msg.text, isUser: msg.isUser)
                         }
                         
                         if viewModel.state.isProcessing {

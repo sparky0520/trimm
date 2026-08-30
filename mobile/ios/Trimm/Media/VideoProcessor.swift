@@ -74,6 +74,8 @@ public class VideoProcessor {
             insertTime = CMTimeAdd(insertTime, duration)
         }
         
-        return AVPlayerItem(asset: composition)
+        return await MainActor.run {
+            AVPlayerItem(asset: composition)
+        }
     }
 }

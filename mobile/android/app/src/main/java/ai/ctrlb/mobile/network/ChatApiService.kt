@@ -3,6 +3,7 @@ package ai.ctrlb.mobile.network
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
+import retrofit2.http.Header
 import retrofit2.http.POST
 import ai.ctrlb.mobile.BuildConfig
 
@@ -10,7 +11,8 @@ data class ChatEditRequest(
     val prompt: String,
     val parentId: String?,
     val chatId: String,
-    val transcript: String?
+    val transcript: String?,
+    val videoUrl: String? = null
 )
 
 data class ChatEditResponse(
@@ -23,10 +25,16 @@ data class ChatTitleResponse(val title: String)
 
 interface ChatApiService {
     @POST("/v1/chats/edit")
-    suspend fun submitEdit(@Body request: ChatEditRequest): ChatEditResponse
+    suspend fun submitEdit(
+        @Header("Authorization") authorization: String,
+        @Body request: ChatEditRequest
+    ): ChatEditResponse
 
     @POST("/v1/chats/title")
-    suspend fun generateTitle(@Body request: ChatTitleRequest): ChatTitleResponse
+    suspend fun generateTitle(
+        @Header("Authorization") authorization: String,
+        @Body request: ChatTitleRequest
+    ): ChatTitleResponse
 
     companion object {
         fun create(): ChatApiService {
