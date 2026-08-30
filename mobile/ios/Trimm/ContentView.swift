@@ -15,7 +15,7 @@ struct ContentView: View {
                         Spacer()
                         
                         TrimmLogo()
-                            .frame(width: 72, height: 72)
+                            .frame(width: 108, height: 108)
                         Text("START A NEW EDIT")
                             .font(.system(size: 10, weight: .bold))
                             .foregroundColor(.muted)

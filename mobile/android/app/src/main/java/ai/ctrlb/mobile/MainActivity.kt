@@ -321,31 +321,28 @@ class MainActivity : ComponentActivity() {
 
 @Composable private fun ImportScreen(onImport: (List<Uri>) -> Unit, onOpenDrawer: (() -> Unit)? = null) {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { if (it.isNotEmpty()) onImport(it) }
-    Column(Modifier.fillMaxSize().background(Ink)) {
-        BrandBar(onOpenDrawer = onOpenDrawer)
-        Box(Modifier.fillMaxSize().padding(12.dp)) {
-            Column(Modifier.align(Alignment.Center).padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Image(
-                    painter = painterResource(id = R.drawable.trimm_launcher),
-                    contentDescription = "Trimm Logo",
-                    modifier = Modifier.size(108.dp)
-                )
-                Spacer(Modifier.height(30.dp))
-                Text("START A NEW EDIT", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
-                Spacer(Modifier.height(10.dp))
-                Text("Turn a rough recording\ninto something worth sharing.", color = CreamRaised, fontSize = 27.sp,
-                    lineHeight = 32.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(12.dp))
-                Text("Bring in your talking-head and product clips, then shape them naturally with AI.", color = Muted, lineHeight = 21.sp)
-                Spacer(Modifier.height(28.dp))
-                Button(onClick = { launcher.launch(arrayOf("video/*")) }, modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp), colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText)) {
-                    Text("Import clips", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 5.dp))
-                }
-                Spacer(Modifier.height(12.dp))
-                Text("YOUR VIDEO STAYS ON DEVICE", color = Muted, fontSize = 9.sp, letterSpacing = .8.sp)
+    Box(Modifier.fillMaxSize().background(Ink).statusBarsPadding().navigationBarsPadding()) {
+        Column(Modifier.align(Alignment.Center).padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Image(
+                painter = painterResource(id = R.drawable.trimm_launcher),
+                contentDescription = "Trimm Logo",
+                modifier = Modifier.size(108.dp)
+            )
+            Spacer(Modifier.height(48.dp))
+            Text("START A NEW EDIT", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
+            Spacer(Modifier.height(16.dp))
+            Text("Turn a rough recording\ninto something worth sharing.", color = CreamRaised, fontSize = 26.sp,
+                lineHeight = 32.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Spacer(Modifier.height(16.dp))
+            Text("Bring in your talking-head and product clips,\nthen shape them naturally with AI.", color = Muted, lineHeight = 22.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Spacer(Modifier.height(32.dp))
+            Button(onClick = { launcher.launch(arrayOf("video/*")) }, modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText)) {
+                Text("Select clips to edit", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
             }
         }
+        Text("YOUR VIDEO STAYS ON DEVICE", color = Muted, fontSize = 10.sp, letterSpacing = 1.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp))
     }
 }
 
