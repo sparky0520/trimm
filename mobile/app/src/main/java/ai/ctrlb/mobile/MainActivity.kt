@@ -177,7 +177,7 @@ class MainActivity : ComponentActivity() {
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
                             ) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-                                    ChatTitleText(pastChat.title)
+                                    ChatTitleText(pastChat)
                                 }
                             }
                         }
@@ -198,17 +198,24 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable fun ChatTitleText(title: String) {
-    var displayedText by rememberSaveable(title) { mutableStateOf("") }
-    LaunchedEffect(title) {
-        if (title != "New Edit" && title != "Talking head edit" && title.isNotBlank() && displayedText != title) {
+@Composable fun ChatTitleText(pastChat: MobileProject) {
+    val cleanTitle = if (pastChat.title == "New Edit" || pastChat.title == "Talking head edit" || pastChat.title.isBlank()) {
+        pastChat.analysis.words.take(4).joinToString(" ") { it.text }.takeIf { it.isNotBlank() } ?: "Untitled Chat"
+    } else {
+        pastChat.title
+    }
+
+    var displayedText by rememberSaveable(cleanTitle) { mutableStateOf("") }
+    LaunchedEffect(cleanTitle) {
+        // Only typewrite if it's an LLM-generated title
+        if (cleanTitle == pastChat.title && displayedText != cleanTitle) {
             displayedText = ""
-            for (char in title) {
+            for (char in cleanTitle) {
                 displayedText += char
                 delay(30)
             }
         } else {
-            displayedText = title
+            displayedText = cleanTitle
         }
     }
     Text(displayedText.takeIf { it.isNotBlank() } ?: "Untitled Chat", color = Cream)
