@@ -390,6 +390,8 @@ ${JSON.stringify(transcript)}
         return { type: operationName, target, ...payload };
       })
     };
+  };
+
   const generateTitle = async (transcript) => {
     const systemPolicy = { role: 'system', parts: [{ text: "You generate very short, concise, and creative titles (max 6 words) for video editing sessions based on the transcript." }] };
     const contents = [{ role: 'user', parts: [{ text: `Generate a short title for a video editing session with this transcript: ${transcript.substring(0, 5000)}` }] }];

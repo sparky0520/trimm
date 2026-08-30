@@ -12,6 +12,9 @@ import ai.ctrlb.mobile.planner.ClarificationQuestion
 import android.net.Uri
 import android.os.Bundle
 import android.content.Intent
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import kotlinx.coroutines.delay
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -174,7 +177,7 @@ class MainActivity : ComponentActivity() {
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
                             ) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-                                    Text(pastChat.title.takeIf { it.isNotBlank() } ?: "Untitled Chat", color = Cream)
+                                    ChatTitleText(pastChat.title)
                                 }
                             }
                         }
@@ -193,6 +196,22 @@ class MainActivity : ComponentActivity() {
     ) {
         TrimmApp(vm, onOpenDrawer = { scope.launch { drawerState.open() } })
     }
+}
+
+@Composable fun ChatTitleText(title: String) {
+    var displayedText by rememberSaveable(title) { mutableStateOf("") }
+    LaunchedEffect(title) {
+        if (title != "New Edit" && title != "Talking head edit" && title.isNotBlank() && displayedText != title) {
+            displayedText = ""
+            for (char in title) {
+                displayedText += char
+                delay(30)
+            }
+        } else {
+            displayedText = title
+        }
+    }
+    Text(displayedText.takeIf { it.isNotBlank() } ?: "Untitled Chat", color = Cream)
 }
 
 @Composable private fun TrimmApp(vm: EditorViewModel, onOpenDrawer: () -> Unit) {
@@ -297,11 +316,13 @@ class MainActivity : ComponentActivity() {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { if (it.isNotEmpty()) onImport(it) }
     Column(Modifier.fillMaxSize().background(Ink)) {
         BrandBar()
-        Box(Modifier.fillMaxSize().padding(12.dp).background(Workspace, RoundedCornerShape(12.dp)).border(1.dp, Border, RoundedCornerShape(12.dp))) {
+        Box(Modifier.fillMaxSize().padding(12.dp)) {
             Column(Modifier.align(Alignment.Center).padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(72.dp).background(Raised, RoundedCornerShape(12.dp)).border(1.dp, Border, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                    Text("T", color = Cream, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
-                }
+                Image(
+                    painter = painterResource(id = R.mipmap.ic_launcher),
+                    contentDescription = "Trimm Logo",
+                    modifier = Modifier.size(72.dp)
+                )
                 Spacer(Modifier.height(30.dp))
                 Text("START A NEW EDIT", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
                 Spacer(Modifier.height(10.dp))
@@ -315,7 +336,7 @@ class MainActivity : ComponentActivity() {
                     Text("Import clips", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 5.dp))
                 }
                 Spacer(Modifier.height(12.dp))
-                Text("MP4 · MOV · WEBM  |  ON-DEVICE WORKSPACE", color = Muted, fontSize = 9.sp, letterSpacing = .8.sp)
+                Text("YOUR VIDEO STAYS ON DEVICE", color = Muted, fontSize = 9.sp, letterSpacing = .8.sp)
             }
         }
     }
