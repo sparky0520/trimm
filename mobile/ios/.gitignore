@@ -7,3 +7,6 @@ DerivedData/
 # Swift Package Manager
 .build/
 *.build/
+
+# Custom Build Directory
+build/
