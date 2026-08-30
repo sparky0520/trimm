@@ -217,7 +217,7 @@ class MainActivity : ComponentActivity() {
 @Composable private fun TrimmApp(vm: EditorViewModel, onOpenDrawer: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     when {
-        state.source == null -> ImportScreen(vm::import)
+        state.source == null -> ImportScreen(vm::import, onOpenDrawer)
         state.project != null -> EditorScreen(
             state, vm::undo, vm::export, vm::applyProposal, vm::rejectProposal,
             vm::undoCheckpoint,
@@ -260,7 +260,7 @@ class MainActivity : ComponentActivity() {
             maxLines = 1,
         )
         Spacer(Modifier.weight(1f))
-        AccountControl()
+
         if (secondaryLabel != null && onSecondary != null) {
             TextButton(
                 onClick = onSecondary,
@@ -312,16 +312,16 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable private fun ImportScreen(onImport: (List<Uri>) -> Unit) {
+@Composable private fun ImportScreen(onImport: (List<Uri>) -> Unit, onOpenDrawer: (() -> Unit)? = null) {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { if (it.isNotEmpty()) onImport(it) }
     Column(Modifier.fillMaxSize().background(Ink)) {
-        BrandBar()
+        BrandBar(onOpenDrawer = onOpenDrawer)
         Box(Modifier.fillMaxSize().padding(12.dp)) {
             Column(Modifier.align(Alignment.Center).padding(30.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Image(
                     painter = painterResource(id = R.drawable.trimm_launcher),
                     contentDescription = "Trimm Logo",
-                    modifier = Modifier.size(72.dp)
+                    modifier = Modifier.size(108.dp)
                 )
                 Spacer(Modifier.height(30.dp))
                 Text("START A NEW EDIT", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
