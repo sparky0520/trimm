@@ -12,8 +12,6 @@ import java.nio.file.StandardCopyOption
 
 class ProjectStore(context: Context) {
     private val root = File(context.filesDir, "projects").apply { mkdirs() }
-    private val exportsDir = File(context.filesDir, "exports")
-    private val previewsDir = File(context.cacheDir, "previews")
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = false; classDiscriminator = "type" }
     private val creatorProfile = File(context.filesDir, "creator-preferences.json")
 
@@ -24,21 +22,6 @@ class ProjectStore(context: Context) {
         temporary.writeText(json.encodeToString(MobileProject.serializer(), project))
         if (target.exists()) target.copyTo(backup, overwrite = true)
         Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-        prune()
-    }
-
-    private fun prune() {
-        val files = root.listFiles { _, name -> name.endsWith(".json") } ?: return
-        if (files.size <= 20) return
-        val toDelete = files.sortedByDescending { it.lastModified() }.drop(20)
-        toDelete.forEach { file ->
-            val id = file.nameWithoutExtension
-            file.delete()
-            File(root, "$id.backup").delete()
-            File(root, "$id.partial").delete()
-            File(exportsDir, "$id.mp4").delete()
-            previewsDir.listFiles { _, name -> name.startsWith("$id-") }?.forEach { it.delete() }
-        }
     }
 
     suspend fun load(id: String): MobileProject = withContext(Dispatchers.IO) {
