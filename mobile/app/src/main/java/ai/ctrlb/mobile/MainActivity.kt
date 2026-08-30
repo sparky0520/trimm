@@ -186,7 +186,6 @@ class MainActivity : ComponentActivity() {
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         AccountControl()
-                        TextButton(onClick = { scope.launch { Clerk.auth.signOut() } }) { Text("Sign Out", color = Coral) }
                     }
                 }
             }
@@ -203,9 +202,10 @@ class MainActivity : ComponentActivity() {
         state.project != null -> EditorScreen(
             state, vm::undo, vm::export, vm::applyProposal, vm::rejectProposal,
             vm::undoCheckpoint,
-            vm::reviseStory, vm::retryTurn, vm::switchBranch, vm::recoverAgent, vm::cancelAnalysis
+            vm::reviseStory, vm::retryTurn, vm::switchBranch, vm::recoverAgent, vm::cancelAnalysis,
+            onOpenDrawer
         )
-        else -> NewEditChatScreen(state, vm::generateDraft, vm::moveClip)
+        else -> NewEditChatScreen(state, vm::generateDraft, vm::moveClip, onOpenDrawer)
     }
 }
 
@@ -321,7 +321,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable private fun NewEditChatScreen(state: EditorState, createDraft: (String) -> Unit, moveClip: (Int, Int) -> Unit) {
+@Composable private fun NewEditChatScreen(state: EditorState, createDraft: (String) -> Unit, moveClip: (Int, Int) -> Unit, onOpenDrawer: () -> Unit) {
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     var message by rememberSaveable { mutableStateOf("") }
     val suggestions = listOf(
@@ -330,7 +330,7 @@ class MainActivity : ComponentActivity() {
         "Keep the best takes and remove mistakes",
     )
     Column(Modifier.fillMaxSize().background(Ink)) {
-        BrandBar()
+        BrandBar(onOpenDrawer = onOpenDrawer)
         LazyColumn(
             Modifier.weight(1f),
             contentPadding = PaddingValues(12.dp),
@@ -436,6 +436,7 @@ private sealed interface ChatElement {
     switchBranch: (String) -> Unit,
     recoverAgent: (AgentRecoveryAction) -> Unit,
     cancelAnalysis: () -> Unit,
+    onOpenDrawer: () -> Unit,
 ) {
     val project = requireNotNull(state.project)
     var fullscreen by rememberSaveable { mutableStateOf(false) }
@@ -455,7 +456,8 @@ private sealed interface ChatElement {
             actionLabel = "Export ${minOf(project.export.width, project.export.height)}p",
             onAction = export,
             secondaryLabel = if (showVideo) "Hide Video" else "Show Video",
-            onSecondary = { showVideo = !showVideo }
+            onSecondary = { showVideo = !showVideo },
+            onOpenDrawer = onOpenDrawer
         )
         if (showVideo) {
             Column(Modifier.fillMaxWidth().padding(start = 12.dp, top = 12.dp, end = 12.dp).background(Workspace, RoundedCornerShape(18.dp)).border(1.dp, Border, RoundedCornerShape(18.dp))) {

@@ -329,6 +329,20 @@ const server = http.createServer(async (request, response) => {
     }
   }
 
+  if (request.method === 'POST' && requestUrl.pathname === '/v1/chats/title') {
+    try {
+      const { transcript } = await collect(request);
+      if (!transcript) throw Object.assign(new Error('Missing transcript'), { status: 400 });
+      const { createGeminiDecisionProvider } = require('./gemini-agent.cjs');
+      const agent = createGeminiDecisionProvider();
+      const title = await agent.generateTitle(transcript);
+      return { status: 200, body: { title } };
+    } catch (err) {
+      console.error('Title Error:', err);
+      return { status: err.status || 500, body: { error: err.message } };
+    }
+  }
+
   if (request.method === 'POST' && requestUrl.pathname === '/v1/chats/edit') {
     try {
       // Create a background job for chat editing

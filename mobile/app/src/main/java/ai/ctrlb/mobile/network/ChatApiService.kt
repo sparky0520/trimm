@@ -18,9 +18,15 @@ data class ChatEditResponse(
     val checkpointId: String
 )
 
+data class ChatTitleRequest(val transcript: String)
+data class ChatTitleResponse(val title: String)
+
 interface ChatApiService {
     @POST("/v1/chats/edit")
     suspend fun submitEdit(@Body request: ChatEditRequest): ChatEditResponse
+
+    @POST("/v1/chats/title")
+    suspend fun generateTitle(@Body request: ChatTitleRequest): ChatTitleResponse
 
     companion object {
         fun create(): ChatApiService {

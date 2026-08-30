@@ -170,7 +170,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             maxOf(capability.recommendedWidth, capability.recommendedHeight),
             minOf(capability.recommendedWidth, capability.recommendedHeight)
         )
-        val project = MobileProject(title = "Talking head edit", source = source, sources = sources, preferences = preferences, creatorPreferences = current.creatorPreferences, analysis = Analysis(words = words, speechHints = candidates), operations = operations,
+        val project = MobileProject(title = "New Edit", source = source, sources = sources, preferences = preferences, creatorPreferences = current.creatorPreferences, analysis = Analysis(words = words, speechHints = candidates), operations = operations,
             export = ExportSettings(exportSize.width, exportSize.height, if (capability.allow4k) "video/hevc" else "video/avc", if (capability.allow4k) 45_000_000 else 16_000_000))
         mutable.value = current.copy(
             project = project,
@@ -181,7 +181,24 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             initialRequest = brief,
             isProcessing = true,
         )
-        viewModelScope.launch { store.save(project) }
+        viewModelScope.launch { 
+            var updatedProject = project
+            if (words.isNotEmpty()) {
+                try {
+                    val transcript = words.joinToString(" ") { it.text }
+                    val response = ai.ctrlb.mobile.network.ChatApiService.create().generateTitle(
+                        ai.ctrlb.mobile.network.ChatTitleRequest(transcript)
+                    )
+                    updatedProject = updatedProject.copy(title = response.title)
+                    if (mutable.value.project?.id == project.id) {
+                        mutable.value = mutable.value.copy(project = updatedProject)
+                    }
+                } catch (e: Exception) {
+                    // Fallback to "New Edit"
+                }
+            }
+            store.save(updatedProject) 
+        }
         val request = OneTimeWorkRequestBuilder<AnalysisWorker>().setInputData(
             Data.Builder().putString("projectId", project.id).putString("prompt", brief).build()
         ).addTag("analysis:${project.id}").build()
