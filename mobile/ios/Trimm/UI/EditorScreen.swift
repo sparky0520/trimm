@@ -13,53 +13,60 @@ public struct EditorScreen: View {
         VStack(spacing: 0) {
             // Video Player Area
             ZStack {
-                Color.black.ignoresSafeArea()
+                Color.ink.ignoresSafeArea()
                 if let _ = viewModel.state.project?.source {
                     if let player = viewModel.player {
                         VideoPlayer(player: player)
                     } else {
                         ProgressView("Loading Video...")
-                            .foregroundColor(.white)
+                            .foregroundColor(.lavender)
                     }
                 }
             }
             .frame(height: UIScreen.main.bounds.height * 0.4)
             
             // Conversation Area
-            ScrollView {
-                VStack(spacing: 16) {
-                    if let initial = viewModel.state.initialRequest {
-                        ChatBubble(message: initial, isUser: true)
-                    }
-                    
-                    if let project = viewModel.state.project {
-                        // In a full implementation, iterate over project.analysis.revisionConversation
-                        // and project.analysis.appliedEditCheckpoints
-                        let analysis = project.analysis
-                        if let _ = analysis.completedAtEpochMs {
-                             ChatBubble(message: "Analysis complete. Proposal ready.", isUser: false)
+            ZStack {
+                Color.ink.ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 16) {
+                        if let initial = viewModel.state.initialRequest {
+                            ChatBubble(message: initial, isUser: true)
+                        }
+                        
+                        if let project = viewModel.state.project {
+                            let analysis = project.analysis
+                            if let _ = analysis.completedAtEpochMs {
+                                 ChatBubble(message: "Analysis complete. Proposal ready.", isUser: false)
+                            }
+                        }
+                        
+                        if let job = viewModel.state.jobMessage {
+                            ChatBubble(message: job, isUser: false)
+                        }
+                        
+                        if viewModel.state.isProcessing {
+                            HStack {
+                                ProgressView()
+                                    .padding()
+                                    .tint(.lavender)
+                                Spacer()
+                            }
                         }
                     }
-                    
-                    if let job = viewModel.state.jobMessage {
-                        ChatBubble(message: job, isUser: false)
-                    }
-                    
-                    if viewModel.state.isProcessing {
-                        HStack {
-                            ProgressView()
-                                .padding()
-                            Spacer()
-                        }
-                    }
+                    .padding()
                 }
-                .padding()
             }
             
             // Input Area
             HStack {
                 TextField("Ask Trimm to change something...", text: $prompt)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .padding(12)
+                    .background(Color.workspace)
+                    .foregroundColor(.creamRaised)
+                    .cornerRadius(8)
                     .disabled(viewModel.state.isProcessing)
                 
                 Button(action: {
@@ -68,12 +75,12 @@ public struct EditorScreen: View {
                 }) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.title)
-                        .foregroundColor(prompt.isEmpty ? .gray : .blue)
+                        .foregroundColor(prompt.isEmpty ? .muted : .coral)
                 }
                 .disabled(prompt.isEmpty || viewModel.state.isProcessing)
             }
             .padding()
-            .background(Color(UIColor.systemBackground))
+            .background(Color.ink)
         }
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -88,9 +95,10 @@ struct ChatBubble: View {
             if isUser { Spacer() }
             
             Text(message)
+                .font(.system(size: 15))
                 .padding(12)
-                .background(isUser ? Color.blue : Color(UIColor.secondarySystemBackground))
-                .foregroundColor(isUser ? .white : .primary)
+                .background(isUser ? Color.raised : Color.workspace)
+                .foregroundColor(.cream)
                 .cornerRadius(16)
                 .frame(maxWidth: 280, alignment: isUser ? .trailing : .leading)
             
