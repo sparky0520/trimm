@@ -164,6 +164,7 @@ h1 span {
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 0;
 }
 .frame-bar {
   height: 48px;
@@ -247,6 +248,7 @@ h1 span {
   padding: 16px;
   flex: 1;
   overflow-y: auto;
+  min-height: 0;
 }
 .message {
   margin: 0;
@@ -377,6 +379,7 @@ h1 span {
   padding-top: 86px;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 footer {
   min-height: 140px;
