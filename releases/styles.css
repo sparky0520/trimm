@@ -316,18 +316,19 @@ h1 span {
 }
 .workflow ol {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: 1fr;
   margin: 65px 0 0;
   padding: 0;
   list-style: none;
   border-top: 1px solid var(--line);
 }
 .workflow li {
-  padding: 30px 28px 4px 0;
+  padding: 26px 0;
 }
 .workflow li + li {
-  padding-left: 28px;
-  border-left: 1px solid var(--line);
+  padding-left: 0;
+  border-left: 0;
+  border-top: 1px solid var(--line);
 }
 .workflow li span {
   color: var(--muted);
@@ -356,6 +357,20 @@ h1 span {
 .closing .eyebrow {
   margin-bottom: 16px;
 }
+.split-main {
+  display: grid;
+  grid-template-columns: 1fr 0.92fr;
+  gap: 70px;
+}
+.hero {
+  min-height: 690px;
+  display: flex;
+  align-items: center;
+  padding: 86px 0;
+}
+.sidebar {
+  padding-top: 86px;
+}
 footer {
   min-height: 140px;
   display: flex;
@@ -374,9 +389,15 @@ footer div {
   font-size: 13px;
 }
 @media (max-width: 800px) {
-  .hero {
+  .split-main {
     grid-template-columns: 1fr;
-    gap: 54px;
+    gap: 0;
+  }
+  .sidebar {
+    padding-top: 0;
+  }
+  .hero {
+    min-height: auto;
     padding: 64px 0 72px;
   }
   .hero-copy {
@@ -396,18 +417,6 @@ footer div {
   }
   .workflow {
     padding: 90px 0;
-  }
-  .workflow ol {
-    grid-template-columns: 1fr;
-    margin-top: 45px;
-  }
-  .workflow li {
-    padding: 26px 0;
-  }
-  .workflow li + li {
-    padding-left: 0;
-    border-left: 0;
-    border-top: 1px solid var(--line);
   }
 }
 @media (max-width: 560px) {
