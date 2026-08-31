@@ -29,7 +29,8 @@ public enum EditOperation: Codable, Equatable {
     case addMotionPreset(id: String, enabled: Bool, range: TimeRange?, preset: String, intensity: Float)
     case addCaptions(id: String, enabled: Bool, cues: [CaptionCue], target: OperationTarget?, speakerId: String?, style: String)
     case addSectionTransition(id: String, enabled: Bool, target: OperationTarget?, preset: String, customBlueprint: String)
-    case addBgm(id: String, enabled: Bool, target: OperationTarget?, prompt: String, role: String, reason: String, url: String)
+    case addBgm(id: String, enabled: Bool, target: OperationTarget?, prompt: String, reason: String, url: String)
+    case addBgmEffect(id: String, enabled: Bool, target: OperationTarget?, prompt: String, reason: String, url: String)
     case addSfx(id: String, enabled: Bool, target: OperationTarget?, prompt: String, reason: String, url: String)
     
     private enum CodingKeys: String, CodingKey {
@@ -111,7 +112,14 @@ public enum EditOperation: Codable, Equatable {
                 id: id, enabled: enabled,
                 target: try container.decodeIfPresent(OperationTarget.self, forKey: .target),
                 prompt: try container.decode(String.self, forKey: .prompt),
-                role: try container.decodeIfPresent(String.self, forKey: .role) ?? "bed",
+                reason: try container.decodeIfPresent(String.self, forKey: .reason) ?? "",
+                url: try container.decodeIfPresent(String.self, forKey: .url) ?? ""
+            )
+        case "add_bgm_effect":
+            self = .addBgmEffect(
+                id: id, enabled: enabled,
+                target: try container.decodeIfPresent(OperationTarget.self, forKey: .target),
+                prompt: try container.decode(String.self, forKey: .prompt),
                 reason: try container.decodeIfPresent(String.self, forKey: .reason) ?? "",
                 url: try container.decodeIfPresent(String.self, forKey: .url) ?? ""
             )
@@ -191,13 +199,20 @@ public enum EditOperation: Codable, Equatable {
             try container.encodeIfPresent(target, forKey: .target)
             try container.encode(preset, forKey: .preset)
             try container.encode(customBlueprint, forKey: .customBlueprint)
-        case .addBgm(let id, let enabled, let target, let prompt, let role, let reason, let url):
+        case .addBgm(let id, let enabled, let target, let prompt, let reason, let url):
             try container.encode("add_bgm", forKey: .type)
             try container.encode(id, forKey: .id)
             try container.encode(enabled, forKey: .enabled)
             try container.encodeIfPresent(target, forKey: .target)
             try container.encode(prompt, forKey: .prompt)
-            try container.encode(role, forKey: .role)
+            try container.encode(reason, forKey: .reason)
+            try container.encode(url, forKey: .url)
+        case .addBgmEffect(let id, let enabled, let target, let prompt, let reason, let url):
+            try container.encode("add_bgm_effect", forKey: .type)
+            try container.encode(id, forKey: .id)
+            try container.encode(enabled, forKey: .enabled)
+            try container.encodeIfPresent(target, forKey: .target)
+            try container.encode(prompt, forKey: .prompt)
             try container.encode(reason, forKey: .reason)
             try container.encode(url, forKey: .url)
         case .addSfx(let id, let enabled, let target, let prompt, let reason, let url):

@@ -123,17 +123,23 @@ const PROPOSE_COLOR_TOOLS = [
 
 const PROPOSE_ADD_BGM_TOOL = operationTool(
   'propose_add_bgm',
-  'Generate and add background music. Use role="bed" for continuous background tracks, or role="effect" for short musical stingers/crescendos meant to be layered on top of the bed at specific times.',
+  'Generate and add a continuous background music bed. This tool is strictly for long-duration background music that spans the video. Do not use this for short musical effects.',
   ['prompt', 'reason'], {
   ...targetRangeProperties,
   prompt: { type: 'string' },
-  role: { type: 'string', enum: ['bed', 'effect'], description: 'Whether this is a continuous background bed or a specific musical effect/hit.' },
-  reason: { type: 'string' },
+});
+
+const PROPOSE_ADD_BGM_EFFECT_TOOL = operationTool(
+  'propose_add_bgm_effect',
+  'Generate and add a longer duration musical effect (default length around 10 to 12 seconds). Use this for musical stingers, crescendos, or drum rolls meant to be layered at specific times. Examples: "10 second rising crescendo", "long drum roll", "suspenseful orchestral build".',
+  ['sourceId', 'startMs', 'endMs', 'prompt', 'reason'], {
+  ...targetRangeProperties,
+  prompt: { type: 'string' },
 });
 
 const PROPOSE_ADD_SFX_TOOL = operationTool(
   'propose_add_sfx',
-  'Generate and add a diegetic foley sound effect (e.g. footsteps, door slam). Do NOT use this for musical cues, use propose_add_bgm with role="effect" instead.',
+  'Generate and add a short duration foley or sound effect (default length around 2 seconds). Do NOT use this for longer musical effects; use propose_add_bgm_effect for those. Examples: "short swoosh", "punch", "door slam", "quick cymbal crash".',
   ['sourceId', 'startMs', 'endMs', 'prompt', 'reason'], {
   ...targetRangeProperties,
   prompt: { type: 'string' },
@@ -190,7 +196,7 @@ const AGENT_TOOLS = Object.freeze([
   PROPOSE_REMOVE_RANGES_TOOL,
   PROPOSE_DIALOGUE_LOUDNESS_TOOL, PROPOSE_MUSIC_DUCKING_TOOL,
   PROPOSE_CAPTIONS_TOOL, PROPOSE_ASPECT_RATIO_TOOL, PROPOSE_TEXT_OVERLAY_TOOL, PROPOSE_ADD_SECTION_TRANSITION_TOOL, ...PROPOSE_COLOR_TOOLS,
-  PROPOSE_ADD_BGM_TOOL, PROPOSE_ADD_SFX_TOOL,
+  PROPOSE_ADD_BGM_TOOL, PROPOSE_ADD_BGM_EFFECT_TOOL, PROPOSE_ADD_SFX_TOOL,
   ASK_CLARIFICATION_TOOL, FINALIZE_EDIT_PROGRAM_TOOL,
   REMOVE_DRAFT_OPERATION_TOOL, FINISH_WITHOUT_PROPOSAL_TOOL,
 ]);

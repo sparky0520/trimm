@@ -22,6 +22,7 @@ object OperationValidator {
                 is SetAspectRatio -> "video-aspect-ratio:${operation.ratio.name}"
                 is AddTextOverlay -> "video-text-overlay:${operation.id}:${operation.text}"
                 is AddBgm -> "audio-bgm:${operation.url}"
+                is AddBgmEffect -> "audio-bgm-effect:${operation.target?.startMs}:${operation.target?.endMs}:${operation.url}"
                 is AddSfx -> "audio-sfx:${operation.target?.startMs}:${operation.target?.endMs}:${operation.url}"
                 is AddSectionTransition -> "video-transition:${operation.id}:${operation.preset}"
                 is AddMotionPreset -> error("Unrendered operation reached render contract")
@@ -37,6 +38,7 @@ object OperationValidator {
         is SetAspectRatio -> "Aspect ratio: ${operation.ratio.name}"
         is AddTextOverlay -> "Custom Text Overlay Graphics"
         is AddBgm -> "Generated • ${operation.prompt}"
+        is AddBgmEffect -> "Generated • ${operation.prompt}"
         is AddSfx -> "Generated • ${operation.prompt}"
         is AddSectionTransition -> "Transition • ${operation.preset}"
         is AddMotionPreset -> "Unavailable • not rendered"
@@ -88,6 +90,7 @@ object OperationValidator {
             is AddCaptions -> { require(op.cues.isNotEmpty()); op.cues.forEach { require(it.range.endMs <= project.durationMs); require(it.text.isNotBlank() && it.text.length <= 120) } }
             is AddTextOverlay -> { require(op.text.isNotBlank()); validateTarget(project, op.target) }
             is AddBgm -> { require(op.prompt.isNotBlank()); validateTarget(project, op.target) }
+            is AddBgmEffect -> { require(op.prompt.isNotBlank()); validateTarget(project, op.target) }
             is AddSfx -> { require(op.prompt.isNotBlank()); validateTarget(project, op.target) }
             is AddSectionTransition -> { require(op.preset.isNotBlank()); validateTarget(project, op.target) }
         } }

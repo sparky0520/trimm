@@ -645,6 +645,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         is SetAspectRatio -> op.copy(enabled = !op.enabled); is AddMotionPreset -> op.copy(enabled = !op.enabled); is AddCaptions -> op.copy(enabled = !op.enabled)
         is AddTextOverlay -> op.copy(enabled = !op.enabled)
         is AddBgm -> op.copy(enabled = !op.enabled)
+        is AddBgmEffect -> op.copy(enabled = !op.enabled)
         is AddSfx -> op.copy(enabled = !op.enabled)
         is AddSectionTransition -> op.copy(enabled = !op.enabled)
     }
@@ -675,6 +676,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         is AddCaptions -> "Updated ${cues.size} caption cue${if (cues.size == 1) "" else "s"}"
         is AddTextOverlay -> "Updated text overlay"
         is AddBgm -> "Added background music"
+        is AddBgmEffect -> "Added background music effect"
         is AddSfx -> "Added sound effect"
         is AddSectionTransition -> "Added section transition"
     }
