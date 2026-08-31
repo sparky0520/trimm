@@ -13,11 +13,9 @@
 </head>
 
 <body>
-  <div class="layout">
-    <div class="layout-left">
-      <header class="nav shell"><a class="brand" href="./" aria-label="Trimm home"><img src="./trimm-icon.png" class="brand-mark" alt="Trimm logo"><span>Trimm</span></a>
-        <nav aria-label="Primary navigation"><a href="#how-it-works">How it works</a></nav>
-      </header>
+  <header class="nav shell"><a class="brand" href="./" aria-label="Trimm home"><img src="./trimm-icon.png" class="brand-mark" alt="Trimm logo"><span>Trimm</span></a>
+    <nav aria-label="Primary navigation"><a href="#how-it-works">How it works</a></nav>
+  </header>
   <main>
     <section class="hero shell">
       <div class="hero-copy">
@@ -29,7 +27,49 @@
           <a class="button" href="#early-access-form">Join Early Access</a>
           <a class="button button-quiet" href="#how-it-works">See how it works</a>
         </div>
-      </section>
+      </div>
+      <div class="product-frame" aria-label="Example Trimm editing workspace">
+        <div class="frame-bar"><img src="./trimm-icon.png" class="brand-mark" alt="Trimm logo"><span>New edit</span><span
+            class="frame-status">Ready</span></div>
+        <div class="preview" style="padding: 0;">
+          <iframe width="100%" height="100%" style="aspect-ratio: 16/9; min-height: 185px; border: none; display: block;" src="https://www.youtube.com/embed/YE7VzlLtp-4" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+        </div>
+        <div class="timeline"><span></span><i></i><b></b><i></i><span></span></div>
+        <div class="conversation">
+          <p class="message message-user">Make this product demo concise. Keep the pricing explanation.</p>
+          <div class="message message-agent"><strong>Trimm</strong>
+            <p>I found a cleaner opening and a stronger demonstration take.</p>
+            <div class="proposal"><span>Proposed edit</span><b>Remove 3 false starts · tighten 4 pauses</b><small>Review
+                before applying</small></div>
+          </div>
+          <p class="message message-user">Can you also add subtitles for the whole video?</p>
+          <div class="message message-agent"><strong>Trimm</strong>
+            <p>Subtitles generated and aligned with the speech.</p>
+            <div class="proposal"><span>Proposed edit</span><b>Add English Captions</b><small>Review before applying</small></div>
+          </div>
+          <p class="message message-user">Change the font of the subtitles to something more playful.</p>
+          <div class="message message-agent"><strong>Trimm</strong>
+            <p>I've updated the caption style to a playful comic font.</p>
+            <div class="proposal"><span>Proposed edit</span><b>Update Caption Style</b><small>Review before applying</small></div>
+          </div>
+          <p class="message message-user">Remove the awkward pause around 1:20.</p>
+          <div class="message message-agent"><strong>Trimm</strong>
+            <p>Done. I've trimmed out the silence between 1:19 and 1:22.</p>
+            <div class="proposal"><span>Proposed edit</span><b>Trim Silence</b><small>Review before applying</small></div>
+          </div>
+          <p class="message message-user">Also, boost the audio on the last segment.</p>
+          <div class="message message-agent"><strong>Trimm</strong>
+            <p>I've increased the gain by 3dB on the final clip.</p>
+            <div class="proposal"><span>Proposed edit</span><b>Adjust Audio Levels</b><small>Review before applying</small></div>
+          </div>
+          <p class="message message-user">Export the video in 1080p.</p>
+          <div class="message message-agent"><strong>Trimm</strong>
+            <p>Ready to export. Your project will be rendered at 1920x1080.</p>
+            <div class="proposal"><span>Action</span><b>Export 1080p</b><small>Confirm to start</small></div>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <section class="workflow shell" id="how-it-works">
       <div class="section-intro">
@@ -101,51 +141,6 @@
   <footer class="shell"><a class="brand" href="./"><img src="./trimm-icon.png" class="brand-mark" alt="Trimm logo"><span>Trimm</span></a>
     <p>Video editing should feel like a conversation.</p>
   </footer>
-    </div>
-    <div class="layout-right">
-      <div class="product-frame" aria-label="Example Trimm editing workspace">
-        <div class="frame-bar"><img src="./trimm-icon.png" class="brand-mark" alt="Trimm logo"><span>New edit</span><span
-            class="frame-status">Ready</span></div>
-        <div class="preview" style="padding: 0;">
-          <iframe width="100%" height="100%" style="aspect-ratio: 16/9; min-height: 185px; border: none; display: block;" src="https://www.youtube.com/embed/YE7VzlLtp-4" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-        </div>
-        <div class="timeline"><span></span><i></i><b></b><i></i><span></span></div>
-        <div class="conversation">
-          <p class="message message-user">Make this product demo concise. Keep the pricing explanation.</p>
-          <div class="message message-agent"><strong>Trimm</strong>
-            <p>I found a cleaner opening and a stronger demonstration take.</p>
-            <div class="proposal"><span>Proposed edit</span><b>Remove 3 false starts · tighten 4 pauses</b><small>Review
-                before applying</small></div>
-          </div>
-          <p class="message message-user">Can you also add subtitles for the whole video?</p>
-          <div class="message message-agent"><strong>Trimm</strong>
-            <p>Subtitles generated and aligned with the speech.</p>
-            <div class="proposal"><span>Proposed edit</span><b>Add English Captions</b><small>Review before applying</small></div>
-          </div>
-          <p class="message message-user">Change the font of the subtitles to something more playful.</p>
-          <div class="message message-agent"><strong>Trimm</strong>
-            <p>I've updated the caption style to a playful comic font.</p>
-            <div class="proposal"><span>Proposed edit</span><b>Update Caption Style</b><small>Review before applying</small></div>
-          </div>
-          <p class="message message-user">Remove the awkward pause around 1:20.</p>
-          <div class="message message-agent"><strong>Trimm</strong>
-            <p>Done. I've trimmed out the silence between 1:19 and 1:22.</p>
-            <div class="proposal"><span>Proposed edit</span><b>Trim Silence</b><small>Review before applying</small></div>
-          </div>
-          <p class="message message-user">Also, boost the audio on the last segment.</p>
-          <div class="message message-agent"><strong>Trimm</strong>
-            <p>I've increased the gain by 3dB on the final clip.</p>
-            <div class="proposal"><span>Proposed edit</span><b>Adjust Audio Levels</b><small>Review before applying</small></div>
-          </div>
-          <p class="message message-user">Export the video in 1080p.</p>
-          <div class="message message-agent"><strong>Trimm</strong>
-            <p>Ready to export. Your project will be rendered at 1920x1080.</p>
-            <div class="proposal"><span>Action</span><b>Export 1080p</b><small>Confirm to start</small></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
   <script src="./app.js" defer></script>
 </body>
 
