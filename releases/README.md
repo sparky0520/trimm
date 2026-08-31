@@ -10,8 +10,6 @@ This public repository stores trimm desktop release assets and hosts the
 official download webpage through GitHub Pages.
 
 - Website: <https://sparky0520.github.io/trimm-releases/>
-- Visual system explainer:
-  <https://sparky0520.github.io/trimm-releases/how-video-editing-works.html>
 - Latest Windows installer:
   <https://github.com/sparky0520/trimm-releases/releases/latest/download/trimm-Setup-Windows.exe>
 
