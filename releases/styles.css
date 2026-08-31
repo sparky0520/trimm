@@ -245,6 +245,8 @@ h1 span {
   display: grid;
   gap: 12px;
   padding: 16px;
+  flex: 1;
+  overflow-y: auto;
 }
 .message {
   margin: 0;
