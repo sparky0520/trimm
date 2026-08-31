@@ -376,10 +376,16 @@ h1 span {
   padding: 86px 0;
 }
 .sidebar {
-  padding-top: 86px;
+  position: relative;
+}
+.sidebar-inner {
+  position: absolute;
+  top: 86px;
+  bottom: 0;
+  left: 0;
+  right: 0;
   display: flex;
   flex-direction: column;
-  min-height: 0;
 }
 footer {
   min-height: 140px;
@@ -404,7 +410,10 @@ footer div {
     gap: 0;
   }
   .sidebar {
-    padding-top: 0;
+    position: static;
+  }
+  .sidebar-inner {
+    position: static;
   }
   .hero {
     min-height: auto;
