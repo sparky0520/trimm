@@ -19,7 +19,6 @@ targets:
       properties:
         UILaunchScreen: {}
         UIRequiresFullScreen: true
-        NSSpeechRecognitionUsageDescription: "Trimm uses speech recognition to transcribe your video clips for AI editing."
     settings:
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     dependencies:

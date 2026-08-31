@@ -14,7 +14,7 @@ class AudioGeneration {
     this.mockS3Cache = new Map();
   }
 
-  async augmentPrompt(userPrompt, type) {
+  async augmentPrompt(userPrompt, type, role = 'bed') {
     const apiKey = process.env.MOONSHOT_API_KEY;
     const baseURL = process.env.MOONSHOT_BASE_URL || 'https://api.moonshot.ai/v1';
     const model = process.env.MOONSHOT_MODEL || 'kimi-k3';
@@ -24,9 +24,16 @@ class AudioGeneration {
       return userPrompt;
     }
 
-    const systemPrompt = type === 'bgm' 
-      ? 'You are an expert prompt engineer for AI music generation. Take the user\'s short idea and expand it into a detailed, comma-separated list of musical attributes (genre, instruments, tempo, mood). Keep it under 50 words. ONLY return the final prompt.'
-      : 'You are an expert prompt engineer for AI sound effect generation. Take the user\'s short idea and expand it into a descriptive prompt focusing on texture, impact, and environment. Keep it under 30 words. ONLY return the final prompt.';
+    let systemPrompt = '';
+    if (type === 'bgm') {
+      if (role === 'effect') {
+        systemPrompt = 'You are an expert prompt engineer for AI music generation. The user wants a short musical stinger, crescendo, or impact effect to be layered on a timeline. Take the user\'s idea and expand it into a detailed list of musical attributes (instruments, intensity, style). Keep it under 30 words. ONLY return the final prompt.';
+      } else {
+        systemPrompt = 'You are an expert prompt engineer for AI music generation. Take the user\'s short idea and expand it into a detailed, comma-separated list of musical attributes (genre, instruments, tempo, mood) for a background music bed. Keep it under 50 words. ONLY return the final prompt.';
+      }
+    } else {
+      systemPrompt = 'You are an expert prompt engineer for AI sound effect generation. Take the user\'s short idea and expand it into a descriptive prompt focusing on texture, impact, and environment. Keep it under 30 words. ONLY return the final prompt.';
+    }
 
     try {
       const response = await fetch(`${baseURL}/chat/completions`, {
@@ -58,8 +65,8 @@ class AudioGeneration {
     return userPrompt;
   }
 
-  async generateBgm(prompt, durationSecs) {
-    let augmentedPrompt = await this.augmentPrompt(prompt, 'bgm');
+  async generateBgm(prompt, durationSecs, role = 'bed') {
+    let augmentedPrompt = await this.augmentPrompt(prompt, 'bgm', role);
     console.log(`[AudioGeneration] Generating BGM for prompt: "${augmentedPrompt}", duration: ${durationSecs}s`);
     
     if (!this.replicateApiToken) {

@@ -185,39 +185,59 @@ object ExportCoordinator {
             if (end > start) TimeRange(maxOf(0L, start - bufferMs), end + bufferMs) else null
         }
 
-        project.operations.filterIsInstance<AddBgm>().lastOrNull { it.enabled }?.let { bgm ->
+        project.operations.filterIsInstance<AddBgm>().filter { it.enabled }.forEach { bgm ->
             val item = MediaItem.Builder().setUri(Uri.parse(bgm.url)).build()
-            val effects = if (speechRanges.isNotEmpty()) listOf(GainProcessor(SpeechDuckingGainProvider(1f, duckDb, speechRanges))) else emptyList()
+            val isBed = bgm.role == "bed"
+            
+            // Only duck BGM beds
+            val effects = if (isBed && speechRanges.isNotEmpty()) listOf(GainProcessor(SpeechDuckingGainProvider(1f, duckDb, speechRanges))) else emptyList()
             val audioDurationMs = getRemoteMediaDurationMs(bgm.url, 15000L)
+            
+            val targetMs = if (!isBed) timelineMapper.sourceToOutput(bgm.target?.startMs ?: 0L) else 0L
+            val items = mutableListOf<EditedMediaItem>()
+            
+            if (targetMs > 0) {
+                val silenceUri = getSilenceUri(context, targetMs)
+                val silenceItem = MediaItem.Builder().setUri(silenceUri).build()
+                items += EditedMediaItem.Builder(silenceItem)
+                    .setDurationUs(targetMs * 1000L)
+                    .setEffects(Effects(emptyList(), emptyList()))
+                    .build()
+            }
+            
             val edited = EditedMediaItem.Builder(item)
                 .setDurationUs(audioDurationMs * 1000L)
                 .setEffects(Effects(effects, emptyList()))
                 .build()
-            
-            if (isPreview) {
-                val totalVideoDurationMs = timelineMapper.sourceToOutput(project.orderedSources.sumOf { it.durationMs })
-                val repeats = if (audioDurationMs > 0) {
-                    Math.ceil(totalVideoDurationMs.toDouble() / audioDurationMs).toInt()
-                } else 1
-                val items = buildList {
+
+            if (isBed) {
+                if (isPreview) {
+                    val totalVideoDurationMs = timelineMapper.sourceToOutput(project.orderedSources.sumOf { it.durationMs })
+                    val repeats = if (audioDurationMs > 0) {
+                        Math.ceil(totalVideoDurationMs.toDouble() / audioDurationMs).toInt()
+                    } else 1
                     for (i in 0 until repeats) {
                         if (i == repeats - 1) {
                             val remainingMs = totalVideoDurationMs - (i * audioDurationMs)
                             if (remainingMs > 0) {
                                 val clipping = MediaItem.ClippingConfiguration.Builder().setEndPositionMs(remainingMs).build()
                                 val lastItem = MediaItem.Builder().setUri(Uri.parse(bgm.url)).setClippingConfiguration(clipping).build()
-                                add(EditedMediaItem.Builder(lastItem).setDurationUs(remainingMs * 1000L).setEffects(Effects(effects, emptyList())).build())
+                                items.add(EditedMediaItem.Builder(lastItem).setDurationUs(remainingMs * 1000L).setEffects(Effects(effects, emptyList())).build())
                             }
                         } else {
-                            add(edited)
+                            items.add(edited)
                         }
                     }
+                    sequences += EditedMediaItemSequence.Builder(items).build()
+                } else {
+                    items.add(edited)
+                    val builder = EditedMediaItemSequence.Builder(items)
+                    builder.setIsLooping(true)
+                    sequences += builder.build()
                 }
-                sequences += EditedMediaItemSequence.Builder(items).build()
             } else {
-                val builder = EditedMediaItemSequence.Builder(listOf(edited))
-                builder.setIsLooping(true)
-                sequences += builder.build()
+                items.add(edited)
+                sequences += EditedMediaItemSequence.Builder(items).build()
             }
         }
 

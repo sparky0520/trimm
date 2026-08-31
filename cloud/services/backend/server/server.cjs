@@ -236,9 +236,9 @@ const server = http.createServer(async (request, response) => {
 
   if (request.method === 'POST' && requestUrl.pathname === '/v1/audio/generate-bgm') {
     try {
-      const { prompt, durationSecs, beats } = await collect(request);
+      const { prompt, durationSecs, beats, role } = await collect(request);
       if (!prompt || !durationSecs) throw Object.assign(new Error('Missing prompt or durationSecs'), { status: 400 });
-      return json(response, 200, await audioGeneration.generateBgm(prompt, durationSecs));
+      return json(response, 200, await audioGeneration.generateBgm(prompt, durationSecs, role));
     } catch (error) {
       console.error('[audio-generate-bgm] request failed', { message: error?.message });
       return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message || 'BGM generation failed' });

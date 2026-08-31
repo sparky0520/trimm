@@ -123,16 +123,17 @@ const PROPOSE_COLOR_TOOLS = [
 
 const PROPOSE_ADD_BGM_TOOL = operationTool(
   'propose_add_bgm',
-  'Generate and add background music to the entire video or a specific interval based on a descriptive prompt (e.g. "cyberpunk synthwave").',
+  'Generate and add background music. Use role="bed" for continuous background tracks, or role="effect" for short musical stingers/crescendos meant to be layered on top of the bed at specific times.',
   ['prompt', 'reason'], {
   ...targetRangeProperties,
   prompt: { type: 'string' },
+  role: { type: 'string', enum: ['bed', 'effect'], description: 'Whether this is a continuous background bed or a specific musical effect/hit.' },
   reason: { type: 'string' },
 });
 
 const PROPOSE_ADD_SFX_TOOL = operationTool(
   'propose_add_sfx',
-  'Generate and add a sound effect to a specific interval based on a descriptive prompt (e.g. "cinematic whoosh").',
+  'Generate and add a diegetic foley sound effect (e.g. footsteps, door slam). Do NOT use this for musical cues, use propose_add_bgm with role="effect" instead.',
   ['sourceId', 'startMs', 'endMs', 'prompt', 'reason'], {
   ...targetRangeProperties,
   prompt: { type: 'string' },

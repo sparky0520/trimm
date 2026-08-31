@@ -18,8 +18,6 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Trimm uses speech recognition to transcribe your video clips for AI editing.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIRequiresFullScreen</key>
