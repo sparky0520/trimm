@@ -591,19 +591,11 @@ private sealed interface ChatElement {
                     }
                     is ChatElement.Checkpoint -> {
                         val checkpoint = element.checkpoint
-                        val canUndo = project.analysis.appliedEditCheckpoints.lastOrNull()?.id == checkpoint.id
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.weight(1f)) {
-                                EditResultChatBubble(checkpoint)
-                            }
-                            IconButton(
-                                onClick = { if (canUndo) undoCheckpoint(checkpoint.id) },
-                                enabled = canUndo,
-                                modifier = Modifier.padding(end = 8.dp)
-                            ) {
-                                Text(if (canUndo) "↩" else "✓", fontSize = 24.sp, color = if (canUndo) Green else Muted)
-                            }
-                        }
+                        EditResultChatBubble(
+                            checkpoint = checkpoint,
+                            canUndo = project.analysis.appliedEditCheckpoints.lastOrNull()?.id == checkpoint.id,
+                            undo = { undoCheckpoint(checkpoint.id) }
+                        )
                     }
                 }
             }
@@ -1119,13 +1111,22 @@ private fun reviewPercent(value: Float) = "${(value * 100).toInt()}%"
     }
 }
 
-@Composable private fun EditResultChatBubble(checkpoint: AppliedEditCheckpoint) {
+@Composable private fun EditResultChatBubble(
+    checkpoint: AppliedEditCheckpoint,
+    canUndo: Boolean,
+    undo: () -> Unit
+) {
     AssistantChatBubble(accent = Green) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Applied edit", color = Green, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 Text(checkpoint.summary, color = CreamRaised, fontWeight = FontWeight.Bold, lineHeight = 20.sp)
             }
+            OutlinedButton(
+                onClick = undo,
+                enabled = canUndo,
+                border = BorderStroke(1.dp, if (canUndo) Green else Border)
+            ) { Text(if (canUndo) "Undo" else "Checkpoint", color = if (canUndo) Green else Muted) }
         }
         Spacer(Modifier.height(8.dp))
         checkpoint.changes.forEach { change ->
