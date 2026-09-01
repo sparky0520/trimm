@@ -246,26 +246,19 @@ class MainActivity : ComponentActivity() {
     Row(
         Modifier
             .fillMaxWidth()
-            .background(Workspace)
             .statusBarsPadding()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (onOpenDrawer != null) {
-            IconButton(onClick = onOpenDrawer) {
+            IconButton(
+                onClick = onOpenDrawer,
+                modifier = Modifier.border(1.dp, Border, RoundedCornerShape(percent = 50))
+            ) {
                 Text("☰", fontSize = 24.sp, color = Cream)
             }
         }
-        Text(
-            "Trimm",
-            color = Cream,
-            fontFamily = FontFamily.SansSerif,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = (-1).sp,
-            maxLines = 1,
-        )
         Spacer(Modifier.weight(1f))
 
         if (secondaryLabel != null && onSecondary != null) {
