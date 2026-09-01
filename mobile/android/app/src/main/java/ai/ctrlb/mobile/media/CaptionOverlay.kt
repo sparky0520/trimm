@@ -57,7 +57,7 @@ class CaptionOverlay(
     override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings = object : OverlaySettings {
         override fun getBackgroundFrameAnchor() = Pair(0f, -0.72f)
         override fun getOverlayFrameAnchor() = Pair(0f, -1f)
-        override fun getScale() = if (portrait) Pair(.7f, .7f) else Pair(.15f, .15f)
+        override fun getScale() = if (portrait) Pair(.7f, .7f) else Pair(.3f, .3f)
     }
 
     private fun wrap(text: String, maxCharacters: Int): String {
