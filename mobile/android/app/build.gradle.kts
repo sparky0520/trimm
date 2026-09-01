@@ -123,7 +123,6 @@ dependencies {
     // AI Audio Integration
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
-    implementation("dev.ffmpegkit-maintained:ffmpeg-kit-audio:+")
 
     // Supabase
     implementation(platform("io.github.jan-tennert.supabase:bom:3.0.0"))

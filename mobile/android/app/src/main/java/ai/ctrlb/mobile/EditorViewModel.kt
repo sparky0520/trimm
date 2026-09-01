@@ -290,7 +290,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         return fallback.copy(platform = platform, pace = pace, music = music, captions = captions)
     }
 
-    fun toggle(id: String) { mutable.value.project?.let { project -> updateProject(project.replaceOperations(project.operations.map { if (it.id == id) toggle(it) else it })) } }
+    fun toggle(id: String) { mutable.value.project?.let { project -> updateProject(project.replaceEditOperations(project.operations.map { if (it.id == id) toggle(it) else it })) } }
     fun applyProposal() {
         mutable.value.project?.let { project ->
             val proposal = project.analysis.pendingProposal ?: return
@@ -306,7 +306,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 revisionBefore = project.revision,
                 revisionAfter = project.revision + 1
             )
-            val applied = project.replaceOperations(validated).copy(
+              val applied = project.replaceEditOperations(validated).copy(
+
                 creatorPreferences = CreatorPreferenceLearner.confirmedProposal(project.creatorPreferences, project, proposal),
                 analysis = project.analysis.copy(
                     editorialPlan = proposal.plan,
@@ -589,14 +590,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             if (project != null) store.save(project)
         }
     }
-    fun undo() { mutable.value.project?.let { updateProject(it.undoOnce()) } }
+    fun undo() { mutable.value.project?.let { updateProject(it.restoreCheckpoint()) } }
     fun undoCheckpoint(checkpointId: String) {
         val project = mutable.value.project ?: return
         if (project.analysis.appliedEditCheckpoints.lastOrNull()?.id != checkpointId) {
             mutable.value = mutable.value.copy(jobMessage = "Only the latest edit checkpoint can be undone.")
             return
         }
-        updateProject(project.undoOnce(), preview = true)
+        updateProject(project.restoreCheckpoint(), preview = true)
         mutable.value = mutable.value.copy(jobMessage = "Edit checkpoint undone")
     }
     fun export() { mutable.value.project?.let { project ->

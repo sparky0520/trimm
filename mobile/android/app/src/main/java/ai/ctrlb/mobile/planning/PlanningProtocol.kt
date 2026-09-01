@@ -1,4 +1,4 @@
-package ai.ctrlb.mobile.layer1
+package ai.ctrlb.mobile.planning
 
 import ai.ctrlb.mobile.domain.MobileProject
 import ai.ctrlb.mobile.domain.RemoveRanges
@@ -10,16 +10,16 @@ import java.io.File
 const val LAYER1_PROTOCOL_VERSION = 1
 
 @Serializable
-data class Layer1Program(
+data class PlanningProgram(
     val protocolVersion: Int = LAYER1_PROTOCOL_VERSION,
     val programId: String,
     val projectId: String,
     val baseRevision: Long,
-    val commands: List<Layer1Command>
+    val commands: List<PlanningCommand>
 )
 
 @Serializable
-sealed interface Layer1Command {
+sealed interface PlanningCommand {
     val id: String
     val requiredCapability: String
 }
@@ -41,7 +41,7 @@ data class GenerateProxy(
     val outputUri: String,
     val maximumWidth: Int,
     val maximumHeight: Int
-) : Layer1Command { override val requiredCapability = "proxy.generate" }
+) : PlanningCommand { override val requiredCapability = "proxy.generate" }
 
 @Serializable @SerialName("audio.extract")
 data class ExtractAudio(
@@ -52,7 +52,7 @@ data class ExtractAudio(
     val codec: String,
     val sampleRate: Int,
     val channels: Int
-) : Layer1Command { override val requiredCapability = "audio.extract" }
+) : PlanningCommand { override val requiredCapability = "audio.extract" }
 
 @Serializable @SerialName("frame.extract")
 data class ExtractFrame(
@@ -62,7 +62,7 @@ data class ExtractFrame(
     val atMs: Long,
     val maximumWidth: Int,
     val maximumHeight: Int
-) : Layer1Command { override val requiredCapability = "frame.extract" }
+) : PlanningCommand { override val requiredCapability = "frame.extract" }
 
 @Serializable data class NormalizedRect(val x: Float, val y: Float, val width: Float, val height: Float)
 
@@ -70,13 +70,13 @@ data class ExtractFrame(
 data class CropFrame(
     override val id: String, val sourceUri: String, val outputUri: String,
     val atMs: Long, val crop: NormalizedRect
-) : Layer1Command { override val requiredCapability = "frame.crop" }
+) : PlanningCommand { override val requiredCapability = "frame.crop" }
 
 @Serializable @SerialName("frames.sample")
 data class SampleFrames(
     override val id: String, val sourceUri: String, val outputDirectoryUri: String,
     val range: TimeRange, val maximumCount: Int
-) : Layer1Command { override val requiredCapability = "frames.sample" }
+) : PlanningCommand { override val requiredCapability = "frames.sample" }
 
 @Serializable @SerialName("timeline.remove")
 data class RemoveTimelineRanges(
@@ -84,7 +84,7 @@ data class RemoveTimelineRanges(
     val sourceFingerprint: String,
     val ranges: List<TimeRange>,
     val evidenceIds: List<String> = emptyList()
-) : Layer1Command { override val requiredCapability = "timeline.remove" }
+) : PlanningCommand { override val requiredCapability = "timeline.remove" }
 
 @Serializable @SerialName("timeline.insert")
 data class InsertTimelineRange(
@@ -93,43 +93,43 @@ data class InsertTimelineRange(
     val sourceRange: TimeRange,
     val targetStartMs: Long,
     val evidenceIds: List<String> = emptyList()
-) : Layer1Command { override val requiredCapability = "timeline.insert" }
+) : PlanningCommand { override val requiredCapability = "timeline.insert" }
 
 @Serializable @SerialName("timeline.move")
 data class MoveTimelineRange(
     override val id: String,
     val timelineRange: TimeRange,
     val targetStartMs: Long
-) : Layer1Command { override val requiredCapability = "timeline.move" }
+) : PlanningCommand { override val requiredCapability = "timeline.move" }
 
 @Serializable @SerialName("clip.transform")
 data class TransformClip(
     override val id: String, val operationId: String, val scale: Float = 1f,
     val rotationDegrees: Float = 0f, val crop: NormalizedRect? = null
-) : Layer1Command { override val requiredCapability = "clip.transform" }
+) : PlanningCommand { override val requiredCapability = "clip.transform" }
 
 @Serializable @SerialName("audio.mix")
 data class MixAudio(
     override val id: String, val operationId: String, val gainDb: Float,
     val duckingDb: Float? = null
-) : Layer1Command { override val requiredCapability = "audio.mix" }
+) : PlanningCommand { override val requiredCapability = "audio.mix" }
 
 @Serializable @SerialName("caption.apply")
 data class ApplyCaptions(
     override val id: String, val operationId: String, val styleId: String
-) : Layer1Command { override val requiredCapability = "caption.apply" }
+) : PlanningCommand { override val requiredCapability = "caption.apply" }
 
 @Serializable @SerialName("effect.apply")
 data class ApplyEffect(
     override val id: String, val operationId: String, val effectId: String,
     val intensity: Float
-) : Layer1Command { override val requiredCapability = "effect.apply" }
+) : PlanningCommand { override val requiredCapability = "effect.apply" }
 
 @Serializable @SerialName("preview.render")
 data class RenderPreview(
     override val id: String,
     val outputUri: String
-) : Layer1Command { override val requiredCapability = "preview.render" }
+) : PlanningCommand { override val requiredCapability = "preview.render" }
 
 @Serializable @SerialName("export.render")
 data class RenderExport(
@@ -139,10 +139,10 @@ data class RenderExport(
     val height: Int,
     val codec: String,
     val bitrate: Int
-) : Layer1Command { override val requiredCapability = "export.render" }
+) : PlanningCommand { override val requiredCapability = "export.render" }
 
 @Serializable
-data class Layer1Capabilities(
+data class PlanningCapabilities(
     val protocolVersions: Set<Int> = setOf(LAYER1_PROTOCOL_VERSION),
     val commands: Set<String>,
     val codecs: Set<String>,
@@ -150,10 +150,10 @@ data class Layer1Capabilities(
     val maximumExportWidth: Int,
     val maximumExportHeight: Int
 ) {
-    fun supports(command: Layer1Command) = command.requiredCapability in commands
+    fun supports(command: PlanningCommand) = command.requiredCapability in commands
 }
 
-data class Layer1PathPolicy(
+data class PlanningPathPolicy(
     val selectedMediaUris: Set<String>,
     val appOwnedRoots: Set<File>
 ) {
@@ -176,14 +176,14 @@ data class Layer1PathPolicy(
     }
 }
 
-class Layer1ProtocolException(message: String) : IllegalArgumentException(message)
+class PlanningProtocolException(message: String) : IllegalArgumentException(message)
 
-object Layer1ProtocolValidator {
+object PlanningProtocolValidator {
     fun validate(
-        program: Layer1Program,
+        program: PlanningProgram,
         project: MobileProject,
-        capabilities: Layer1Capabilities,
-        paths: Layer1PathPolicy
+        capabilities: PlanningCapabilities,
+        paths: PlanningPathPolicy
     ) {
         check(program.protocolVersion in capabilities.protocolVersions) { "Unsupported Layer 1 protocol version" }
         check(program.projectId == project.id) { "Program targets another project" }
@@ -247,10 +247,10 @@ object Layer1ProtocolValidator {
         }
     }
 
-    private fun requireInput(uri: String, paths: Layer1PathPolicy) =
+    private fun requireInput(uri: String, paths: PlanningPathPolicy) =
         check(paths.permitsInput(uri)) { "Unsafe input path" }
 
-    private fun requireOutput(uri: String, paths: Layer1PathPolicy) =
+    private fun requireOutput(uri: String, paths: PlanningPathPolicy) =
         check(paths.permitsOutput(uri)) { "Unsafe output path" }
 
     private fun requireSource(fingerprint: String, project: MobileProject) =
@@ -264,7 +264,7 @@ object Layer1ProtocolValidator {
             rect.x + rect.width <= 1f && rect.y + rect.height <= 1f
 
     private fun check(condition: Boolean, message: () -> String) {
-        if (!condition) throw Layer1ProtocolException(message())
+        if (!condition) throw PlanningProtocolException(message())
     }
 }
 
@@ -273,11 +273,11 @@ object Layer1ProtocolValidator {
  * Replaying a completed program is a no-op; non-timeline commands are executed
  * by the media workers after the same validation step.
  */
-object Layer1ProgramApplier {
-    fun apply(program: Layer1Program, project: MobileProject): MobileProject {
-        if (program.programId in project.appliedLayer1ProgramIds) return project
+object PlanningProgramApplier {
+    fun apply(program: PlanningProgram, project: MobileProject): MobileProject {
+        if (program.programId in project.appliedProgramIds) return project
         val removals = program.commands.filterIsInstance<RemoveTimelineRanges>()
-        if (removals.isEmpty()) return project.markLayer1ProgramApplied(program.programId)
+        if (removals.isEmpty()) return project.markProgramApplied(program.programId)
         val operations = project.operations + removals.map { command ->
             RemoveRanges(
                 id = "layer1:${command.id}",
@@ -286,6 +286,6 @@ object Layer1ProgramApplier {
                 reason = command.evidenceIds.firstOrNull() ?: "Layer 1 edit program"
             )
         }
-        return project.applyLayer1Program(program.programId, operations)
+        return project.applyEditOperation(program.programId, operations)
     }
 }

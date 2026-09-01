@@ -94,6 +94,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
 @Serializable enum class VisualStyle { NATURAL, WARM, CLEAN, PUNCHY }
 @Serializable enum class MusicChoice { AUTOMATIC, USER_FILE, NONE }
 
+@Serializable data class NormalizedRect(val x: Float, val y: Float, val width: Float, val height: Float)
 @Serializable sealed interface EditOperation { val id: String; val enabled: Boolean }
 @Serializable data class OperationTarget(val sourceId: String, val startMs: Long, val endMs: Long) {
     init { require(sourceId.isNotBlank() && startMs >= 0 && endMs > startMs) }
@@ -146,8 +147,30 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val reason: String = "",
     val url: String = ""
 ) : EditOperation
-
+@Serializable @SerialName("set_rotation") data class SetRotation(
+    override val id: String = UUID.randomUUID().toString(),
+    override val enabled: Boolean = true,
+    val itemId: String,
+    val rotation: Float
+) : EditOperation
+@Serializable @SerialName("clear_rotation") data class ClearRotation(
+    override val id: String = UUID.randomUUID().toString(),
+    override val enabled: Boolean = true,
+    val itemId: String
+) : EditOperation
+@Serializable @SerialName("set_crop") data class SetCrop(
+    override val id: String = UUID.randomUUID().toString(),
+    override val enabled: Boolean = true,
+    val itemId: String,
+    val crop: NormalizedRect
+) : EditOperation
+@Serializable @SerialName("clear_crop") data class ClearCrop(
+    override val id: String = UUID.randomUUID().toString(),
+    override val enabled: Boolean = true,
+    val itemId: String
+) : EditOperation
 @Serializable data class ColorGrade(val exposure: Float = 0f, val temperature: Float = 0f, val contrast: Float = 1f, val saturation: Float = 1f, val highlights: Float = 0f, val shadows: Float = 0f, val skinProtection: Float = .8f) {
+
     init { require(exposure in -1f..1f && temperature in -1f..1f && contrast in .75f..1.35f && saturation in .7f..1.3f && highlights in -1f..1f && shadows in -1f..1f && skinProtection in 0f..1f) }
 }
 @Serializable data class Analysis(
@@ -244,15 +267,24 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val evidenceGraphs: List<EvidenceGraphReference> = emptyList(),
     val operations: List<EditOperation> = emptyList(),
     val undo: List<ProjectSnapshot> = emptyList(),
+    val redo: List<ProjectSnapshot> = emptyList(),
     val export: ExportSettings = ExportSettings(),
     val revision: Long = 0,
-    val appliedLayer1ProgramIds: List<String> = emptyList()
+    val appliedProgramIds: List<String> = emptyList()
 ) {
     init { require(schemaVersion == 1); require(source.durationMs > 0) }
     val orderedSources: List<SourceMedia> get() = sources.ifEmpty { listOf(source) }
     val durationMs: Long get() = orderedSources.sumOf { it.durationMs }
     private fun withExportRatioRecomputed(): MobileProject {
-        val targetRatio = operations.filterIsInstance<SetAspectRatio>().lastOrNull { it.enabled }?.ratio ?: preferences.aspectRatio
+        var targetRatio = operations.filterIsInstance<SetAspectRatio>().lastOrNull { it.enabled }?.ratio ?: preferences.aspectRatio
+        
+        operations.filterIsInstance<SetRotation>().lastOrNull { it.enabled }?.let { op ->
+            val rotation = op.rotation
+            if (rotation == 90f || rotation == 270f) {
+                targetRatio = if (targetRatio == AspectRatio.LANDSCAPE) AspectRatio.PORTRAIT else AspectRatio.LANDSCAPE
+            }
+        }
+
         val longSide = maxOf(export.width, export.height)
         val shortSide = minOf(export.width, export.height)
         val nextExport = when (targetRatio) {
@@ -264,21 +296,22 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     }
 
     private fun snapshot() = ProjectSnapshot(operations, orderedSources, analysis)
-    fun replaceOperations(next: List<EditOperation>) = copy(operations = next, undo = (undo + snapshot()).takeLast(30), revision = revision + 1).withExportRatioRecomputed()
-    fun applyLayer1Program(programId: String, next: List<EditOperation>) =
+    fun replaceEditOperations(next: List<EditOperation>) = copy(operations = next, undo = (undo + snapshot()).takeLast(30), redo = emptyList(), revision = revision + 1).withExportRatioRecomputed()
+    fun applyEditOperations(programId: String, next: List<EditOperation>) =
         copy(
             operations = next,
             undo = (undo + snapshot()).takeLast(30),
+            redo = emptyList(),
             revision = revision + 1,
-            appliedLayer1ProgramIds = (appliedLayer1ProgramIds + programId).takeLast(100)
+            appliedProgramIds = (appliedProgramIds + programId).takeLast(100)
         ).withExportRatioRecomputed()
-    fun markLayer1ProgramApplied(programId: String) =
-        copy(appliedLayer1ProgramIds = (appliedLayer1ProgramIds + programId).takeLast(100))
+    fun markProgramApplied(programId: String) =
+        copy(appliedProgramIds = (appliedProgramIds + programId).takeLast(100))
     fun replaceSources(next: List<SourceMedia>): MobileProject {
         require(next.isNotEmpty())
         return copy(source = next.first(), sources = next, undo = (undo + snapshot()).takeLast(30), revision = revision + 1)
     }
-    fun undoOnce() = undo.lastOrNull()?.let { snapshot ->
+    fun restoreCheckpoint() = undo.lastOrNull()?.let { snapshot ->
         val restoredSources = snapshot.sources.ifEmpty { orderedSources }
         copy(
             source = restoredSources.first(),
@@ -286,6 +319,20 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
             operations = snapshot.operations,
             analysis = snapshot.analysis ?: analysis,
             undo = undo.dropLast(1),
+            redo = (redo + snapshot()).takeLast(30),
+            revision = revision + 1
+        ).withExportRatioRecomputed()
+    } ?: this
+
+    fun redoCheckpoint() = redo.lastOrNull()?.let { snapshot ->
+        val restoredSources = snapshot.sources.ifEmpty { orderedSources }
+        copy(
+            source = restoredSources.first(),
+            sources = restoredSources,
+            operations = snapshot.operations,
+            analysis = snapshot.analysis ?: analysis,
+            redo = redo.dropLast(1),
+            undo = (undo + snapshot()).takeLast(30),
             revision = revision + 1
         ).withExportRatioRecomputed()
     } ?: this

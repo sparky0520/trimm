@@ -15,16 +15,10 @@ const ripple = z.enum(['none', 'insert', 'close-gap']);
 const normalizedRect = z.object({ x: finiteNumber.min(0).max(1), y: finiteNumber.min(0).max(1), width: finiteNumber.min(0.2).max(1), height: finiteNumber.min(0.2).max(1) }).strict()
   .refine(({ x, width }) => x + width <= 1, { path: ['width'], message: 'crop exceeds source width' })
   .refine(({ y, height }) => y + height <= 1, { path: ['height'], message: 'crop exceeds source height' });
-const safeRegion = z.object({ id, kind: z.enum(['face', 'ui']), rect: normalizedRect }).strict();
-const perspective = z.object({ corners: z.array(normalizedPoint).length(4) }).strict();
-const stabilizationSample = z.object({ time: seconds, x: finiteNumber.min(-0.15).max(0.15), y: finiteNumber.min(-0.15).max(0.15), rotation: finiteNumber.min(-5).max(5) }).strict();
-const stabilization = z.object({ strength: z.enum(['light', 'medium']), requiredCrop: finiteNumber.min(0).max(0.35), confirmedSevere: z.boolean(), corrections: z.array(stabilizationSample).min(2).max(240) }).strict()
-  .refine(({ corrections }) => corrections.every((sample, index) => index === 0 || sample.time > corrections[index - 1].time), { path: ['corrections'], message: 'stabilization samples must be time ordered' });
 const cameraTransform = z.object({
   crop: normalizedRect.optional(), rotation: finiteNumber.min(-15).max(360).optional(),
-  stabilization: stabilization.optional(), perspective: perspective.optional(),
   safeRegions: z.array(safeRegion).max(20), evidence: z.string().min(1),
-}).strict().refine((value) => value.crop || value.rotation != null || value.stabilization || value.perspective, { message: 'at least one camera correction is required' });
+}).strict().refine((value) => value.crop || value.rotation != null, { message: 'at least one camera correction is required' });
 
 const motionBase = { itemId: id, start: seconds, end: seconds, reducedMotion: z.enum(['full', 'reduce']), intent: z.enum(['introduce', 'point-out', 'transition', 'recap']) };
 const motionRange = (schema) => schema.refine(({ start, end }) => end > start, { path: ['end'], message: 'end must be greater than start' });
@@ -180,8 +174,10 @@ export const SetMusicEditOperationSchema = operation('set_music_edit', {
 });
 export const ClearMusicEditOperationSchema = operation('clear_music_edit', { itemId: id });
 
-export const SetCameraTransformOperationSchema = operation('set_camera_transform', { itemId: id, transform: cameraTransform });
-export const ClearCameraTransformOperationSchema = operation('clear_camera_transform', { itemId: id });
+export const SetRotationOperationSchema = operation('set_rotation', { itemId: id, rotation: finiteNumber.min(-15).max(360) });
+export const ClearRotationOperationSchema = operation('clear_rotation', { itemId: id });
+export const SetCropOperationSchema = operation('set_crop', { itemId: id, crop: normalizedRect });
+export const ClearCropOperationSchema = operation('clear_crop', { itemId: id });
 export const AddFeatureTitleOperationSchema = motionRange(operation('add_feature_title', { ...motionBase, value: z.string().min(1).max(80), preset: z.enum(['product', 'feature']) }));
 export const AddCalloutOperationSchema = motionRange(operation('add_callout', { ...motionBase, value: z.string().min(1).max(60), target: targetRect, evidence: targetEvidence, preset: z.enum(['label', 'compact']) }));
 export const AddSpotlightOperationSchema = motionRange(operation('add_spotlight', { ...motionBase, target: targetRect, evidence: targetEvidence, preset: z.enum(['soft', 'focused']) }));
@@ -207,8 +203,10 @@ export const EditOperationSchema = z.discriminatedUnion('type', [
   ClearAudioLevelsOperationSchema,
   SetMusicEditOperationSchema,
   ClearMusicEditOperationSchema,
-  SetCameraTransformOperationSchema,
-  ClearCameraTransformOperationSchema,
+  SetRotationOperationSchema,
+  ClearRotationOperationSchema,
+  SetCropOperationSchema,
+  ClearCropOperationSchema,
   AddFeatureTitleOperationSchema,
   AddCalloutOperationSchema,
   AddSpotlightOperationSchema,

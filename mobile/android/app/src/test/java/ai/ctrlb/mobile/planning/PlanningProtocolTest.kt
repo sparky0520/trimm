@@ -1,4 +1,4 @@
-package ai.ctrlb.mobile.layer1
+package ai.ctrlb.mobile.planning
 
 import ai.ctrlb.mobile.domain.MobileProject
 import ai.ctrlb.mobile.domain.SourceMedia
@@ -60,7 +60,7 @@ class Layer1ProtocolTest {
 
         assertEquals(5, applied.revision)
         assertEquals(1, applied.undo.size)
-        assertEquals(project.operations, applied.undoOnce().operations)
+        assertEquals(project.operations, applied.restoreCheckpoint().operations)
         assertSame(applied, Layer1ProgramApplier.apply(program, applied))
     }
 

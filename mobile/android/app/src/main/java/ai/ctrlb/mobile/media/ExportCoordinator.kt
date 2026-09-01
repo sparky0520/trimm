@@ -24,6 +24,8 @@ import androidx.media3.transformer.Transformer
 import androidx.media3.effect.Presentation
 import androidx.media3.effect.RgbAdjustment
 import androidx.media3.effect.OverlayEffect
+import androidx.media3.effect.Rotation
+import androidx.media3.effect.Crop
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -89,6 +91,19 @@ object ExportCoordinator {
                         it.enabled && targets(it.target, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd)
                     }
                     FineColorEffect.create(colorOperations)?.let(itemVideoEffects::add)
+                    
+                    project.operations.filterIsInstance<SetRotation>().lastOrNull { 
+                        it.enabled && targets(it.itemId, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd) 
+                    }?.let { rotOp ->
+                        itemVideoEffects.add(Rotation(rotOp.rotation))
+                    }
+                    project.operations.filterIsInstance<SetCrop>().lastOrNull { 
+                        it.enabled && targets(it.itemId, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd) 
+                    }?.let { cropOp ->
+                        val crop = cropOp.crop
+                        itemVideoEffects.add(Crop(crop.x, crop.y, crop.width, crop.height))
+                    }
+
                     EditedMediaItem.Builder(item).setDurationUs(maxOf(1L, source.durationMs * 1000L))
                         .setEffects(Effects(audioEffects, itemVideoEffects)).build()
                 }
@@ -298,8 +313,12 @@ object ExportCoordinator {
         return result
     }
 
-    private fun targets(target: OperationTarget?, exactId: String, legacyId: String, startMs: Long, endMs: Long): Boolean =
-        target == null || ((target.sourceId == exactId || target.sourceId == legacyId) && target.startMs <= startMs && target.endMs >= endMs)
+private fun targets(target: OperationTarget?, exactId: String, legacyId: String, startMs: Long, endMs: Long): Boolean =
+    target == null || ((target.sourceId == exactId || target.sourceId == legacyId) && target.startMs <= startMs && target.endMs >= endMs)
+
+private fun targets(itemId: String, exactId: String, legacyId: String, startMs: Long, endMs: Long): Boolean =
+    itemId == exactId || itemId == legacyId
+
 
     private fun splitAtBoundaries(ranges: List<TimeRange>, boundaries: List<Long>): List<TimeRange> = ranges.flatMap { range ->
         val points = (listOf(range.startMs) + boundaries.filter { it > range.startMs && it < range.endMs } + range.endMs).sorted()

@@ -50,11 +50,11 @@ class EditorialReviewTest {
         val plan = StagedEditorialPlan(emptyList(), emptyList(), emptyList())
         val pending = PendingEditorialProposal(0, "Cut", plan, after, emptyList())
         val project = MobileProject(title = "Review", source = source, operations = before, analysis = Analysis(pendingProposal = pending))
-        val applied = project.replaceOperations(OperationValidator.validate(project, after, 0))
+        val applied = project.replaceEditOperations(OperationValidator.validate(project, after, 0))
             .copy(analysis = project.analysis.copy(editorialPlan = plan, pendingProposal = null))
         assertEquals(1, applied.revision)
         assertEquals(1, applied.undo.size)
-        val undone = applied.undoOnce()
+        val undone = applied.restoreCheckpoint()
         assertEquals(before, undone.operations)
         assertEquals(project.analysis, undone.analysis)
     }
