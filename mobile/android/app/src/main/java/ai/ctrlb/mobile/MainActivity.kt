@@ -314,7 +314,21 @@ class MainActivity : ComponentActivity() {
 
 @Composable private fun ImportScreen(onImport: (List<Uri>) -> Unit, onOpenDrawer: (() -> Unit)? = null) {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { if (it.isNotEmpty()) onImport(it) }
+    val user by Clerk.userFlow.collectAsStateWithLifecycle()
+    var showSignIn by rememberSaveable { mutableStateOf(false) }
+
     Box(Modifier.fillMaxSize().background(Ink).statusBarsPadding().navigationBarsPadding()) {
+        if (onOpenDrawer != null) {
+            IconButton(
+                onClick = onOpenDrawer,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 16.dp, top = 8.dp)
+                    .border(1.dp, Border, RoundedCornerShape(percent = 50))
+            ) {
+                Text("☰", fontSize = 24.sp, color = Cream)
+            }
+        }
         Column(Modifier.align(Alignment.Center).padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Image(
                 painter = painterResource(id = R.drawable.trimm_launcher),
@@ -330,12 +344,46 @@ class MainActivity : ComponentActivity() {
             Text("Bring in your talking-head and product clips,\nthen shape them naturally with AI.", color = Muted, lineHeight = 22.sp,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             Spacer(Modifier.height(32.dp))
-            Button(onClick = { launcher.launch(arrayOf("video/*")) }, modifier = Modifier.fillMaxWidth().height(56.dp),
-                shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText)) {
-                Text("Select clips to edit", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+            
+            if (BuildConfig.CLERK_PUBLISHABLE_KEY.isNotBlank() && user == null) {
+                Image(
+                    painter = painterResource(id = R.drawable.btn_google_signin),
+                    contentDescription = "Sign in with Google",
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .clickable(
+                            role = androidx.compose.ui.semantics.Role.Button,
+                            onClick = { showSignIn = true }
+                        )
+                )
+            } else {
+                Button(onClick = { launcher.launch(arrayOf("video/*")) }, modifier = Modifier.fillMaxWidth().height(56.dp),
+                    shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText)) {
+                    Text("Select clips to edit", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                }
             }
         }
         Text("YOUR VIDEO STAYS ON DEVICE", color = Muted, fontSize = 10.sp, letterSpacing = 1.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp))
+    }
+
+    if (showSignIn && user == null) {
+        Dialog(onDismissRequest = { showSignIn = false }) {
+            Surface(
+                Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                color = Workspace,
+            ) {
+                Box(Modifier.padding(12.dp)) {
+                    AuthView()
+                    TextButton(
+                        onClick = { showSignIn = false },
+                        modifier = Modifier.align(Alignment.TopEnd),
+                    ) { Text("Close", color = Cream) }
+                }
+            }
+        }
     }
 }
 
