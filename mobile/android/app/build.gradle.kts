@@ -74,17 +74,9 @@ android {
     }
     buildTypes {
         debug {
-            val allowBootstrap = providers.gradleProperty("TRIMM_ALLOW_BOOTSTRAP_AUTH")
-                .orElse(providers.environmentVariable("TRIMM_ALLOW_BOOTSTRAP_AUTH"))
-                .orElse(rootLocalEnv["TRIMM_ALLOW_BOOTSTRAP_AUTH"] ?: "false").get().equals("true", ignoreCase = true)
             val force4kExport = providers.gradleProperty("TRIMM_FORCE_4K_EXPORT")
                 .orElse("false").get().equals("true", ignoreCase = true)
-            val bootstrapToken = if (allowBootstrap) {
-                providers.gradleProperty("TRIMM_PLANNER_TOKEN")
-                    .orElse(providers.environmentVariable("TRIMM_PLANNER_CLIENT_TOKEN"))
-                    .orElse(rootLocalEnv["TRIMM_PLANNER_CLIENT_TOKEN"] ?: "").get()
-            } else ""
-            buildConfigField("String", "PLANNER_TOKEN", "\"${bootstrapToken.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+            buildConfigField("String", "PLANNER_TOKEN", "\"\"")
             buildConfigField("boolean", "FORCE_4K_EXPORT", force4kExport.toString())
         }
         release {

@@ -71,8 +71,8 @@ function fromEnvironment(environment = process.env) {
   
   return new Authenticator({
     jwtSecret: environment.SUPABASE_JWT_SECRET,
-    bootstrapToken: environment.TRIMM_PLANNER_CLIENT_TOKEN,
-    allowBootstrap: !production && environment.TRIMM_ALLOW_BOOTSTRAP_AUTH === 'true',
+    bootstrapToken: '',
+    allowBootstrap: false,
     isRevoked: ({ tokenId }) => tokenId !== null && revokedTokenIds.has(tokenId),
   });
 }
