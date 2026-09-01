@@ -103,9 +103,23 @@
           <div class="frame-bar"><img src="./trimm-icon.png" class="brand-mark" alt="Trimm logo"><span>New edit</span><span
               class="frame-status">Ready</span></div>
           <div class="preview" style="padding: 0; background: #000; overflow: hidden;">
-            <video src="./trimm-ad.webm" autoplay loop muted playsinline style="width: 100%; height: 100%; aspect-ratio: 16/9; min-height: 185px; display: block; object-fit: cover;"></video>
+            <video id="demo-video" src="./trimm-ad.webm" autoplay loop muted playsinline style="width: 100%; height: 100%; aspect-ratio: 16/9; min-height: 185px; display: block; object-fit: cover;"></video>
           </div>
-          <div class="timeline"><span></span><i></i><b></b><i></i><span></span></div>
+          <div class="timeline" style="position: relative;">
+            <span></span><i></i><i></i><span></span>
+            <b id="playhead" style="position: absolute; left: 0; margin-left: 16px;"></b>
+          </div>
+          <script>
+            const demoVideo = document.getElementById('demo-video');
+            const playhead = document.getElementById('playhead');
+            demoVideo.addEventListener('timeupdate', () => {
+              if (demoVideo.duration) {
+                // timeline has 16px padding on left/right. Calculate progress across inner width.
+                const progress = (demoVideo.currentTime / demoVideo.duration) * 100;
+                playhead.style.left = `calc(${progress}% - ${progress * 32 / 100}px)`; 
+              }
+            });
+          </script>
           <div class="conversation">
             <p class="message message-user">Make this product demo concise. Keep the pricing explanation.</p>
             <div class="message message-agent"><strong>Trimm</strong>
