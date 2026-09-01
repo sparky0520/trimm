@@ -12,7 +12,7 @@ import java.nio.file.StandardCopyOption
 
 class ProjectStore(context: Context) {
     private val root = File(context.filesDir, "projects").apply { mkdirs() }
-    private val json = Json { encodeDefaults = true; ignoreUnknownKeys = false; classDiscriminator = "type" }
+    private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true; classDiscriminator = "type" }
     private val creatorProfile = File(context.filesDir, "creator-preferences.json")
 
     suspend fun save(project: MobileProject) = withContext(Dispatchers.IO) {
