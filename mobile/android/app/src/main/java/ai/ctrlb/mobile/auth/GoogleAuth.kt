@@ -29,11 +29,25 @@ suspend fun signInWithGoogle(activity: Activity): Boolean {
         .build()
 
     return try {
-        val result = credentialManager.getCredential(activity, request)
-        val credential = result.credential
+        val credential = try {
+            credentialManager.getCredential(activity, request).credential
+        } catch (e: androidx.credentials.exceptions.NoCredentialException) {
+            val signUpOption = com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption.Builder(webClientId).build()
+            val signUpRequest = GetCredentialRequest.Builder().addCredentialOption(signUpOption).build()
+            credentialManager.getCredential(activity, signUpRequest).credential
+        }
 
-        if (credential is com.google.android.libraries.identity.googleid.GoogleIdTokenCredential) {
-            val idToken = credential.idToken
+        val idToken = when (credential) {
+            is com.google.android.libraries.identity.googleid.GoogleIdTokenCredential -> credential.idToken
+            is androidx.credentials.CustomCredential -> {
+                if (credential.type == com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                    com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.createFrom(credential.data).idToken
+                } else null
+            }
+            else -> null
+        }
+
+        if (idToken != null) {
             supabase.auth.signInWith(IDToken) {
                 this.idToken = idToken
                 this.provider = Google

@@ -32,6 +32,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -45,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.platform.LocalContext
@@ -159,8 +161,21 @@ class MainActivity : ComponentActivity() {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Chats", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Cream)
-                        IconButton(onClick = { /* TODO: New Chat */ }) { Text("+", fontSize = 24.sp, color = Cream) }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Trimm",
+                                color = Cream,
+                                fontFamily = FontFamily.SansSerif,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = (-1).sp,
+                                maxLines = 1,
+                            )
+                        }
+                        IconButton(onClick = {
+                            vm.loadProject(java.util.UUID.randomUUID().toString())
+                            scope.launch { drawerState.close() }
+                        }) { Text("+", fontSize = 24.sp, color = Cream) }
                     }
                     val state by vm.state.collectAsStateWithLifecycle()
                     LazyColumn(Modifier.weight(1f).padding(horizontal = 8.dp)) {
@@ -219,6 +234,25 @@ class MainActivity : ComponentActivity() {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var isOnline by rememberSaveable { mutableStateOf(true) }
+    var showBackOnline by rememberSaveable { mutableStateOf(false) }
+    var wasOffline by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(isOnline) {
+        if (!isOnline) {
+            wasOffline = true
+            showBackOnline = false
+        } else if (wasOffline) {
+            showBackOnline = true
+            wasOffline = false
+        }
+    }
+
+    LaunchedEffect(showBackOnline) {
+        if (showBackOnline) {
+            delay(3000)
+            showBackOnline = false
+        }
+    }
 
     DisposableEffect(context) {
         val connectivityManager = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -255,6 +289,10 @@ class MainActivity : ComponentActivity() {
         if (!isOnline) {
             Box(Modifier.fillMaxWidth().background(Coral).statusBarsPadding().padding(8.dp), contentAlignment = Alignment.Center) {
                 Text("You're offline. AI features are disabled.", color = DarkText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        } else if (showBackOnline) {
+            Box(Modifier.fillMaxWidth().background(Color(0xFF4ADE80)).statusBarsPadding().padding(8.dp), contentAlignment = Alignment.Center) {
+                Text("Back online.", color = DarkText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -307,15 +345,65 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable private fun AccountControl(activity: Activity) {
-    if (BuildConfig.SUPABASE_PUBLISHABLE_KEY.isBlank()) return
     val sessionStatus by supabase.auth.sessionStatus.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    var showMenu by remember { mutableStateOf(false) }
 
-    when (sessionStatus) {
-        is SessionStatus.Authenticated -> { /* UserButton() */ }
-        else -> TextButton(onClick = { 
-            scope.launch { signInWithGoogle(activity) } 
-        }) { Text("Sign in", color = Cream) }
+    Box {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.clickable { if (sessionStatus is SessionStatus.Authenticated) showMenu = true }
+        ) {
+            if (BuildConfig.SUPABASE_PUBLISHABLE_KEY.isBlank()) {
+                Text("Offline Mode", color = Cream)
+            } else {
+                when (sessionStatus) {
+                    is SessionStatus.Authenticated -> {
+                        val user = supabase.auth.currentUserOrNull()
+                        val avatarUrl = user?.userMetadata?.get("avatar_url")?.jsonPrimitive?.content
+                        val name = user?.userMetadata?.get("full_name")?.jsonPrimitive?.content ?: user?.userMetadata?.get("name")?.jsonPrimitive?.content ?: "User"
+
+                        if (avatarUrl != null) {
+                            coil.compose.AsyncImage(
+                                model = avatarUrl,
+                                contentDescription = "Profile Picture",
+                                modifier = Modifier.size(40.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                            )
+                        } else {
+                            Box(Modifier.size(40.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Border))
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Text(name, color = Cream, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                    }
+                    else -> TextButton(
+                        onClick = { scope.launch { signInWithGoogle(activity) } },
+                        contentPadding = PaddingValues(0.dp)
+                    ) { Text("Sign in", color = Cream) }
+                }
+            }
+        }
+        
+        DropdownMenu(
+            expanded = showMenu,
+            onDismissRequest = { showMenu = false }
+        ) {
+            val user = supabase.auth.currentUserOrNull()
+            val email = user?.email
+            if (email != null) {
+                DropdownMenuItem(
+                    text = { Text(email, color = Muted, fontSize = 12.sp) },
+                    onClick = { },
+                    enabled = false
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("Sign out") },
+                onClick = { 
+                    showMenu = false
+                    scope.launch { supabase.auth.signOut() }
+                }
+            )
+        }
     }
 }
 
@@ -361,6 +449,8 @@ class MainActivity : ComponentActivity() {
                         .fillMaxWidth()
                         .height(56.dp)
                         .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
                             role = androidx.compose.ui.semantics.Role.Button,
                             onClick = { scope.launch { signInWithGoogle(activity) } }
                         )
