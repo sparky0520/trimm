@@ -127,9 +127,9 @@ p {
 }
 h1 {
   margin-bottom: 0;
-  font-size: clamp(52px, 6.3vw, 82px);
+  font-size: clamp(40px, 5vw, 64px);
   line-height: 0.96;
-  letter-spacing: -0.07em;
+  letter-spacing: -0.05em;
 }
 h1 span {
   color: var(--muted);
