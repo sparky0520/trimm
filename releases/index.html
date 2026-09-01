@@ -112,13 +112,16 @@
           <script>
             const demoVideo = document.getElementById('demo-video');
             const playhead = document.getElementById('playhead');
-            demoVideo.addEventListener('timeupdate', () => {
+            
+            function updatePlayhead() {
               if (demoVideo.duration) {
                 // timeline has 16px padding on left/right. Calculate progress across inner width.
                 const progress = (demoVideo.currentTime / demoVideo.duration) * 100;
                 playhead.style.left = `calc(${progress}% - ${progress * 32 / 100}px)`; 
               }
-            });
+              requestAnimationFrame(updatePlayhead);
+            }
+            requestAnimationFrame(updatePlayhead);
           </script>
           <div class="conversation">
             <p class="message message-user">Make this product demo concise. Keep the pricing explanation.</p>
