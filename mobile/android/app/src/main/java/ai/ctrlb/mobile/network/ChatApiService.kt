@@ -36,6 +36,26 @@ interface ChatApiService {
         @Body request: ChatTitleRequest
     ): ChatTitleResponse
 
+    @POST("/v1/projects/sync")
+    suspend fun syncProject(
+        @Header("Authorization") authorization: String,
+        @Body projectJson: okhttp3.RequestBody
+    ): okhttp3.ResponseBody
+
+    @retrofit2.http.GET("/v1/projects")
+    suspend fun getProjects(
+        @Header("Authorization") authorization: String
+    ): com.google.gson.JsonObject
+
+    @retrofit2.http.GET("/v1/chats/{chatId}/checkpoints")
+    suspend fun getCheckpoints(
+        @Header("Authorization") authorization: String,
+        @retrofit2.http.Path("chatId") chatId: String
+    ): com.google.gson.JsonObject
+
+    @retrofit2.http.GET("/v1/projects/{id}")
+    suspend fun getProject(@Header("Authorization") authorization: String, @retrofit2.http.Path("id") id: String): com.google.gson.JsonObject
+
     companion object {
         fun create(): ChatApiService {
             val retrofit = Retrofit.Builder()

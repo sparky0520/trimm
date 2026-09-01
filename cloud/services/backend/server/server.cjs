@@ -336,6 +336,8 @@ const server = http.createServer(async (request, response) => {
       if (!chat_id || !prompt) {
         throw Object.assign(new Error('Missing chat_id or prompt'), { status: 400 });
       }
+      
+      const principal = await authentication.authenticate(request);
 
       // 1. Create Checkpoint as 'pending'
       const { createClient } = require('@supabase/supabase-js');
@@ -369,6 +371,132 @@ const server = http.createServer(async (request, response) => {
     }
   }
 
+  if (request.method === 'POST' && requestUrl.pathname === '/v1/projects/sync') {
+    try {
+      const principal = await authentication.authenticate(request);
+      const projectData = await collect(request);
+      if (!projectData.id) throw Object.assign(new Error('Missing project id'), { status: 400 });
+
+      const { createClient } = require('@supabase/supabase-js');
+      const supabase = createClient(
+        process.env.SUPABASE_URL || '',
+        process.env.SUPABASE_SECRET_KEY || ''
+      );
+      
+      // Upsert the project in the chats table
+      // We use the service_role key to bypass RLS, ensuring we can insert even if the Clerk user ID is not a valid auth.users UUID
+      const { error } = await supabase.from('chats')
+        .upsert({
+          id: projectData.id,
+          title: projectData.title || 'New Chat',
+          user_id: principal.sub,
+          project_data: projectData,
+        }, { onConflict: 'id' });
+
+      if (error) throw Object.assign(new Error(error.message), { status: 500 });
+      
+      return json(response, 200, { success: true });
+    } catch (error) {
+      console.error('[projects-sync] request failed', { message: error?.message });
+      return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message || 'Project sync failed' });
+    }
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/v1/projects') {
+    try {
+      const principal = await authentication.authenticate(request);
+
+      const { createClient } = require('@supabase/supabase-js');
+      const supabase = createClient(
+        process.env.SUPABASE_URL || '',
+        process.env.SUPABASE_SECRET_KEY || ''
+      );
+      
+      const { data, error } = await supabase.from('chats')
+        .select('project_data')
+        .eq('user_id', principal.sub)
+        .not('project_data', 'is', null);
+
+      if (error) throw Object.assign(new Error(error.message), { status: 500 });
+      
+      const projects = data.map(row => {
+          const pd = row.project_data;
+          let title = pd.title;
+          if (title === 'New Edit' || title === 'Talking head edit' || !title) {
+              const words = pd.analysis?.words || [];
+              const text = words.slice(0, 4).map(w => w.text).join(' ');
+              title = text ? text : 'Untitled Chat';
+          }
+          return { id: pd.id, title: title, modifiedAt: pd.analysis?.completedAtEpochMs || 0 };
+      });
+      projects.sort((a, b) => b.modifiedAt - a.modifiedAt);
+      return json(response, 200, { projects });
+    } catch (error) {
+      console.error('[projects-get] request failed', { message: error?.message });
+      return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message || 'Project fetch failed' });
+    }
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname.match(/^\/v1\/projects\/([^\/]+)$/)) {
+    try {
+      const principal = await authentication.authenticate(request);
+      const projectId = requestUrl.pathname.split('/')[3];
+
+      const { createClient } = require('@supabase/supabase-js');
+      const supabase = createClient(
+        process.env.SUPABASE_URL || '',
+        process.env.SUPABASE_SECRET_KEY || ''
+      );
+      
+      const { data, error } = await supabase.from('chats')
+        .select('project_data')
+        .eq('id', projectId)
+        .eq('user_id', principal.sub)
+        .single();
+
+      if (error || !data) throw Object.assign(new Error(error?.message || 'Not found'), { status: 404 });
+      
+      return json(response, 200, data.project_data);
+    } catch (error) {
+      console.error('[project-get] request failed', { message: error?.message });
+      return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message || 'Project fetch failed' });
+    }
+  }
+
+
+  if (request.method === 'GET' && requestUrl.pathname.startsWith('/v1/chats/') && requestUrl.pathname.endsWith('/checkpoints')) {
+    try {
+      const principal = await authentication.authenticate(request);
+      const chatId = requestUrl.pathname.split('/')[3];
+
+      const { createClient } = require('@supabase/supabase-js');
+      const supabase = createClient(
+        process.env.SUPABASE_URL || '',
+        process.env.SUPABASE_SECRET_KEY || ''
+      );
+      
+      // We first check if the chat belongs to the user
+      const { data: chatData, error: chatError } = await supabase.from('chats')
+        .select('id')
+        .eq('id', chatId)
+        .eq('user_id', principal.sub)
+        .single();
+        
+      if (chatError) throw Object.assign(new Error('Chat not found or unauthorized'), { status: 404 });
+
+      const { data, error } = await supabase.from('checkpoints')
+        .select('*')
+        .eq('chat_id', chatId)
+        .eq('status', 'completed');
+
+      if (error) throw Object.assign(new Error(error.message), { status: 500 });
+      
+      return json(response, 200, { checkpoints: data });
+    } catch (error) {
+      console.error('[checkpoints-get] request failed', { message: error?.message });
+      return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message || 'Checkpoints fetch failed' });
+    }
+  }
 
   return json(response, 404, { error: 'Not found' });
 });

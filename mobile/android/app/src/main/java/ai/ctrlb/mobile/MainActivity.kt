@@ -9,6 +9,11 @@ import ai.ctrlb.mobile.planner.AgentRecoveryStatus
 import ai.ctrlb.mobile.planner.AgentUsageSummary
 import ai.ctrlb.mobile.planner.AgentDecisionMapper
 import ai.ctrlb.mobile.planner.ClarificationQuestion
+import android.media.MediaMetadataRetriever
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.Uri
 import android.os.Bundle
 import android.content.Intent
@@ -198,17 +203,13 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable fun ChatTitleText(pastChat: MobileProject) {
-    val cleanTitle = if (pastChat.title == "New Edit" || pastChat.title == "Talking head edit" || pastChat.title.isBlank()) {
-        pastChat.analysis.words.take(4).joinToString(" ") { it.text }.takeIf { it.isNotBlank() } ?: "Untitled Chat"
-    } else {
-        pastChat.title
-    }
+@Composable fun ChatTitleText(pastChat: ai.ctrlb.mobile.data.ChatSummary) {
+    val cleanTitle = pastChat.title
 
     var displayedText by rememberSaveable(cleanTitle) { mutableStateOf("") }
     LaunchedEffect(cleanTitle) {
-        // Only typewrite if it's an LLM-generated title
-        if (cleanTitle == pastChat.title && displayedText != cleanTitle) {
+        // Typewrite title on first render
+        if (displayedText != cleanTitle) {
             displayedText = ""
             for (char in cleanTitle) {
                 displayedText += char
@@ -223,15 +224,47 @@ class MainActivity : ComponentActivity() {
 
 @Composable private fun TrimmApp(vm: EditorViewModel, onOpenDrawer: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
-    when {
-        state.source == null -> ImportScreen(vm::import, onOpenDrawer)
-        state.project != null -> EditorScreen(
-            state, vm::undo, vm::export, vm::applyProposal, vm::rejectProposal,
-            vm::undoCheckpoint,
-            vm::reviseStory, vm::retryTurn, vm::switchBranch, vm::recoverAgent, vm::cancelAnalysis,
-            onOpenDrawer
-        )
-        else -> NewEditChatScreen(state, vm::generateDraft, vm::moveClip, onOpenDrawer)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var isOnline by rememberSaveable { mutableStateOf(true) }
+
+    DisposableEffect(context) {
+        val connectivityManager = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val callback = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) { isOnline = true }
+            override fun onLost(network: android.net.Network) { isOnline = false }
+        }
+        val request = android.net.NetworkRequest.Builder()
+            .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+        connectivityManager.registerNetworkCallback(request, callback)
+        
+        // Initial check
+        val activeNetwork = connectivityManager.activeNetwork
+        val caps = connectivityManager.getNetworkCapabilities(activeNetwork)
+        isOnline = caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+
+        onDispose { connectivityManager.unregisterNetworkCallback(callback) }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        when {
+            state.source == null -> ImportScreen(vm::import, onOpenDrawer)
+            state.project != null -> EditorScreen(
+                state, vm::undo, vm::export, vm::applyProposal, vm::rejectProposal,
+                vm::undoCheckpoint,
+                vm::reviseStory, vm::retryTurn, vm::switchBranch, vm::recoverAgent, vm::cancelAnalysis,
+                vm::relinkVideo,
+                isOnline,
+                onOpenDrawer
+            )
+            else -> NewEditChatScreen(state, vm::generateDraft, vm::moveClip, vm::relinkVideo, isOnline, onOpenDrawer)
+        }
+
+        if (!isOnline) {
+            Box(Modifier.fillMaxWidth().background(Coral).statusBarsPadding().padding(8.dp), contentAlignment = Alignment.Center) {
+                Text("You're offline. AI features are disabled.", color = DarkText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }
 
@@ -387,7 +420,8 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable private fun NewEditChatScreen(state: EditorState, createDraft: (String) -> Unit, moveClip: (Int, Int) -> Unit, onOpenDrawer: () -> Unit) {
+@Composable private fun NewEditChatScreen(state: EditorState, createDraft: (String) -> Unit, moveClip: (Int, Int) -> Unit, onRelink: (Uri) -> Unit, isOnline: Boolean, onOpenDrawer: () -> Unit) {
+    val relinkLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { if (it != null) onRelink(it) }
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     var message by rememberSaveable { mutableStateOf("") }
     val suggestions = listOf(
@@ -404,9 +438,22 @@ class MainActivity : ComponentActivity() {
         ) {
             item {
                 Box(Modifier.fillMaxWidth().background(Workspace, RoundedCornerShape(18.dp)).border(1.dp, Border, RoundedCornerShape(18.dp)).padding(10.dp)) {
-                    val first = state.sources.first()
-                    VideoPreview(state.sources.map { it.uri }, Modifier.fillMaxWidth().aspectRatio(first.displaySize().aspectRatio))
-                    SmallAction("Expand", Modifier.align(Alignment.TopEnd).padding(8.dp)) { fullscreen = true }
+                    val first = state.sources.firstOrNull()
+                    if (first?.uri.isNullOrEmpty()) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(32.dp)) {
+                            Text("Missing Video File", color = Coral, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Spacer(Modifier.height(4.dp))
+                            Text("This video is no longer on your device.", color = Muted, fontSize = 12.sp)
+                            Spacer(Modifier.height(16.dp))
+                            Button(onClick = { relinkLauncher.launch(arrayOf("video/*")) },
+                                colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText)) {
+                                Text("Relink Video")
+                            }
+                        }
+                    } else {
+                        VideoPreview(state.sources.map { it.uri }, Modifier.fillMaxWidth().aspectRatio(first!!.displaySize().aspectRatio))
+                        SmallAction("Expand", Modifier.align(Alignment.TopEnd).padding(8.dp)) { fullscreen = true }
+                    }
                 }
             }
             item { ClipOrder(state.sources, moveClip) }
@@ -448,6 +495,7 @@ class MainActivity : ComponentActivity() {
                     placeholder = { Text("Describe the edit you want…") },
                     minLines = 1,
                     maxLines = 5,
+                    enabled = isOnline,
                     shape = RoundedCornerShape(24.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = CreamRaised, unfocusedTextColor = CreamRaised,
@@ -457,7 +505,7 @@ class MainActivity : ComponentActivity() {
                 )
                 Button(
                     onClick = { createDraft(message) },
-                    enabled = message.isNotBlank(),
+                    enabled = message.isNotBlank() && isOnline,
                     modifier = Modifier.height(56.dp),
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText),
@@ -502,8 +550,11 @@ private sealed interface ChatElement {
     switchBranch: (String) -> Unit,
     recoverAgent: (AgentRecoveryAction) -> Unit,
     cancelAnalysis: () -> Unit,
+    onRelink: (Uri) -> Unit,
+    isOnline: Boolean,
     onOpenDrawer: () -> Unit,
 ) {
+    val relinkLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { if (it != null) onRelink(it) }
     val project = requireNotNull(state.project)
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     var showVideo by rememberSaveable { mutableStateOf(false) }
@@ -536,7 +587,20 @@ private sealed interface ChatElement {
                 }
                 val ratio = project.export.width.toFloat() / project.export.height
                 Box(Modifier.fillMaxWidth().padding(10.dp).background(Ink, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                    CanonicalVideoPreview(project, Modifier.fillMaxWidth().aspectRatio(ratio))
+                    if (state.sources.firstOrNull()?.uri.isNullOrEmpty()) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
+                            Text("Missing Video File", color = Coral, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Spacer(Modifier.height(4.dp))
+                            Text("This video is no longer on your device.", color = Muted, fontSize = 12.sp)
+                            Spacer(Modifier.height(16.dp))
+                            Button(onClick = { relinkLauncher.launch(arrayOf("video/*")) },
+                                colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText)) {
+                                Text("Relink Video")
+                            }
+                        }
+                    } else {
+                        CanonicalVideoPreview(project, Modifier.fillMaxWidth().aspectRatio(ratio))
+                    }
                 }
                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("00:00", color = Muted, fontSize = 10.sp)
@@ -744,10 +808,11 @@ private sealed interface ChatElement {
                 ) {
                     followUpSuggestions.forEach { suggestion ->
                         SuggestionChip(
-                            onClick = { request = suggestion },
+                            onClick = { if (isOnline) request = suggestion },
                             label = { Text(suggestion, fontSize = 11.sp, color = Cream) },
                             colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Workspace),
-                            border = null
+                            border = null,
+                            enabled = isOnline
                         )
                     }
                 }
@@ -762,6 +827,7 @@ private sealed interface ChatElement {
                         modifier = Modifier.weight(1f),
                         placeholder = { Text("Ask Trimm for changes or edits…") },
                         maxLines = 5,
+                        enabled = isOnline,
                         shape = RoundedCornerShape(24.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = CreamRaised, unfocusedTextColor = CreamRaised,

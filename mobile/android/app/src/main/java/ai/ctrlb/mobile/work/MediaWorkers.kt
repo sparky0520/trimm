@@ -22,6 +22,7 @@ import androidx.work.WorkerParameters
 import android.content.ContentValues
 import android.provider.MediaStore
 import android.util.Log
+import io.github.jan.supabase.storage.storage
 
 abstract class ProgressWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     suspend fun progress(stage: String, percent: Int) = setProgress(Data.Builder().putString("stage", stage).putInt("percent", percent).build())
@@ -126,7 +127,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                     try { uploadClient.upload(derivative) } finally { java.io.File(derivative.localPath).delete() }
                 }
             )
-            runCatching {
+            runCatching<Unit> {
                 val completedRun = coordinator.orchestrateStateless(
                     request = AgentRunRequest(
                         projectId = project.id,
@@ -278,3 +279,66 @@ private fun Throwable.detailedMessage(fallback: String): String =
         .distinct()
         .joinToString(" → ")
         .ifBlank { fallback }
+
+class ChatEditWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result = runCatching {
+        val projectId = requireNotNull(inputData.getString("projectId"))
+        val message = requireNotNull(inputData.getString("message"))
+        val turnId = requireNotNull(inputData.getString("turnId"))
+        
+        val store = ProjectStore(applicationContext)
+        val project = store.load(projectId)
+        
+        val preparer = SelectiveDerivativePreparer(
+            java.io.File(applicationContext.cacheDir, "agent-derivatives"), AndroidDerivativeWriter(applicationContext)
+        )
+        val transcript = sourceTranscript(project.analysis.words, project.orderedSources)
+        val apiService = ai.ctrlb.mobile.network.ChatApiService.create()
+
+        var videoStorageUrl: String? = null
+        if (inputData.getBoolean("uploadVideoContext", true)) {
+            val job = ai.ctrlb.mobile.planner.AuthorizedEvidenceJob(
+                id = java.util.UUID.randomUUID().toString(),
+                sourceId = project.orderedSources.firstOrNull()?.fingerprint ?: "",
+                type = "video",
+                purpose = "video-inspection",
+                range = ai.ctrlb.mobile.planner.EvidenceRange(0, 15000), // First 15 seconds
+                acceptedFormat = "video/mp4",
+                maximumBytes = 25_000_000,
+                maximumDurationMs = 15000,
+                resolution = "original",
+                expiresAt = java.time.Instant.now().plusSeconds(3600).toString(),
+                reused = false
+            )
+            try {
+                val derivative = preparer.prepare(DerivativeAuthorization(job), project.orderedSources)
+                val file = java.io.File(derivative.localPath)
+                val bucket = ai.ctrlb.mobile.network.supabase.storage.from("assets")
+                val path = "video-context/${project.id}/${java.util.UUID.randomUUID()}.mp4"
+                bucket.upload(path, file.readBytes()) {
+                    upsert = true
+                }
+                videoStorageUrl = bucket.publicUrl(path)
+                file.delete()
+            } catch (e: Exception) {
+                Log.e("ChatEditWorker", "Failed to upload video context", e)
+            }
+        }
+
+        val request = ai.ctrlb.mobile.network.ChatEditRequest(
+            prompt = message,
+            parentId = project.analysis.appliedEditCheckpoints.lastOrNull()?.id,
+            chatId = project.id,
+            transcript = transcript.joinToString(" ") { it.text },
+            videoUrl = videoStorageUrl
+        )
+        
+        val token = ai.ctrlb.mobile.auth.AuthTokenProvider.currentToken()
+        apiService.submitEdit("Bearer $token", request)
+        
+        Result.success()
+    }.getOrElse { error ->
+        Log.e("ChatEditWorker", "Edit failed", error)
+        Result.failure(Data.Builder().putString("error", error.message).build())
+    }
+}

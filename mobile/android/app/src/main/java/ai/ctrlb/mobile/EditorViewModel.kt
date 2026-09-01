@@ -51,7 +51,7 @@ data class EditorState(
     val initialRequest: String? = null,
     val pendingChatMessage: String? = null,
     val isProcessing: Boolean = false,
-    val pastChats: List<MobileProject> = emptyList()
+    val pastChats: List<ai.ctrlb.mobile.data.ChatSummary> = emptyList()
 ) {
     val source: SourceMedia? get() = sources.firstOrNull()
 }
@@ -109,6 +109,27 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 jobMessage = null,
                 isProcessing = false
             )
+
+            // Recover missed checkpoints from the background
+            runCatching {
+                val token = ai.ctrlb.mobile.auth.AuthTokenProvider.currentToken()
+                val apiService = ai.ctrlb.mobile.network.ChatApiService.create()
+                val response = apiService.getCheckpoints("Bearer $token", id)
+                val checkpoints = response.getAsJsonArray("checkpoints")
+                
+                if (checkpoints.size() > 0) {
+                    val currentProject = mutable.value.project ?: return@runCatching
+                    
+                    // Simple recovery: if we had a pending conversation turn, and we have completed checkpoints, mark it finished
+                    val finished = currentProject.copy(analysis = currentProject.analysis.copy(
+                        revisionConversation = currentProject.analysis.revisionConversation.map { turn ->
+                            if (turn.isPending) turn.copy(response = "Revised proposal ready to review (recovered)", isPending = false, isError = false) else turn
+                        }
+                    ))
+                    store.save(finished)
+                    mutable.value = mutable.value.copy(project = finished)
+                }
+            }
         } catch (e: Exception) {
             mutable.value = mutable.value.copy(errorMessage = "Failed to load chat: ${e.message}")
         }
@@ -118,6 +139,30 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val sources = uris.distinct().map { uri -> readSource(uri) }
         require(sources.isNotEmpty()) { "Choose at least one video." }
         mutable.value = EditorState(sources = sources, creatorPreferences = mutable.value.creatorPreferences)
+    }
+
+    fun relinkVideo(uri: Uri) = viewModelScope.launch {
+        try {
+            val project = mutable.value.project ?: return@launch
+            val newSource = readSource(uri)
+            val updatedSources = project.orderedSources.mapIndexed { index, source ->
+                if (index == 0) source.copy(
+                    uri = uri.toString(),
+                    fingerprint = newSource.fingerprint,
+                    durationMs = newSource.durationMs,
+                    width = newSource.width,
+                    height = newSource.height
+                ) else source
+            }
+            val updatedProject = project.replaceSources(updatedSources)
+            store.save(updatedProject)
+            mutable.value = mutable.value.copy(
+                project = updatedProject,
+                sources = updatedProject.sources
+            )
+        } catch (e: Exception) {
+            mutable.value = mutable.value.copy(errorMessage = "Relinking failed: ${e.message}")
+        }
     }
 
     private suspend fun readSource(uri: Uri): SourceMedia = withContext(Dispatchers.IO) {
@@ -467,88 +512,37 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val uploadVideoContext = true // Boolean flag to control video upload
 
     private fun continueChatConversation(project: MobileProject, turnId: String, message: String) {
-        val preparer = SelectiveDerivativePreparer(
-            java.io.File(getApplication<Application>().cacheDir, "agent-derivatives"), AndroidDerivativeWriter(getApplication())
-        )
-        val transcript = sourceTranscript(project.analysis.words, project.orderedSources)
-        val apiService = ChatApiService.create()
+        val workManager = androidx.work.WorkManager.getInstance(getApplication())
+        val data = androidx.work.Data.Builder()
+            .putString("projectId", project.id)
+            .putString("message", message)
+            .putString("turnId", turnId)
+            .putBoolean("uploadVideoContext", uploadVideoContext)
+            .build()
+        val request = androidx.work.OneTimeWorkRequestBuilder<ai.ctrlb.mobile.work.ChatEditWorker>()
+            .setInputData(data)
+            .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
+            .build()
+        workManager.enqueue(request)
+
+        mutable.value = mutable.value.copy(jobMessage = "Uploading video context (background)...")
+
         val repository = ChatRepository()
-
         viewModelScope.launch {
-            var videoStorageUrl: String? = null
-            if (uploadVideoContext) {
-                mutable.value = mutable.value.copy(jobMessage = "Preparing video context...")
-                val job = ai.ctrlb.mobile.planner.AuthorizedEvidenceJob(
-                    id = java.util.UUID.randomUUID().toString(),
-                    sourceId = project.orderedSources.firstOrNull()?.fingerprint ?: "",
-                    type = "video",
-                    purpose = "video-inspection",
-                    range = ai.ctrlb.mobile.planner.EvidenceRange(0, 15000), // First 15 seconds
-                    acceptedFormat = "video/mp4",
-                    maximumBytes = 25_000_000,
-                    maximumDurationMs = 15000,
-                    resolution = "original",
-                    expiresAt = java.time.Instant.now().plusSeconds(3600).toString(),
-                    reused = false
-                )
-                try {
-                    val derivative = preparer.prepare(DerivativeAuthorization(job), project.orderedSources)
-                    val file = java.io.File(derivative.localPath)
-                    val bucket = supabase.storage.from("assets")
-                    val path = "video-context/${project.id}/${java.util.UUID.randomUUID()}.mp4"
-                    bucket.upload(path, file.readBytes()) {
-                        upsert = true
-                    }
-                    videoStorageUrl = bucket.publicUrl(path)
-                    file.delete()
-                } catch (e: Exception) {
-                    android.util.Log.e("EditorViewModel", "Failed to upload video context", e)
+            // Start listening to the realtime updates for this checkpoint in case the app stays open
+            chatListenJob?.cancel()
+            chatListenJob = launch {
+                repository.listenForCheckpoints(project.id).collect { checkpointData ->
+                    val currentProject = mutable.value.project ?: return@collect
+                    val finished = currentProject.copy(analysis = currentProject.analysis.copy(
+                        revisionConversation = currentProject.analysis.revisionConversation.map {
+                            if (it.id == turnId) it.copy(response = "Revised proposal ready to review", isPending = false, isError = false) else it
+                        }
+                    ))
+                    store.save(finished)
+                    mutable.value = mutable.value.copy(project = finished, jobMessage = "Applying edits...", isProcessing = false)
+                    // TODO: Apply edits
                 }
-            }
-
-            mutable.value = mutable.value.copy(jobMessage = "Thinking...")
-            
-            val request = ChatEditRequest(
-                prompt = message,
-                parentId = project.analysis.appliedEditCheckpoints.lastOrNull()?.id,
-                chatId = project.id,
-                transcript = transcript.joinToString(" ") { it.text },
-                videoUrl = videoStorageUrl
-            )
-            
-            try {
-                val token = ai.ctrlb.mobile.auth.AuthTokenProvider.currentToken()
-                val response = apiService.submitEdit("Bearer $token", request)
-                // Start listening to the realtime updates for this checkpoint
-                chatListenJob?.cancel()
-                chatListenJob = launch {
-                    repository.listenForCheckpoints(project.id).collect { checkpointData ->
-                        // Once we receive the completed status, we process the JSON edits
-                        val currentProject = mutable.value.project ?: return@collect
-                        val finished = currentProject.copy(analysis = currentProject.analysis.copy(
-                            revisionConversation = currentProject.analysis.revisionConversation.map {
-                                if (it.id == turnId) it.copy(response = "Revised proposal ready to review", isPending = false, isError = false) else it
-                            }
-                        ))
-                        store.save(finished)
-                        mutable.value = mutable.value.copy(project = finished, jobMessage = "Applying edits...", isProcessing = false)
-                        
-                        // TODO: Apply edits
-                    }
-                }
-            } catch (e: Exception) {
-                val currentProject = mutable.value.project ?: return@launch
-                val finished = currentProject.copy(analysis = currentProject.analysis.copy(
-                    revisionConversation = currentProject.analysis.revisionConversation.map {
-                        if (it.id == turnId) it.copy(response = "Error: ${e.message}", isPending = false, isError = true) else it
-                    }
-                ))
-                store.save(finished)
-                mutable.value = mutable.value.copy(
-                    project = finished,
-                    jobMessage = "Could not reach Trimm: ${e.message}",
-                    isProcessing = false
-                )
             }
         }
     }
