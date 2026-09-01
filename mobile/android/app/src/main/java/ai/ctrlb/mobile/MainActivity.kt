@@ -40,16 +40,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -58,15 +60,18 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import io.github.jan.supabase.auth.status.SessionStatus
+import io.github.jan.supabase.auth.auth
+import ai.ctrlb.mobile.network.supabase
+import ai.ctrlb.mobile.auth.signInWithGoogle
+import android.app.Activity
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.transformer.CompositionPlayer
 import androidx.media3.ui.PlayerView
-import com.clerk.api.Clerk
-import com.clerk.ui.auth.AuthView
-import com.clerk.ui.userbutton.UserButton
+import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -131,19 +136,8 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
-        if (BuildConfig.CLERK_PUBLISHABLE_KEY.isNotBlank()) {
-            lifecycleScope.launch { Clerk.auth.handle(intent.data) }
-        }
         enableEdgeToEdge()
         setContent { TrimmTheme { Surface(Modifier.fillMaxSize(), color = Ink) { AppWithDrawer() } } }
-    }
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        if (BuildConfig.CLERK_PUBLISHABLE_KEY.isNotBlank()) {
-            lifecycleScope.launch { Clerk.auth.handle(intent.data) }
-        }
     }
 }
 
@@ -193,7 +187,7 @@ class MainActivity : ComponentActivity() {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        AccountControl()
+                        AccountControl(LocalContext.current as Activity)
                     }
                 }
             }
@@ -208,7 +202,6 @@ class MainActivity : ComponentActivity() {
 
     var displayedText by rememberSaveable(cleanTitle) { mutableStateOf("") }
     LaunchedEffect(cleanTitle) {
-        // Typewrite title on first render
         if (displayedText != cleanTitle) {
             displayedText = ""
             for (char in cleanTitle) {
@@ -224,7 +217,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable private fun TrimmApp(vm: EditorViewModel, onOpenDrawer: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     var isOnline by rememberSaveable { mutableStateOf(true) }
 
     DisposableEffect(context) {
@@ -238,7 +231,6 @@ class MainActivity : ComponentActivity() {
             .build()
         connectivityManager.registerNetworkCallback(request, callback)
         
-        // Initial check
         val activeNetwork = connectivityManager.activeNetwork
         val caps = connectivityManager.getNetworkCapabilities(activeNetwork)
         isOnline = caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
@@ -248,7 +240,7 @@ class MainActivity : ComponentActivity() {
 
     Box(Modifier.fillMaxSize()) {
         when {
-            state.source == null -> ImportScreen(vm::import, onOpenDrawer)
+            state.source == null -> ImportScreen(LocalContext.current as Activity, vm::import, onOpenDrawer)
             state.project != null -> EditorScreen(
                 state, vm::undo, vm::export, vm::applyProposal, vm::rejectProposal,
                 vm::undoCheckpoint,
@@ -314,41 +306,23 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable private fun AccountControl() {
-    if (BuildConfig.CLERK_PUBLISHABLE_KEY.isBlank()) return
-    val initialized by Clerk.isInitialized.collectAsStateWithLifecycle()
-    val user by Clerk.userFlow.collectAsStateWithLifecycle()
-    var showSignIn by rememberSaveable { mutableStateOf(false) }
+@Composable private fun AccountControl(activity: Activity) {
+    if (BuildConfig.SUPABASE_PUBLISHABLE_KEY.isBlank()) return
+    val sessionStatus by supabase.auth.sessionStatus.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
 
-    when {
-        !initialized -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Lavender)
-        user != null -> UserButton()
-        else -> TextButton(onClick = { showSignIn = true }) { Text("Sign in", color = Cream) }
-    }
-
-    if (showSignIn && user == null) {
-        Dialog(onDismissRequest = { showSignIn = false }) {
-            Surface(
-                Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                color = Workspace,
-            ) {
-                Box(Modifier.padding(12.dp)) {
-                    AuthView()
-                    TextButton(
-                        onClick = { showSignIn = false },
-                        modifier = Modifier.align(Alignment.TopEnd),
-                    ) { Text("Close", color = Cream) }
-                }
-            }
-        }
+    when (sessionStatus) {
+        is SessionStatus.Authenticated -> { /* UserButton() */ }
+        else -> TextButton(onClick = { 
+            scope.launch { signInWithGoogle(activity) } 
+        }) { Text("Sign in", color = Cream) }
     }
 }
 
-@Composable private fun ImportScreen(onImport: (List<Uri>) -> Unit, onOpenDrawer: (() -> Unit)? = null) {
+@Composable private fun ImportScreen(activity: Activity, onImport: (List<Uri>) -> Unit, onOpenDrawer: (() -> Unit)? = null) {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { if (it.isNotEmpty()) onImport(it) }
-    val user by Clerk.userFlow.collectAsStateWithLifecycle()
-    var showSignIn by rememberSaveable { mutableStateOf(false) }
+    val sessionStatus by supabase.auth.sessionStatus.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
 
     Box(Modifier.fillMaxSize().background(Ink).statusBarsPadding().navigationBarsPadding()) {
         if (onOpenDrawer != null) {
@@ -378,7 +352,7 @@ class MainActivity : ComponentActivity() {
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             Spacer(Modifier.height(32.dp))
             
-            if (BuildConfig.CLERK_PUBLISHABLE_KEY.isNotBlank() && user == null) {
+            if (BuildConfig.SUPABASE_PUBLISHABLE_KEY.isNotBlank() && sessionStatus !is SessionStatus.Authenticated) {
                 Image(
                     painter = painterResource(id = R.drawable.btn_google_signin),
                     contentDescription = "Sign in with Google",
@@ -388,7 +362,7 @@ class MainActivity : ComponentActivity() {
                         .height(56.dp)
                         .clickable(
                             role = androidx.compose.ui.semantics.Role.Button,
-                            onClick = { showSignIn = true }
+                            onClick = { scope.launch { signInWithGoogle(activity) } }
                         )
                 )
             } else {
@@ -399,24 +373,6 @@ class MainActivity : ComponentActivity() {
             }
         }
         Text("YOUR VIDEO STAYS ON DEVICE", color = Muted, fontSize = 10.sp, letterSpacing = 1.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp))
-    }
-
-    if (showSignIn && user == null) {
-        Dialog(onDismissRequest = { showSignIn = false }) {
-            Surface(
-                Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                color = Workspace,
-            ) {
-                Box(Modifier.padding(12.dp)) {
-                    AuthView()
-                    TextButton(
-                        onClick = { showSignIn = false },
-                        modifier = Modifier.align(Alignment.TopEnd),
-                    ) { Text("Close", color = Cream) }
-                }
-            }
-        }
     }
 }
 

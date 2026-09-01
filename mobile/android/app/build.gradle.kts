@@ -54,9 +54,13 @@ android {
         val supabasePublishableKey = providers.gradleProperty("SUPABASE_PUBLISHABLE_KEY")
             .orElse(providers.environmentVariable("SUPABASE_PUBLISHABLE_KEY"))
             .orElse(rootLocalEnv["SUPABASE_PUBLISHABLE_KEY"] ?: "").get()
+        val googleWebClientId = providers.gradleProperty("GOOGLE_WEB_CLIENT_ID")
+            .orElse(providers.environmentVariable("GOOGLE_WEB_CLIENT_ID"))
+            .orElse(rootLocalEnv["GOOGLE_WEB_CLIENT_ID"] ?: "").get()
             
         buildConfigField("String", "SUPABASE_URL", "\"${supabaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${supabasePublishableKey.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${googleWebClientId.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
     }
     signingConfigs {
         create("release") {
@@ -117,8 +121,12 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.2.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
-    implementation("com.clerk:clerk-android-ui:1.0.28")
     implementation("com.google.android.play:app-update-ktx:2.1.0")
+
+    // Google Sign-In via Credential Manager
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
     
     // AI Audio Integration
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
@@ -128,6 +136,7 @@ dependencies {
     // Supabase
     implementation(platform("io.github.jan-tennert.supabase:bom:3.0.0"))
     implementation("io.github.jan-tennert.supabase:postgrest-kt")
+    implementation("io.github.jan-tennert.supabase:auth-kt")
     implementation("io.github.jan-tennert.supabase:realtime-kt")
     implementation("io.github.jan-tennert.supabase:storage-kt")
     implementation("io.ktor:ktor-client-okhttp:3.0.0")
