@@ -356,10 +356,9 @@ h1 span {
 .closing {
   padding: 92px 0;
   border-top: 1px solid var(--line);
-  text-align: center;
 }
 .closing h2 {
-  margin: 0 auto 31px;
+  margin: 0 0 31px;
 }
 .closing .eyebrow {
   margin-bottom: 16px;
@@ -483,6 +482,7 @@ footer div {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding-top: 8px;
 }
 .proposal-wrapper .proposal {
   flex: 1;
