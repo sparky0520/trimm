@@ -1,6 +1,7 @@
 @file:OptIn(UnstableApi::class)
 package ai.ctrlb.mobile.media.effects
 
+import androidx.annotation.OptIn
 import android.content.Context
 import androidx.media3.common.util.Size
 import androidx.media3.common.util.UnstableApi

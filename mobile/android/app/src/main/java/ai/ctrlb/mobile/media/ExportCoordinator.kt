@@ -242,12 +242,10 @@ object ExportCoordinator {
                         items.add(edited)
                     }
                 }
-                sequences += items.fold(EditedMediaItemSequence.Builder()) { b, i -> b.addItem(i) }.build()
+                sequences += EditedMediaItemSequence.withAudioAndVideoFrom(items)
             } else {
                 items.add(edited)
-                val builder = items.fold(EditedMediaItemSequence.Builder()) { b, i -> b.addItem(i) }
-                builder.setIsLooping(true)
-                sequences += builder.build()
+                sequences += EditedMediaItemSequence.withAudioAndVideoFrom(items).buildUpon().setIsLooping(true).build()
             }
         }
 
@@ -268,7 +266,7 @@ object ExportCoordinator {
                 .setDurationUs(effectDurationMs * 1000L)
                 .setEffects(Effects(emptyList(), emptyList()))
                 .build()
-            sequences += items.fold(EditedMediaItemSequence.Builder()) { b, i -> b.addItem(i) }.build()
+            sequences += EditedMediaItemSequence.withAudioFrom(items)
         }
 
         project.operations.filterIsInstance<AddSfx>().filter { it.enabled }.forEach { sfx ->
@@ -288,7 +286,7 @@ object ExportCoordinator {
                 .setDurationUs(sfxDurationMs * 1000L)
                 .setEffects(Effects(emptyList(), emptyList()))
                 .build()
-            sequences += items.fold(EditedMediaItemSequence.Builder()) { b, i -> b.addItem(i) }.build()
+            sequences += EditedMediaItemSequence.withAudioFrom(items)
         }
 
         return Composition.Builder(sequences).setEffects(Effects(emptyList(), videoEffects)).build()
