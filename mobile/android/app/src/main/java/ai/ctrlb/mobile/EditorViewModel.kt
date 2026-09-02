@@ -85,6 +85,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun newChat() {
+        mutable.value = EditorState(
+            creatorPreferences = mutable.value.creatorPreferences,
+            pastChats = mutable.value.pastChats
+        )
+    }
+
     fun loadProject(id: String) = viewModelScope.launch {
         try {
             val project = store.load(id)

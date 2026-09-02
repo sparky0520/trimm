@@ -173,7 +173,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         IconButton(onClick = {
-                            vm.loadProject(java.util.UUID.randomUUID().toString())
+                            vm.newChat()
                             scope.launch { drawerState.close() }
                         }) { Text("+", fontSize = 24.sp, color = Cream) }
                     }
