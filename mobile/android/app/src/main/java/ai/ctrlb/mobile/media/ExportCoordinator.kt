@@ -26,6 +26,8 @@ import androidx.media3.effect.RgbAdjustment
 import androidx.media3.effect.OverlayEffect
 import androidx.media3.effect.ScaleAndRotateTransformation
 import androidx.media3.effect.Crop
+import ai.ctrlb.mobile.media.effects.MotionPresetEffect
+import ai.ctrlb.mobile.media.effects.GraphicOverlayEffect
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -80,22 +82,41 @@ object ExportCoordinator {
                     if (localEnd < source.durationMs - 50) {
                         clipping.setEndPositionMs(localEnd)
                     }
-                    val item = MediaItem.Builder().setUri(source.uri).setClippingConfiguration(clipping.build()).build()
+                    val speedOp = project.operations.filterIsInstance<SetSpeed>().lastOrNull { 
+                        it.enabled && targets(it.itemId, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd) 
+                    }
+                    val speed = speedOp?.speed ?: 1f
+                    
+                    val item = MediaItem.Builder()
+                        .setUri(source.uri)
+                        .setClippingConfiguration(clipping.build())
+                        .setPlaybackSpeed(speed)
+                        .build()
                     val globalRange = TimeRange(start, end)
-                    val target = project.operations.filterIsInstance<SetAudioLevels>().lastOrNull {
+                    val target = project.operations.filterIsInstance<AutoAudioDucking>().lastOrNull {
                         it.enabled && it.parameter != "music_ducking" && targets(it.target, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd)
                     }?.dialogueLufs ?: -20f
-                    val audioEffects = if (target != -20f) listOf(DialogueAudioProcessor(0f, target)) else emptyList()
+                    val volume = project.operations.filterIsInstance<SetVolume>().lastOrNull {
+                        it.enabled && targets(it.itemId, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd)
+                    }?.volume ?: 1f
+                    val audioEffects = if (target != -20f) {
+                        listOf(DialogueAudioProcessor(0f, target), GainProcessor(volume))
+                    } else if (volume != 1f) {
+                        listOf(GainProcessor(volume))
+                    } else {
+                        emptyList()
+                    }
                     val itemVideoEffects = mutableListOf<Effect>()
                     val colorOperations = project.operations.filterIsInstance<SetColorGrade>().filter {
                         it.enabled && targets(it.target, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd)
                     }
                     FineColorEffect.create(colorOperations)?.let(itemVideoEffects::add)
                     
-                    project.operations.filterIsInstance<SetRotation>().lastOrNull { 
+                    val motionOp = project.operations.filterIsInstance<AddMotionPreset>().lastOrNull { 
                         it.enabled && targets(it.itemId, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd) 
-                    }?.let { rotOp ->
-                        itemVideoEffects.add(ScaleAndRotateTransformation.Builder().setRotationDegrees(rotOp.rotation).build())
+                    }
+                    motionOp?.let { op ->
+                        itemVideoEffects.add(MotionPresetEffect(op.preset, op.intensity, (localEnd - localStart).toLong()))
                     }
                     project.operations.filterIsInstance<SetCrop>().lastOrNull { 
                         it.enabled && targets(it.itemId, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd) 
@@ -167,30 +188,21 @@ object ExportCoordinator {
             }
         }
 
-        // Add Section Transitions
-        project.operations.filterIsInstance<AddSectionTransition>().filter { it.enabled }.forEach { transition ->
-            val range = transition.target?.let { TimeRange(it.startMs, it.endMs) }
-            if (range != null) {
-                val outputStart = timelineMapper.sourceToOutput(range.startMs)
-                val outputEnd = timelineMapper.sourceToOutput(range.endMs)
-                if (outputEnd > outputStart) {
-                    videoEffects += OverlayEffect(
-                        listOf(
-                            TransitionGraphicOverlay(
-                                preset = transition.preset,
-                                blueprintJson = transition.customBlueprint,
-                                startMs = outputStart,
-                                endMs = outputEnd
-                            )
-                        )
-                    )
-                }
-            }
+        // Add Callouts and Spotlights
+        val callouts = project.operations.filterIsInstance<AddCallout>().filter { it.enabled }.map { 
+            GraphicOverlayEffect.CalloutData(it.text, it.target, it.range) 
         }
+        val spotlights = project.operations.filterIsInstance<AddSpotlight>().filter { it.enabled }.map { 
+            GraphicOverlayEffect.SpotlightData(it.target, it.range) 
+        }
+        if (callouts.isNotEmpty() || spotlights.isNotEmpty()) {
+            videoEffects += GraphicOverlayEffect(callouts, spotlights)
+        }
+
         val sequences = mutableListOf(sequence)
 
         // BGM and SFX Generation
-        val ducking = project.operations.filterIsInstance<SetAudioLevels>().lastOrNull { it.enabled && (it.parameter == "music_ducking" || it.parameter == null) }
+            val ducking = project.operations.filterIsInstance<AutoAudioDucking>().lastOrNull { it.enabled && (it.parameter == "music_ducking" || it.parameter == null) }
         val duckDb = ducking?.musicDuckDb ?: -15f
         val bufferMs = 500L
         

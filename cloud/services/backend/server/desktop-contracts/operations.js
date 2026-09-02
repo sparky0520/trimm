@@ -51,7 +51,7 @@ export const SetSpeedOperationSchema = operation('set_speed', {
 
 export const SetVolumeOperationSchema = operation('set_volume', {
   itemId: id,
-  volume: finiteNumber.min(0).max(1),
+  volume: finiteNumber.min(0).max(2),
 });
 
 export const AddZoomOperationSchema = operation('add_zoom', {
@@ -100,7 +100,7 @@ const itemPatch = z.object({
   end: seconds.optional(),
   trim: trimRange.optional(),
   speed: finiteNumber.positive().optional(),
-  volume: finiteNumber.min(0).max(1).optional(),
+  volume: finiteNumber.min(0).max(2).optional(),
   scale: finiteNumber.min(1).max(4).optional(),
   focus: normalizedPoint.optional(),
   value: z.string().min(1).optional(),
@@ -151,7 +151,7 @@ const audioAdjustment = z.object({
   speechRanges: z.array(speechRange).max(200),
 }).strict();
 
-export const SetAudioLevelsOperationSchema = operation('set_audio_levels', {
+export const AutoAudioDuckingOperationSchema = operation('auto_audio_ducking', {
   targetLufs: z.union([z.literal(-16), z.literal(-18), z.literal(-20)]),
   duckingDb: finiteNumber.min(3).max(18),
   attackSeconds: finiteNumber.min(0.05).max(0.5),
@@ -179,13 +179,21 @@ export const ClearRotationOperationSchema = operation('clear_rotation', { itemId
 export const SetCropOperationSchema = operation('set_crop', { itemId: id, crop: normalizedRect });
 export const ClearCropOperationSchema = operation('clear_crop', { itemId: id });
 export const AddFeatureTitleOperationSchema = motionRange(operation('add_feature_title', { ...motionBase, value: z.string().min(1).max(80), preset: z.enum(['product', 'feature']) }));
-export const AddCalloutOperationSchema = motionRange(operation('add_callout', { ...motionBase, value: z.string().min(1).max(60), target: targetRect, evidence: targetEvidence, preset: z.enum(['label', 'compact']) }));
-export const AddSpotlightOperationSchema = motionRange(operation('add_spotlight', { ...motionBase, target: targetRect, evidence: targetEvidence, preset: z.enum(['soft', 'focused']) }));
+export const AddCalloutOperationSchema = operation('add_callout', {
+  text: z.string().min(1),
+  target: normalizedRect,
+  range: timeRange.optional(),
+});
+
+export const AddSpotlightOperationSchema = operation('add_spotlight', {
+  target: normalizedRect,
+  range: timeRange.optional(),
+});
 export const AddPushOperationSchema = motionRange(operation('add_push', { ...motionBase, target: targetRect, evidence: targetEvidence, direction: z.enum(['in', 'out']), preset: z.enum(['subtle', 'standard']) }));
 export const AddSectionTransitionOperationSchema = motionRange(operation('add_section_transition', { ...motionBase, preset: z.enum(['cut', 'dip', 'slide']), direction: z.enum(['left', 'right']).optional() }));
 export const AddDeviceFrameOperationSchema = motionRange(operation('add_device_frame', { ...motionBase, target: targetRect, evidence: targetEvidence, preset: z.enum(['screen', 'device']) }));
 
-export const EditOperationSchema = z.discriminatedUnion('type', [
+export const EditInstructionSchema = z.discriminatedUnion('type', [
   RemoveRangesOperationSchema,
   SetSpeedOperationSchema,
   SetVolumeOperationSchema,
@@ -199,7 +207,7 @@ export const EditOperationSchema = z.discriminatedUnion('type', [
   TrimItemOperationSchema,
   MoveItemOperationSchema,
 
-  SetAudioLevelsOperationSchema,
+   AutoAudioDuckingOperationSchema,
   ClearAudioLevelsOperationSchema,
   SetMusicEditOperationSchema,
   ClearMusicEditOperationSchema,
@@ -215,15 +223,15 @@ export const EditOperationSchema = z.discriminatedUnion('type', [
   AddDeviceFrameOperationSchema,
 ]);
 
-export const EditOperationBatchSchema = z.array(EditOperationSchema).min(1);
+export const EditInstructionBatchSchema = z.array(EditInstructionSchema).min(1);
 
-export function parseEditOperations(input) {
-  return EditOperationBatchSchema.parse(input);
+export function parseEditInstructions(input) {
+  return EditInstructionBatchSchema.parse(input);
 }
 
 /** JSON Schema suitable for a model structured-output response property. */
-export function editOperationsJsonSchema() {
-  return z.toJSONSchema(EditOperationBatchSchema, {
+export function editInstructionsJsonSchema() {
+  return z.toJSONSchema(EditInstructionBatchSchema, {
     target: 'draft-7',
     unrepresentable: 'throw',
   });

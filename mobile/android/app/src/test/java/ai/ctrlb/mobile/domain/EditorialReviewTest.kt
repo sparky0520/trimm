@@ -45,12 +45,12 @@ class EditorialReviewTest {
 
 
     @Test fun `atomic apply creates one checkpoint and undo restores exact operations`() {
-        val before = listOf<EditOperation>(SetAudioLevels(id = "before"))
-        val after = listOf<EditOperation>(SetAudioLevels(id = "after"))
+        val before = listOf<EditInstruction>(SetAudioLevels(id = "before"))
+        val after = listOf<EditInstruction>(SetAudioLevels(id = "after"))
         val plan = StagedEditorialPlan(emptyList(), emptyList(), emptyList())
         val pending = PendingEditorialProposal(0, "Cut", plan, after, emptyList())
         val project = MobileProject(title = "Review", source = source, operations = before, analysis = Analysis(pendingProposal = pending))
-        val applied = project.replaceEditOperations(OperationValidator.validate(project, after, 0))
+        val applied = project.replaceEditInstructions(OperationValidator.validate(project, after, 0))
             .copy(analysis = project.analysis.copy(editorialPlan = plan, pendingProposal = null))
         assertEquals(1, applied.revision)
         assertEquals(1, applied.undo.size)

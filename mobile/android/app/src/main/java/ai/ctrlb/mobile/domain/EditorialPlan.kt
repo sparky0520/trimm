@@ -51,6 +51,6 @@ import kotlinx.serialization.Serializable
     val expectedRevision: Long,
     val summary: String,
     val plan: StagedEditorialPlan,
-    val operations: List<EditOperation>,
+    val operations: List<EditInstruction>,
     val evidenceIds: List<String>
 )

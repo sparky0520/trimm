@@ -11,7 +11,7 @@ class ProjectTest {
     }
     @Test fun `operation changes are exactly undoable`() {
         val project = MobileProject(title = "Test", source = source)
-        val changed = project.replaceEditOperations(listOf(SetAudioLevels()))
+        val changed = project.replaceEditInstructions(listOf(SetAudioLevels()))
         assertEquals(1, changed.operations.size)
         assertEquals(project.operations, changed.restoreCheckpoint().operations)
     }
@@ -26,7 +26,7 @@ class ProjectTest {
         assertEquals(listOf(operations.last()), OperationValidator.visible(operations))
     }
     @Test fun `every enabled mobile operation changes the documented render fixture`() {
-        val fixture = listOf<EditOperation>(
+        val fixture = listOf<EditInstruction>(
             RemoveRanges(ranges = listOf(TimeRange(100, 200)), confidence = .96f, reason = "immediate-retake"),
             SetColorGrade(grade = ColorGrade(exposure = .1f)),
             SetAudioLevels(dialogueLufs = -16f),
@@ -38,7 +38,7 @@ class ProjectTest {
         }
     }
     @Test fun `cards disclose evidence preference or default basis`() {
-        val operations = listOf<EditOperation>(
+        val operations = listOf<EditInstruction>(
             RemoveRanges(ranges = listOf(TimeRange(100, 200)), confidence = .96f, reason = "retake"),
             SetAudioLevels()
         )

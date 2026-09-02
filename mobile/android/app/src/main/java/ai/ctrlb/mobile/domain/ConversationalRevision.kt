@@ -117,7 +117,7 @@ object ConversationalRevisionEngine {
         request: String,
         kind: EditorialConstraintKind,
         value: String,
-        transform: (List<EditOperation>) -> List<EditOperation>
+        transform: (List<EditInstruction>) -> List<EditInstruction>
     ): ConversationalRevisionResult {
         val current = project.analysis.pendingProposal
             ?: return clarification(project, request, "There is no current proposal to revise.")

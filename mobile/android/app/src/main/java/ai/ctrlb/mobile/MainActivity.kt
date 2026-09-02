@@ -1424,8 +1424,48 @@ private fun reviewPercent(value: Float) = "${(value * 100).toInt()}%"
 }
 
 private fun formatDuration(ms: Long): String = "%d:%02d".format(ms / 60_000, (ms / 1_000) % 60)
-private fun operationTitle(op: EditOperation) = when (op) { is RemoveRanges -> "Range removal"; is SetColorGrade -> "Frame-based color"; is SetAudioLevels -> "Dialogue leveling"; is SetAspectRatio -> "Aspect ratio"; is AddMotionPreset -> "Motion preset"; is AddCaptions -> "Captions"; is AddTextOverlay -> "Text overlay"; is AddBgm -> "Background music"; is AddBgmEffect -> "Background music effect"; is AddSfx -> "Sound effect"; is AddSectionTransition -> "Section transition"; is SetRotation -> "Rotation"; is ClearRotation -> "Clear rotation"; is SetCrop -> "Crop"; is ClearCrop -> "Clear crop" }
-private fun operationDetail(op: EditOperation) = when (op) { is RemoveRanges -> "${op.ranges.size} range cuts"; is SetColorGrade -> "Natural, skin-safe grade"; is SetAudioLevels -> "${op.dialogueLufs.toInt()} LUFS dialogue"; is SetAspectRatio -> op.ratio.name; is AddMotionPreset -> op.preset; is AddCaptions -> "${op.cues.size} timed caption cards"; is AddTextOverlay -> "Generated Graphics"; is AddBgm -> "AI-generated BGM"; is AddBgmEffect -> "AI-generated BGM effect"; is AddSfx -> "AI-generated SFX"; is AddSectionTransition -> "Transition effects"; is SetRotation -> "${op.rotation}°"; is ClearRotation -> op.itemId; is SetCrop -> op.itemId; is ClearCrop -> op.itemId }
+private fun operationTitle(op: EditInstruction) = when (op) { 
+    is RemoveRanges -> "Range removal"
+    is SetColorGrade -> "Frame-based color"
+    is AutoAudioDucking -> "Audio ducking"
+    is SetVolume -> "Volume adjustment"
+    is SetSpeed -> "Playback speed"
+    is AddCallout -> "Callout"
+    is AddSpotlight -> "Spotlight"
+    is SetAspectRatio -> "Aspect ratio"
+    is AddMotionPreset -> "Motion preset"
+    is AddCaptions -> "Captions"
+    is AddTextOverlay -> "Text overlay"
+    is AddBgm -> "Background music"
+    is AddBgmEffect -> "Background music effect"
+    is AddSfx -> "Sound effect"
+    is SetRotation -> "Rotation"
+    is ClearRotation -> "Clear rotation"
+    is SetCrop -> "Crop"
+    is ClearCrop -> "Clear crop"
+    else -> "Operation"
+}
+private fun operationDetail(op: EditInstruction) = when (op) { 
+    is RemoveRanges -> "${op.ranges.size} range cuts"
+    is SetColorGrade -> "Natural, skin-safe grade"
+    is AutoAudioDucking -> "${op.dialogueLufs.toInt()} LUFS dialogue"
+    is SetVolume -> "Manual gain: ${op.volume}x"
+    is SetSpeed -> "Playback speed: ${op.speed}x"
+    is AddCallout -> "Text: ${op.text}"
+    is AddSpotlight -> "Focused highlight"
+    is SetAspectRatio -> op.ratio.name
+    is AddMotionPreset -> op.preset
+    is AddCaptions -> "${op.cues.size} timed caption cards"
+    is AddTextOverlay -> "Generated Graphics"
+    is AddBgm -> "AI-generated BGM"
+    is AddBgmEffect -> "AI-generated BGM effect"
+    is AddSfx -> "AI-generated SFX"
+    is SetRotation -> "${op.rotation}°"
+    is ClearRotation -> op.itemId
+    is SetCrop -> op.itemId
+    is ClearCrop -> op.itemId
+    else -> "Detail unavailable"
+}
 
 @Composable private fun TrimmTheme(content: @Composable () -> Unit) = MaterialTheme(
     colorScheme = darkColorScheme(primary = Coral, secondary = Lavender, background = Ink, surface = Workspace, onSurface = CreamRaised, outline = Border),

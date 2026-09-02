@@ -1,6 +1,6 @@
 package ai.ctrlb.mobile.planner
 
-import ai.ctrlb.mobile.domain.EditOperation
+import ai.ctrlb.mobile.domain.EditInstruction
 import ai.ctrlb.mobile.domain.PendingEditorialProposal
 import ai.ctrlb.mobile.domain.StagedEditorialPlan
 import ai.ctrlb.mobile.domain.SourceMedia
@@ -224,7 +224,7 @@ object AgentDecisionMapper {
         if (run.status !in setOf(AgentRunStatus.PROPOSAL_READY, AgentRunStatus.PARTIAL, AgentRunStatus.FAILED) ||
             run.decision["type"]?.jsonPrimitive?.content != "edit_program") return null
         val operations = run.decision["operations"]?.jsonArray?.map { element ->
-            json.decodeFromJsonElement(EditOperation.serializer(), element)
+                             json.decodeFromJsonElement(EditInstruction.serializer(), element)
         } ?: return null
         val evidenceIds = run.decision["operations"]?.jsonArray.orEmpty()
             .flatMap { operation ->
@@ -385,7 +385,7 @@ class AgentRunCoordinator(
                                 onProgress("Generating sound effect...", (index * 100) / tasks.size)
                                 op = op.copy(url = gateway.generateSfx(op.prompt))
                             }
-                            json.encodeToJsonElement(EditOperation.serializer(), op).jsonObject
+                             json.encodeToJsonElement(EditInstruction.serializer(), op).jsonObject
                         } ?: emptyList()
                         
                         if (newOps.isEmpty() && !semanticRetry && task.description.contains(Regex("(silence|dead space|pause|gap|quiet)", RegexOption.IGNORE_CASE))) {
@@ -577,7 +577,7 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
     val sources: List<Layer2SourceInventory>,
     val mediaIndex: RequestShapedMediaIndex,
     val evidenceJobIds: List<String> = emptyList(),
-    val existingOperations: List<EditOperation> = emptyList(),
+     val existingOperations: List<EditInstruction> = emptyList(),
     val budgets: Layer2Budgets = Layer2Budgets()
 )
 @Serializable data class EvidenceRange(val startMs: Long, val endMs: Long)

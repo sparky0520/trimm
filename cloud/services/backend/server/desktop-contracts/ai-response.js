@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { EditOperationBatchSchema } from './operations.js';
+import { EditInstructionBatchSchema } from './operations.js';
 
 const reply = z.string().min(1);
 const textList = z.array(z.string().min(1));
@@ -24,7 +24,7 @@ export const AiResponseSchema = z.discriminatedUnion('mode', [
   z.object({
     mode: z.literal('proposal'),
     reply,
-    operations: EditOperationBatchSchema,
+    operations: EditInstructionBatchSchema,
     evidence: textList,
     assumptions: textList,
     warnings: textList,

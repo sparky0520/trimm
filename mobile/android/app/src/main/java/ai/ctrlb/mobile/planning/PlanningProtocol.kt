@@ -286,6 +286,6 @@ object PlanningProgramApplier {
                 reason = command.evidenceIds.firstOrNull() ?: "Layer 1 edit program"
             )
         }
-        return project.applyEditOperations(program.programId, operations)
+        return project.applyEditInstructions(program.programId, operations)
     }
 }

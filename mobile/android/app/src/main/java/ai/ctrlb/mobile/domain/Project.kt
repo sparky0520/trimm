@@ -95,30 +95,26 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
 @Serializable enum class MusicChoice { AUTOMATIC, USER_FILE, NONE }
 
 @Serializable data class NormalizedRect(val x: Float, val y: Float, val width: Float, val height: Float)
-@Serializable sealed interface EditOperation { val id: String; val enabled: Boolean }
+@Serializable sealed interface EditInstruction { val id: String; val enabled: Boolean }
 @Serializable data class OperationTarget(val sourceId: String, val startMs: Long, val endMs: Long) {
     init { require(sourceId.isNotBlank() && startMs >= 0 && endMs > startMs) }
 }
-@Serializable @SerialName("remove_ranges") data class RemoveRanges(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val ranges: List<TimeRange>, val confidence: Float, val reason: String = "", val pacing: String = "natural") : EditOperation
-@Serializable @SerialName("set_color_grade") data class SetColorGrade(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val grade: ColorGrade? = null, val target: OperationTarget? = null, val parameter: String? = null, val value: Float? = null) : EditOperation
-@Serializable @SerialName("set_audio_levels") data class SetAudioLevels(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val parameter: String? = null, val dialogueLufs: Float = -16f, val musicDuckDb: Float = -9f, val attackMs: Long = 120, val releaseMs: Long = 450, val target: OperationTarget? = null) : EditOperation
-@Serializable @SerialName("set_aspect_ratio") data class SetAspectRatio(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val ratio: AspectRatio = AspectRatio.PORTRAIT) : EditOperation
+@Serializable @SerialName("remove_ranges") data class RemoveRanges(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val ranges: List<TimeRange>, val confidence: Float, val reason: String = "", val pacing: String = "natural") : EditInstruction
+@Serializable @SerialName("set_color_grade") data class SetColorGrade(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val grade: ColorGrade? = null, val target: OperationTarget? = null, val parameter: String? = null, val value: Float? = null) : EditInstruction
+@Serializable @SerialName("set_volume") data class SetVolume(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val itemId: String, val volume: Float) : EditInstruction
+@Serializable @SerialName("set_aspect_ratio") data class SetAspectRatio(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val ratio: AspectRatio = AspectRatio.PORTRAIT) : EditInstruction
 @Serializable @SerialName("add_text_overlay") data class AddTextOverlay(
     override val id: String = UUID.randomUUID().toString(),
     override val enabled: Boolean = true,
     val text: String,
     val target: OperationTarget? = null,
     val designBlueprint: String = "{}"
-) : EditOperation
-@Serializable @SerialName("add_motion_preset") data class AddMotionPreset(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val range: TimeRange? = null, val preset: String, val intensity: Float = .5f) : EditOperation
-@Serializable @SerialName("add_captions") data class AddCaptions(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val cues: List<CaptionCue> = emptyList(), val target: OperationTarget? = null, val speakerId: String? = null, val style: String = "bold-bottom") : EditOperation
-@Serializable @SerialName("add_section_transition") data class AddSectionTransition(
-    override val id: String = UUID.randomUUID().toString(),
-    override val enabled: Boolean = true,
-    val target: OperationTarget? = null,
-    val preset: String = "fade-in",
-    val customBlueprint: String = "{}"
-) : EditOperation
+) : EditInstruction
+@Serializable @SerialName("add_motion_preset") data class AddMotionPreset(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val range: TimeRange? = null, val preset: String, val intensity: Float = .5f) : EditInstruction
+@Serializable @SerialName("add_captions") data class AddCaptions(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val cues: List<CaptionCue> = emptyList(), val target: OperationTarget? = null, val speakerId: String? = null, val style: String = "bold-bottom") : EditInstruction
+@Serializable @SerialName("set_speed") data class SetSpeed(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val itemId: String, val speed: Float) : EditInstruction
+@Serializable @SerialName("add_callout") data class AddCallout(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val text: String, val target: NormalizedRect, val range: TimeRange? = null) : EditInstruction
+@Serializable @SerialName("add_spotlight") data class AddSpotlight(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val target: NormalizedRect, val range: TimeRange? = null) : EditInstruction
 
 
 @Serializable @SerialName("add_bgm") data class AddBgm(
@@ -128,7 +124,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val prompt: String,
     val reason: String = "",
     val url: String = ""
-) : EditOperation
+) : EditInstruction
 
 @Serializable @SerialName("add_bgm_effect") data class AddBgmEffect(
     override val id: String = java.util.UUID.randomUUID().toString(),
@@ -137,7 +133,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val prompt: String,
     val reason: String = "",
     val url: String = ""
-) : EditOperation
+) : EditInstruction
 
 @Serializable @SerialName("add_sfx") data class AddSfx(
     override val id: String = java.util.UUID.randomUUID().toString(),
@@ -146,29 +142,29 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val prompt: String,
     val reason: String = "",
     val url: String = ""
-) : EditOperation
+) : EditInstruction
 @Serializable @SerialName("set_rotation") data class SetRotation(
     override val id: String = UUID.randomUUID().toString(),
     override val enabled: Boolean = true,
     val itemId: String,
     val rotation: Float
-) : EditOperation
+) : EditInstruction
 @Serializable @SerialName("clear_rotation") data class ClearRotation(
     override val id: String = UUID.randomUUID().toString(),
     override val enabled: Boolean = true,
     val itemId: String
-) : EditOperation
+) : EditInstruction
 @Serializable @SerialName("set_crop") data class SetCrop(
     override val id: String = UUID.randomUUID().toString(),
     override val enabled: Boolean = true,
     val itemId: String,
     val crop: NormalizedRect
-) : EditOperation
+) : EditInstruction
 @Serializable @SerialName("clear_crop") data class ClearCrop(
     override val id: String = UUID.randomUUID().toString(),
     override val enabled: Boolean = true,
     val itemId: String
-) : EditOperation
+) : EditInstruction
 @Serializable data class ColorGrade(val exposure: Float = 0f, val temperature: Float = 0f, val contrast: Float = 1f, val saturation: Float = 1f, val highlights: Float = 0f, val shadows: Float = 0f, val skinProtection: Float = .8f) {
 
     init { require(exposure in -1f..1f && temperature in -1f..1f && contrast in .75f..1.35f && saturation in .7f..1.3f && highlights in -1f..1f && shadows in -1f..1f && skinProtection in 0f..1f) }
@@ -250,7 +246,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
 )
 @Serializable data class ExportSettings(val width: Int = 1920, val height: Int = 1080, val codec: String = "video/avc", val bitrate: Int = 16_000_000)
 @Serializable data class ProjectSnapshot(
-    val operations: List<EditOperation>,
+    val operations: List<EditInstruction>,
     val sources: List<SourceMedia> = emptyList(),
     val analysis: Analysis? = null
 )
@@ -265,7 +261,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val creatorPreferences: CreatorPreferenceProfile = CreatorPreferenceProfile(),
     val analysis: Analysis = Analysis(),
     val evidenceGraphs: List<EvidenceGraphReference> = emptyList(),
-    val operations: List<EditOperation> = emptyList(),
+    val operations: List<EditInstruction> = emptyList(),
     val undo: List<ProjectSnapshot> = emptyList(),
     val redo: List<ProjectSnapshot> = emptyList(),
     val export: ExportSettings = ExportSettings(),
@@ -296,8 +292,8 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     }
 
     private fun snapshot() = ProjectSnapshot(operations, orderedSources, analysis)
-    fun replaceEditOperations(next: List<EditOperation>) = copy(operations = next, undo = (undo + snapshot()).takeLast(30), redo = emptyList(), revision = revision + 1).withExportRatioRecomputed()
-    fun applyEditOperations(programId: String, next: List<EditOperation>) =
+    fun replaceEditInstructions(next: List<EditInstruction>) = copy(operations = next, undo = (undo + snapshot()).takeLast(30), redo = emptyList(), revision = revision + 1).withExportRatioRecomputed()
+    fun applyEditInstructions(programId: String, next: List<EditInstruction>) =
         copy(
             operations = next,
             undo = (undo + snapshot()).takeLast(30),

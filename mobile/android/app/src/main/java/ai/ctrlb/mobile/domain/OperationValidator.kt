@@ -1,17 +1,17 @@
 package ai.ctrlb.mobile.domain
 
 object OperationValidator {
-    fun isRendered(operation: EditOperation): Boolean = when (operation) {
+    fun isRendered(operation: EditInstruction): Boolean = when (operation) {
         is AddMotionPreset -> false
         else -> true
     }
 
-    fun isPlannerAvailable(operation: EditOperation): Boolean = isRendered(operation)
+    fun isPlannerAvailable(operation: EditInstruction): Boolean = isRendered(operation)
 
-    fun visible(operations: List<EditOperation>): List<EditOperation> =
+    fun visible(operations: List<EditInstruction>): List<EditInstruction> =
         operations.filter(::isRendered)
 
-    fun renderFingerprint(operations: List<EditOperation>): List<String> =
+    fun renderFingerprint(operations: List<EditInstruction>): List<String> =
         operations.filter { it.enabled && isRendered(it) }.map { operation ->
             when (operation) {
                 is RemoveRanges -> "timeline-range:${operation.ranges}"
@@ -33,7 +33,7 @@ object OperationValidator {
             }
         }
 
-    fun basis(operation: EditOperation): String = when (operation) {
+    fun basis(operation: EditInstruction): String = when (operation) {
         is RemoveRanges -> "Transcript evidence • ${operation.reason.ifBlank { "Range removal" }}"
         is SetColorGrade -> "Frame evidence"
         is SetAudioLevels -> "Default • ${operation.dialogueLufs.toInt()} LUFS dialogue target"
@@ -52,7 +52,7 @@ object OperationValidator {
         is ClearCrop -> "Crop cleared • ${operation.itemId}"
     }
 
-    fun validate(project: MobileProject, proposed: List<EditOperation>, expectedRevision: Long = project.revision): List<EditOperation> {
+    fun validate(project: MobileProject, proposed: List<EditInstruction>, expectedRevision: Long = project.revision): List<EditInstruction> {
         require(expectedRevision == project.revision) { "Stale edit proposal" }
         require(proposed.map { it.id }.distinct().size == proposed.size) { "Duplicate operation id" }
         require(proposed.all(::isPlannerAvailable)) { "Operation is unavailable without render support or frame evidence" }
@@ -86,25 +86,28 @@ object OperationValidator {
                 require(op.grade != null || (op.parameter in setOf("exposure", "temperature", "contrast", "saturation", "highlights", "shadows", "skinProtection") && op.value != null))
                 validateTarget(project, op.target)
             }
-            is SetAudioLevels -> {
+            is AutoAudioDucking -> {
                 if (op.parameter == "dialogue_loudness") require(op.dialogueLufs in -24f..-12f)
                 else if (op.parameter == "music_ducking") require(op.musicDuckDb in -18f..-3f)
                 else { require(op.dialogueLufs in -24f..-12f); require(op.musicDuckDb in -18f..-3f) }
                 require(op.attackMs in 0..2_000 && op.releaseMs in 0..5_000); validateTarget(project, op.target)
             }
+            is SetVolume -> { require(op.volume in 0f..2f) }
+            is SetSpeed -> { require(op.speed > 0f) }
+            is AddCallout -> { validateTarget(project, OperationTarget(op.target.toString(), 0, 0)) }
+            is AddSpotlight -> { validateTarget(project, OperationTarget(op.target.toString(), 0, 0)) }
             is SetAspectRatio -> { }
             is AddMotionPreset -> { require(op.range != null && op.range.endMs <= project.durationMs); require(op.intensity in 0f..1f) }
-
             is AddCaptions -> { require(op.cues.isNotEmpty()); op.cues.forEach { require(it.range.endMs <= project.durationMs); require(it.text.isNotBlank() && it.text.length <= 120) } }
             is AddTextOverlay -> { require(op.text.isNotBlank()); validateTarget(project, op.target) }
             is AddBgm -> { require(op.prompt.isNotBlank()); validateTarget(project, op.target) }
             is AddBgmEffect -> { require(op.prompt.isNotBlank()); validateTarget(project, op.target) }
             is AddSfx -> { require(op.prompt.isNotBlank()); validateTarget(project, op.target) }
-            is AddSectionTransition -> { require(op.preset.isNotBlank()); validateTarget(project, op.target) }
             is SetRotation -> { require(op.rotation in -360f..360f) }
             is ClearRotation -> { }
             is SetCrop -> { require(op.crop.x >= 0f && op.crop.y >= 0f && op.crop.width > 0f && op.crop.height > 0f && op.crop.x + op.crop.width <= 1f && op.crop.y + op.crop.height <= 1f) }
             is ClearCrop -> { }
+            else -> { }
         } }
         return resolved
     }

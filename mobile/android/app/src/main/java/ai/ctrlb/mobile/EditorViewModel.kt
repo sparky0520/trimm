@@ -206,8 +206,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             .copy(aspectRatio = source.detectedAspectRatio())
         val durationMs = sources.sumOf { it.durationMs }
         val candidates = FumbleDetector.detect(words, durationMs, preferences.pace)
-        val operations = buildList<EditOperation> {
-            if (source.hasAudio) { add(SetAudioLevels()) }
+        val operations = buildList<EditInstruction> {
+            if (source.hasAudio) { add(AutoAudioDucking()) }
         }
         // Export may preserve or reduce source resolution, never invent extra detail by upscaling.
         val sourceCeiling = sources.renderSizeWithin(3840, 2160)
@@ -290,7 +290,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         return fallback.copy(platform = platform, pace = pace, music = music, captions = captions)
     }
 
-    fun toggle(id: String) { mutable.value.project?.let { project -> updateProject(project.replaceEditOperations(project.operations.map { if (it.id == id) toggle(it) else it })) } }
+    fun toggle(id: String) { mutable.value.project?.let { project -> updateProject(project.replaceEditInstructions(project.operations.map { if (it.id == id) toggle(it) else it })) } }
     fun applyProposal() {
         mutable.value.project?.let { project ->
             val proposal = project.analysis.pendingProposal ?: return
@@ -306,7 +306,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 revisionBefore = project.revision,
                 revisionAfter = project.revision + 1
             )
-              val applied = project.replaceEditOperations(validated).copy(
+               val applied = project.replaceEditInstructions(validated).copy(
 
                 creatorPreferences = CreatorPreferenceLearner.confirmedProposal(project.creatorPreferences, project, proposal),
                 analysis = project.analysis.copy(
@@ -463,7 +463,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 transcript = sourceTranscript(project.analysis.words, project.orderedSources),
                 existingOperations = project.operations.map { operation ->
                     val json = Json { encodeDefaults = true }
-                    json.encodeToJsonElement(EditOperation.serializer(), operation).jsonObject
+                           json.encodeToJsonElement(EditInstruction.serializer(), operation).jsonObject
                 },
                 uploadInitialVideoContext = false
             )
@@ -635,18 +635,22 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             else mutable.value.copy(errorMessage = "Preview failed: ${info.outputData.getString("error") ?: info.state}", jobMessage = null)
         }
     }
-    private fun toggle(op: EditOperation): EditOperation = when (op) {
-        is RemoveRanges -> op.copy(enabled = !op.enabled); is SetColorGrade -> op.copy(enabled = !op.enabled); is SetAudioLevels -> op.copy(enabled = !op.enabled)
-        is SetAspectRatio -> op.copy(enabled = !op.enabled); is AddMotionPreset -> op.copy(enabled = !op.enabled); is AddCaptions -> op.copy(enabled = !op.enabled)
+    private fun toggle(op: EditInstruction): EditInstruction = when (op) {
+        is RemoveRanges -> op.copy(enabled = !op.enabled)
+        is SetColorGrade -> op.copy(enabled = !op.enabled)
+        is AutoAudioDucking -> op.copy(enabled = !op.enabled)
+        is SetVolume -> op.copy(enabled = !op.enabled)
+        is SetSpeed -> op.copy(enabled = !op.enabled)
+        is AddCallout -> op.copy(enabled = !op.enabled)
+        is AddSpotlight -> op.copy(enabled = !op.enabled)
+        is AddMotionPreset -> op.copy(enabled = !op.enabled)
+        is AddCaptions -> op.copy(enabled = !op.enabled)
         is AddTextOverlay -> op.copy(enabled = !op.enabled)
-        is AddBgm -> op.copy(enabled = !op.enabled)
-        is AddBgmEffect -> op.copy(enabled = !op.enabled)
-        is AddSfx -> op.copy(enabled = !op.enabled)
-        is AddSectionTransition -> op.copy(enabled = !op.enabled)
         is SetRotation -> op.copy(enabled = !op.enabled)
         is ClearRotation -> op.copy(enabled = !op.enabled)
         is SetCrop -> op.copy(enabled = !op.enabled)
         is ClearCrop -> op.copy(enabled = !op.enabled)
+        else -> op
     }
     private fun processingMessage(stage: String?, percent: Int): String = when {
         stage?.startsWith("transcript-") == true -> "Preparing speech analysis…"
@@ -656,9 +660,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         stage?.startsWith("agent-task:") == true -> "Working on step ${stage.removePrefix("agent-task:").trim()}…"
         else -> "Reading your clips and preparing a proposal…"
     }
-    private fun editResultLines(before: List<EditOperation>, after: List<EditOperation>): List<String> {
-        val beforeById = before.associateBy(EditOperation::id)
-        val afterById = after.associateBy(EditOperation::id)
+    private fun editResultLines(before: List<EditInstruction>, after: List<EditInstruction>): List<String> {
+               val beforeById = before.associateBy(EditInstruction::id)
+               val afterById = after.associateBy(EditInstruction::id)
         val added = after.filter { it.id !in beforeById }.map { "+ ${it.editResultLabel()}" }
         val removed = before.filter { it.id !in afterById }.map { "− ${it.editResultLabel()}" }
         val changed = after.filter { operation ->
@@ -666,10 +670,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }.map { "~ ${it.editResultLabel()}" }
         return (added + removed + changed).ifEmpty { listOf("~ Updated the current edit") }.take(12)
     }
-    private fun EditOperation.editResultLabel(): String = when (this) {
+    private fun EditInstruction.editResultLabel(): String = when (this) {
         is RemoveRanges -> "Cut ${ranges.size} range${if (ranges.size == 1) "" else "s"}"
         is SetColorGrade -> "Updated color grade"
-        is SetAudioLevels -> "Updated audio levels"
+        is AutoAudioDucking -> "Updated audio levels"
+        is SetVolume -> "Updated volume"
+        is SetSpeed -> "Updated speed"
+        is AddCallout -> "Added callout"
+        is AddSpotlight -> "Added spotlight"
         is SetAspectRatio -> "Updated aspect ratio"
         is AddMotionPreset -> "Updated motion"
         is AddCaptions -> "Updated ${cues.size} caption cue${if (cues.size == 1) "" else "s"}"
@@ -677,11 +685,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         is AddBgm -> "Added background music"
         is AddBgmEffect -> "Added background music effect"
         is AddSfx -> "Added sound effect"
-        is AddSectionTransition -> "Added section transition"
         is SetRotation -> "Updated rotation"
         is ClearRotation -> "Cleared rotation"
         is SetCrop -> "Updated crop"
         is ClearCrop -> "Cleared crop"
+        else -> "Updated edit"
     }
 
     private suspend fun awaitWork(
