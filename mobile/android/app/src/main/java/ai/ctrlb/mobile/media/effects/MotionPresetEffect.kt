@@ -1,36 +1,36 @@
+@file:OptIn(UnstableApi::class)
 package ai.ctrlb.mobile.media.effects
 
-import androidx.media3.common.Effect
+import android.content.Context
+import androidx.media3.common.util.Size
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.effect.BaseGlShaderProgram
 import androidx.media3.effect.GlEffect
 import androidx.media3.effect.GlShaderProgram
-import android.opengl.GLES20
 
-@OptIn(UnstableApi::class)
 class MotionPresetEffect(
     private val preset: String,
     private val intensity: Float,
     private val durationMs: Long
 ) : GlEffect {
-    override fun wrapGlShaderProgram(context: android.content.Context, glShaderProgram: GlShaderProgram): GlShaderProgram {
-        return MotionPresetShaderProgram(context, glShaderProgram, preset, intensity, durationMs)
+    override fun toGlShaderProgram(context: Context, useHdr: Boolean): GlShaderProgram {
+        return MotionPresetShaderProgram(useHdr, preset, intensity, durationMs)
     }
 }
 
-@OptIn(UnstableApi::class)
 class MotionPresetShaderProgram(
-    context: android.content.Context,
-    glShaderProgram: GlShaderProgram,
+    useHdr: Boolean,
     private val preset: String,
     private val intensity: Float,
     private val durationMs: Long
-) : GlShaderProgram(context, glShaderProgram) {
+) : BaseGlShaderProgram(useHdr, /* texturePoolCapacity= */ 1) {
 
-    private var currentFrameTimeMs: Long = 0
+    override fun configure(inputWidth: Int, inputHeight: Int): Size = Size(inputWidth, inputHeight)
 
-    override fun draw() {
+    override fun drawFrame(inputTexId: Int, presentationTimeUs: Long) {
+        val currentFrameTimeMs = presentationTimeUs / 1000
         val progress = (currentFrameTimeMs.toFloat() / durationMs).coerceIn(0f, 1f)
-        
+
         var scaleX = 1.0f
         var scaleY = 1.0f
         var translateX = 0.0f
@@ -45,18 +45,10 @@ class MotionPresetShaderProgram(
                 scaleX = 1.2f - (0.2f * intensity * progress)
                 scaleY = 1.2f - (0.2f * intensity * progress)
             }
-            "pan_left" -> {
-                translateX = -0.1f * intensity * progress
-            }
-            "pan_right" -> {
-                translateX = 0.1f * intensity * progress
-            }
-            "pan_up" -> {
-                translateY = -0.1f * intensity * progress
-            }
-            "pan_down" -> {
-                translateY = 0.1f * intensity * progress
-            }
+            "pan_left" -> translateX = -0.1f * intensity * progress
+            "pan_right" -> translateX = 0.1f * intensity * progress
+            "pan_up" -> translateY = -0.1f * intensity * progress
+            "pan_down" -> translateY = 0.1f * intensity * progress
             "ken_burns" -> {
                 scaleX = 1.0f + (0.1f * intensity * progress)
                 scaleY = 1.0f + (0.1f * intensity * progress)
@@ -64,9 +56,9 @@ class MotionPresetShaderProgram(
             }
         }
 
-        // Update the transformation matrix of the shader
-        // In a real Media3 implementation, we would pass these as uniforms to the fragment shader
-        // For this wrapper, we apply the transformation to the coordinate system
-        super.draw()
+        // Transformation parameters (scaleX, scaleY, translateX, translateY) would be passed
+        // as uniforms to a custom GLSL shader in a full implementation.
+        // Currently passes through the frame unmodified.
+        android.opengl.GLES20.glBindTexture(android.opengl.GLES20.GL_TEXTURE_2D, inputTexId)
     }
 }

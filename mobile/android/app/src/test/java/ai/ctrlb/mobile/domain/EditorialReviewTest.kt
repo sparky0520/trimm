@@ -50,7 +50,7 @@ class EditorialReviewTest {
         val plan = StagedEditorialPlan(emptyList(), emptyList(), emptyList())
         val pending = PendingEditorialProposal(0, "Cut", plan, after, emptyList())
         val project = MobileProject(title = "Review", source = source, operations = before, analysis = Analysis(pendingProposal = pending))
-        val applied = project.replaceEditInstructions(OperationValidator.validate(project, after, 0))
+        val applied = project.replaceEditInstructions(InstructionValidator.validate(project, after, 0))
             .copy(analysis = project.analysis.copy(editorialPlan = plan, pendingProposal = null))
         assertEquals(1, applied.revision)
         assertEquals(1, applied.undo.size)

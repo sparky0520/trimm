@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.nio.file.Files
@@ -32,13 +33,11 @@ class ProjectStore(context: Context) {
         Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
 
         // Background cloud sync
+        @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
         GlobalScope.launch(Dispatchers.IO) {
             runCatching {
                 val token = ai.ctrlb.mobile.auth.AuthTokenProvider.currentToken()
-                val requestBody = okhttp3.RequestBody.create(
-                    "application/json".toMediaType(),
-                    projectJsonStr
-                )
+                val requestBody = projectJsonStr.toRequestBody("application/json".toMediaType())
                 apiService.syncProject("Bearer $token", requestBody)
             }
         }

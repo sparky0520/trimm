@@ -1,12 +1,13 @@
+@file:OptIn(UnstableApi::class)
 package ai.ctrlb.mobile.media.effects
 
-import androidx.media3.common.Effect
+import android.content.Context
+import androidx.media3.common.util.Size
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.effect.BaseGlShaderProgram
 import androidx.media3.effect.GlEffect
 import androidx.media3.effect.GlShaderProgram
-import android.opengl.GLES20
 
-@OptIn(UnstableApi::class)
 class GraphicOverlayEffect(
     private val callouts: List<CalloutData>,
     private val spotlights: List<SpotlightData>
@@ -14,23 +15,23 @@ class GraphicOverlayEffect(
     data class CalloutData(val text: String, val rect: ai.ctrlb.mobile.domain.NormalizedRect, val range: ai.ctrlb.mobile.domain.TimeRange?)
     data class SpotlightData(val rect: ai.ctrlb.mobile.domain.NormalizedRect, val range: ai.ctrlb.mobile.domain.TimeRange?)
 
-    override fun wrapGlShaderProgram(context: android.content.Context, glShaderProgram: GlShaderProgram): GlShaderProgram {
-        return GraphicOverlayShaderProgram(context, glShaderProgram, callouts, spotlights)
+    override fun toGlShaderProgram(context: Context, useHdr: Boolean): GlShaderProgram {
+        return GraphicOverlayShaderProgram(useHdr, callouts, spotlights)
     }
 }
 
-@OptIn(UnstableApi::class)
 class GraphicOverlayShaderProgram(
-    context: android.content.Context,
-    glShaderProgram: GlShaderProgram,
-    private val callouts: List<CalloutData>,
-    private val spotlights: List<SpotlightData>
-) : GlShaderProgram(context, glShaderProgram) {
+    useHdr: Boolean,
+    private val callouts: List<GraphicOverlayEffect.CalloutData>,
+    private val spotlights: List<GraphicOverlayEffect.SpotlightData>
+) : BaseGlShaderProgram(useHdr, /* texturePoolCapacity= */ 1) {
 
-    override fun draw() {
+    override fun configure(inputWidth: Int, inputHeight: Int): Size = Size(inputWidth, inputHeight)
+
+    override fun drawFrame(inputTexId: Int, presentationTimeUs: Long) {
         // Implementation would involve:
         // 1. Rendering the spotlight mask (darkening the screen except for the target rect)
         // 2. Drawing callout lines and text overlays using a separate texture or canvas
-        super.draw()
+        android.opengl.GLES20.glBindTexture(android.opengl.GLES20.GL_TEXTURE_2D, inputTexId)
     }
 }

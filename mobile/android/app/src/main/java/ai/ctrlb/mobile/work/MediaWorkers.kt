@@ -105,7 +105,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                 warnings = analysisWarnings,
                 completedAtEpochMs = System.currentTimeMillis()
             ),
-            operations = project.operations.filter(OperationValidator::isRendered).toMutableList(),
+            operations = project.operations.filter(InstructionValidator::isRendered).toMutableList(),
             revision = project.revision + 1
         )
         store.save(analyzed)
@@ -158,7 +158,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                     }
                 )
                 AgentDecisionMapper.pendingProposal(completedRun)?.let { proposal ->
-                    OperationValidator.validate(analyzed, proposal.operations, proposal.expectedRevision)
+                    InstructionValidator.validate(analyzed, proposal.operations, proposal.expectedRevision)
                     analyzed = analyzed.copy(analysis = analyzed.analysis.copy(
                         agentRun = completedRun,
                         pendingProposal = proposal,
@@ -250,7 +250,7 @@ class PreviewWorker(context: Context, params: WorkerParameters) : ProgressWorker
         val persisted = ProjectStore(applicationContext).load(projectId)
         val stored = if (inputData.getBoolean("simulatePendingProposal", false)) {
             persisted.analysis.pendingProposal?.let { proposal ->
-                persisted.copy(operations = OperationValidator.validate(
+                persisted.copy(operations = InstructionValidator.validate(
                     persisted, proposal.operations, proposal.expectedRevision
                 ))
             } ?: persisted

@@ -1,6 +1,6 @@
 package ai.ctrlb.mobile.domain
 
-object OperationValidator {
+object InstructionValidator {
     fun isRendered(operation: EditInstruction): Boolean = when (operation) {
         is AddMotionPreset -> false
         else -> true
@@ -17,7 +17,9 @@ object OperationValidator {
                 is RemoveRanges -> "timeline-range:${operation.ranges}"
                 is SetColorGrade -> "video-color:${operation.grade}:${operation.target}:${operation.parameter}:${operation.value}"
                 is SetAudioLevels -> "dialogue-levels:${operation.dialogueLufs}:${operation.musicDuckDb}"
-
+                is NormaliseAudio -> "normalise-audio:${operation.parameter}:${operation.dialogueLufs}:${operation.musicDuckDb}"
+                is SetVolume -> "audio-volume:${operation.itemId}:${operation.volume}"
+                is SetSpeed -> "video-speed:${operation.itemId}:${operation.speed}"
                 is AddCaptions -> "video-captions:${operation.cues}:${operation.style}"
                 is SetAspectRatio -> "video-aspect-ratio:${operation.ratio.name}"
                 is AddTextOverlay -> "video-text-overlay:${operation.id}:${operation.text}"
@@ -29,6 +31,8 @@ object OperationValidator {
                 is ClearRotation -> "video-rotation-clear:${operation.itemId}"
                 is SetCrop -> "video-crop:${operation.itemId}:${operation.crop}"
                 is ClearCrop -> "video-crop-clear:${operation.itemId}"
+                is AddCallout -> "video-callout:${operation.id}:${operation.text}"
+                is AddSpotlight -> "video-spotlight:${operation.id}"
                 is AddMotionPreset -> error("Unrendered operation reached render contract")
             }
         }
@@ -37,7 +41,9 @@ object OperationValidator {
         is RemoveRanges -> "Transcript evidence • ${operation.reason.ifBlank { "Range removal" }}"
         is SetColorGrade -> "Frame evidence"
         is SetAudioLevels -> "Default • ${operation.dialogueLufs.toInt()} LUFS dialogue target"
-
+        is NormaliseAudio -> "Auto audio ducking"
+        is SetVolume -> "Volume adjustment"
+        is SetSpeed -> "Speed adjustment"
         is AddCaptions -> "Transcript evidence • ${operation.cues.size} timed cues"
         is SetAspectRatio -> "Aspect ratio: ${operation.ratio.name}"
         is AddTextOverlay -> "Custom Text Overlay Graphics"
@@ -50,6 +56,8 @@ object OperationValidator {
         is ClearRotation -> "Rotation cleared • ${operation.itemId}"
         is SetCrop -> "Crop • ${operation.itemId}"
         is ClearCrop -> "Crop cleared • ${operation.itemId}"
+        is AddCallout -> "Callout • ${operation.text}"
+        is AddSpotlight -> "Spotlight"
     }
 
     fun validate(project: MobileProject, proposed: List<EditInstruction>, expectedRevision: Long = project.revision): List<EditInstruction> {
@@ -86,7 +94,7 @@ object OperationValidator {
                 require(op.grade != null || (op.parameter in setOf("exposure", "temperature", "contrast", "saturation", "highlights", "shadows", "skinProtection") && op.value != null))
                 validateTarget(project, op.target)
             }
-            is AutoAudioDucking -> {
+            is NormaliseAudio -> {
                 if (op.parameter == "dialogue_loudness") require(op.dialogueLufs in -24f..-12f)
                 else if (op.parameter == "music_ducking") require(op.musicDuckDb in -18f..-3f)
                 else { require(op.dialogueLufs in -24f..-12f); require(op.musicDuckDb in -18f..-3f) }
@@ -96,6 +104,7 @@ object OperationValidator {
             is SetSpeed -> { require(op.speed > 0f) }
             is AddCallout -> { validateTarget(project, OperationTarget(op.target.toString(), 0, 0)) }
             is AddSpotlight -> { validateTarget(project, OperationTarget(op.target.toString(), 0, 0)) }
+            is SetAudioLevels -> { validateTarget(project, op.target) }
             is SetAspectRatio -> { }
             is AddMotionPreset -> { require(op.range != null && op.range.endMs <= project.durationMs); require(op.intensity in 0f..1f) }
             is AddCaptions -> { require(op.cues.isNotEmpty()); op.cues.forEach { require(it.range.endMs <= project.durationMs); require(it.text.isNotBlank() && it.text.length <= 120) } }

@@ -214,7 +214,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val durationMs = sources.sumOf { it.durationMs }
         val candidates = FumbleDetector.detect(words, durationMs, preferences.pace)
         val operations = buildList<EditInstruction> {
-            if (source.hasAudio) { add(AutoAudioDucking()) }
+            if (source.hasAudio) { add(NormaliseAudio()) }
         }
         // Export may preserve or reduce source resolution, never invent extra detail by upscaling.
         val sourceCeiling = sources.renderSizeWithin(3840, 2160)
@@ -302,7 +302,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         mutable.value.project?.let { project ->
             val proposal = project.analysis.pendingProposal ?: return
             val validated = runCatching {
-                OperationValidator.validate(project, proposal.operations, proposal.expectedRevision)
+                InstructionValidator.validate(project, proposal.operations, proposal.expectedRevision)
             }.getOrElse { error ->
                 mutable.value = mutable.value.copy(jobMessage = error.message ?: "This proposal is no longer current.")
                 return
@@ -645,7 +645,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private fun toggle(op: EditInstruction): EditInstruction = when (op) {
         is RemoveRanges -> op.copy(enabled = !op.enabled)
         is SetColorGrade -> op.copy(enabled = !op.enabled)
-        is AutoAudioDucking -> op.copy(enabled = !op.enabled)
+        is NormaliseAudio -> op.copy(enabled = !op.enabled)
         is SetVolume -> op.copy(enabled = !op.enabled)
         is SetSpeed -> op.copy(enabled = !op.enabled)
         is AddCallout -> op.copy(enabled = !op.enabled)
@@ -680,7 +680,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private fun EditInstruction.editResultLabel(): String = when (this) {
         is RemoveRanges -> "Cut ${ranges.size} range${if (ranges.size == 1) "" else "s"}"
         is SetColorGrade -> "Updated color grade"
-        is AutoAudioDucking -> "Updated audio levels"
+        is NormaliseAudio -> "Updated audio levels"
         is SetVolume -> "Updated volume"
         is SetSpeed -> "Updated speed"
         is AddCallout -> "Added callout"

@@ -1,6 +1,6 @@
 package ai.ctrlb.mobile.planner
 
-import ai.ctrlb.mobile.layer1.*
+// Layer2SourceInventory is in ai.ctrlb.mobile.planner — same package as this test
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject

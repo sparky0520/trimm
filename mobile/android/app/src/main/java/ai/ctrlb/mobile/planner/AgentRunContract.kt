@@ -289,7 +289,7 @@ class AgentRunCoordinator(
                 projectRevision = request.projectRevision,
                 status = AgentRunStatus.WAITING_FOR_USER,
                 events = listOf(AgentActivityEvent(1, "clarification", "Agent requested clarification", java.time.Instant.now().toString())),
-                decision = json.encodeToJsonElement(ClarificationDecision.serializer(), planResponse!!.clarification!!).jsonObject
+                decision = json.encodeToJsonElement(ClarificationDecision.serializer(), planResponse.clarification).jsonObject
             )
             onPersist(snapshot, planResponse)
             return snapshot
@@ -358,19 +358,19 @@ class AgentRunCoordinator(
                     // Once we have a final outcome for this task, append operations to our existing ones
                     if (outcome["type"]?.jsonPrimitive?.content == "edit_program") {
                         val existingRemovals = existingOperations.mapNotNull { opElem ->
-                            val decoded = json.decodeFromJsonElement(EditOperation.serializer(), opElem)
+                            val decoded = json.decodeFromJsonElement(EditInstruction.serializer(), opElem)
                             if (decoded is ai.ctrlb.mobile.domain.RemoveRanges) decoded.ranges else null
                         }.flatten()
                         
                         val newRemovals = outcome["operations"]?.jsonArray?.mapNotNull { element ->
-                            val decoded = json.decodeFromJsonElement(EditOperation.serializer(), element)
+                            val decoded = json.decodeFromJsonElement(EditInstruction.serializer(), element)
                             if (decoded is ai.ctrlb.mobile.domain.RemoveRanges) decoded.ranges else null
                         }?.flatten() ?: emptyList()
 
                         val mapper = ai.ctrlb.mobile.domain.TimelineMapper(existingRemovals + newRemovals)
 
                         val newOps = outcome["operations"]?.jsonArray?.map { element ->
-                            var op = json.decodeFromJsonElement(EditOperation.serializer(), element)
+                            var op = json.decodeFromJsonElement(EditInstruction.serializer(), element)
                             if (op is ai.ctrlb.mobile.domain.AddBgm && op.url.isBlank()) {
                                 onProgress("Generating background music...", (index * 100) / tasks.size)
                                 val bgmStartOutputMs = mapper.sourceToOutput(op.target?.startMs ?: 0L)

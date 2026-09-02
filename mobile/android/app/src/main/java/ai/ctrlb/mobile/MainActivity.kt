@@ -104,7 +104,7 @@ class MainActivity : ComponentActivity() {
             val isUpdateAllowed = info.isUpdateTypeAllowed(updateType)
             if (isUpdateAvailable && isUpdateAllowed) {
                 try {
-                    appUpdateManager.startUpdateFlowForResult(info, updateType, this, updateRequestCode)
+                    appUpdateManager.startUpdateFlowForResult(info, this, com.google.android.play.core.appupdate.AppUpdateOptions.defaultOptions(updateType), updateRequestCode)
                 } catch (e: Exception) {
                     Log.e("MainActivity", "Failed to start update flow", e)
                 }
@@ -497,7 +497,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     } else {
-                        VideoPreview(state.sources.map { it.uri }, Modifier.fillMaxWidth().aspectRatio(first!!.displaySize().aspectRatio))
+                        VideoPreview(state.sources.map { it.uri }, Modifier.fillMaxWidth().aspectRatio(first.displaySize().aspectRatio))
                         SmallAction("Expand", Modifier.align(Alignment.TopEnd).padding(8.dp)) { fullscreen = true }
                     }
                 }
@@ -1427,7 +1427,7 @@ private fun formatDuration(ms: Long): String = "%d:%02d".format(ms / 60_000, (ms
 private fun operationTitle(op: EditInstruction) = when (op) { 
     is RemoveRanges -> "Range removal"
     is SetColorGrade -> "Frame-based color"
-    is AutoAudioDucking -> "Audio ducking"
+    is NormaliseAudio -> "Audio ducking"
     is SetVolume -> "Volume adjustment"
     is SetSpeed -> "Playback speed"
     is AddCallout -> "Callout"
@@ -1448,7 +1448,7 @@ private fun operationTitle(op: EditInstruction) = when (op) {
 private fun operationDetail(op: EditInstruction) = when (op) { 
     is RemoveRanges -> "${op.ranges.size} range cuts"
     is SetColorGrade -> "Natural, skin-safe grade"
-    is AutoAudioDucking -> "${op.dialogueLufs.toInt()} LUFS dialogue"
+    is NormaliseAudio -> "${op.dialogueLufs.toInt()} LUFS dialogue"
     is SetVolume -> "Manual gain: ${op.volume}x"
     is SetSpeed -> "Playback speed: ${op.speed}x"
     is AddCallout -> "Text: ${op.text}"

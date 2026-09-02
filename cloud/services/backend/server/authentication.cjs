@@ -19,6 +19,9 @@ class Authenticator {
     this.jwksUrl = options.jwksUrl ? String(options.jwksUrl) : null;
     this.bootstrapToken = String(options.bootstrapToken || '');
     this.allowBootstrap = options.allowBootstrap === true;
+    this.issuer = options.issuer ? String(options.issuer) : null;
+    this.audience = options.audience ? String(options.audience) : null;
+    this.authorizedParties = options.authorizedParties ? new Set(options.authorizedParties) : null;
     this.isRevoked = typeof options.isRevoked === 'function' ? options.isRevoked : async () => false;
     // Lazily initialized JWKS set — cached across requests
     this._jwks = null;
@@ -57,10 +60,17 @@ class Authenticator {
 
     try {
       const { jwtVerify } = require('jose');
-      const { payload } = await jwtVerify(token, this._getJwks());
+      const verifyOptions = { clockTolerance: 5 };
+      if (this.issuer) verifyOptions.issuer = this.issuer;
+      if (this.audience) verifyOptions.audience = this.audience;
+      const { payload } = await jwtVerify(token, this._getJwks(), verifyOptions);
 
       if (typeof payload.sub !== 'string' || !/^[^\s]{1,200}$/.test(payload.sub)) {
         throw new Error('Token subject is invalid.');
+      }
+
+      if (this.authorizedParties && payload.azp && !this.authorizedParties.has(String(payload.azp))) {
+        throw new Error('Authorized party is not trusted.');
       }
 
       if (await this.isRevoked({ subject: payload.sub, tokenId: typeof payload.jti === 'string' ? payload.jti : null })) {

@@ -165,6 +165,29 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     override val enabled: Boolean = true,
     val itemId: String
 ) : EditInstruction
+@Serializable @SerialName("normalise_audio") data class NormaliseAudio(
+    override val id: String = UUID.randomUUID().toString(),
+    override val enabled: Boolean = true,
+    val parameter: String? = null,
+    val dialogueLufs: Float = -20f,
+    val musicDuckDb: Float = -15f,
+    val attackMs: Int = 150,
+    val releaseMs: Int = 350,
+    val target: OperationTarget? = null
+) : EditInstruction
+@Serializable @SerialName("set_audio_levels") data class SetAudioLevels(
+    override val id: String = UUID.randomUUID().toString(),
+    override val enabled: Boolean = true,
+    val dialogueLufs: Float = -20f,
+    val musicDuckDb: Float = -15f,
+    val target: OperationTarget? = null
+) : EditInstruction
+@Serializable @SerialName("add_section_transition") data class AddSectionTransition(
+    override val id: String = UUID.randomUUID().toString(),
+    override val enabled: Boolean = true,
+    val preset: String,
+    val target: OperationTarget? = null
+) : EditInstruction
 @Serializable data class ColorGrade(val exposure: Float = 0f, val temperature: Float = 0f, val contrast: Float = 1f, val saturation: Float = 1f, val highlights: Float = 0f, val shadows: Float = 0f, val skinProtection: Float = .8f) {
 
     init { require(exposure in -1f..1f && temperature in -1f..1f && contrast in .75f..1.35f && saturation in .7f..1.3f && highlights in -1f..1f && shadows in -1f..1f && skinProtection in 0f..1f) }

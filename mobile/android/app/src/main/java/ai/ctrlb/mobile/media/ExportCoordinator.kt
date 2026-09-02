@@ -11,7 +11,6 @@ import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Effect
-import androidx.media3.common.audio.DefaultGainProvider
 import androidx.media3.common.audio.GainProcessor
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.transformer.Composition
@@ -90,19 +89,18 @@ object ExportCoordinator {
                     val item = MediaItem.Builder()
                         .setUri(source.uri)
                         .setClippingConfiguration(clipping.build())
-                        .setPlaybackSpeed(speed)
                         .build()
                     val globalRange = TimeRange(start, end)
-                    val target = project.operations.filterIsInstance<AutoAudioDucking>().lastOrNull {
+                    val dialogueTarget = project.operations.filterIsInstance<NormaliseAudio>().lastOrNull {
                         it.enabled && it.parameter != "music_ducking" && targets(it.target, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd)
                     }?.dialogueLufs ?: -20f
                     val volume = project.operations.filterIsInstance<SetVolume>().lastOrNull {
                         it.enabled && targets(it.itemId, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd)
                     }?.volume ?: 1f
-                    val audioEffects = if (target != -20f) {
-                        listOf(DialogueAudioProcessor(0f, target), GainProcessor(volume))
+                    val audioEffects = if (dialogueTarget != -20f) {
+                        listOf(DialogueAudioProcessor(0f, dialogueTarget), GainProcessor(SpeechDuckingGainProvider(volume, 0f, emptyList())))
                     } else if (volume != 1f) {
-                        listOf(GainProcessor(volume))
+                        listOf(GainProcessor(SpeechDuckingGainProvider(volume, 0f, emptyList())))
                     } else {
                         emptyList()
                     }
@@ -112,11 +110,11 @@ object ExportCoordinator {
                     }
                     FineColorEffect.create(colorOperations)?.let(itemVideoEffects::add)
                     
-                    val motionOp = project.operations.filterIsInstance<AddMotionPreset>().lastOrNull { 
-                        it.enabled && targets(it.itemId, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd) 
+                    val motionOp = project.operations.filterIsInstance<AddMotionPreset>().lastOrNull { op ->
+                        op.enabled && (op.range == null || (op.range.startMs < localEnd + sourceStart && op.range.endMs > localStart + sourceStart))
                     }
                     motionOp?.let { op ->
-                        itemVideoEffects.add(MotionPresetEffect(op.preset, op.intensity, (localEnd - localStart).toLong()))
+                        itemVideoEffects.add(MotionPresetEffect(op.preset, op.intensity, (localEnd - localStart)))
                     }
                     project.operations.filterIsInstance<SetCrop>().lastOrNull { 
                         it.enabled && targets(it.itemId, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd) 
@@ -202,7 +200,7 @@ object ExportCoordinator {
         val sequences = mutableListOf(sequence)
 
         // BGM and SFX Generation
-            val ducking = project.operations.filterIsInstance<AutoAudioDucking>().lastOrNull { it.enabled && (it.parameter == "music_ducking" || it.parameter == null) }
+        val ducking = project.operations.filterIsInstance<NormaliseAudio>().lastOrNull { it.enabled && (it.parameter == "music_ducking" || it.parameter == null) }
         val duckDb = ducking?.musicDuckDb ?: -15f
         val bufferMs = 500L
         
@@ -244,10 +242,10 @@ object ExportCoordinator {
                         items.add(edited)
                     }
                 }
-                sequences += EditedMediaItemSequence.Builder(items).build()
+                sequences += items.fold(EditedMediaItemSequence.Builder()) { b, i -> b.addItem(i) }.build()
             } else {
                 items.add(edited)
-                val builder = EditedMediaItemSequence.Builder(items)
+                val builder = items.fold(EditedMediaItemSequence.Builder()) { b, i -> b.addItem(i) }
                 builder.setIsLooping(true)
                 sequences += builder.build()
             }
@@ -270,7 +268,7 @@ object ExportCoordinator {
                 .setDurationUs(effectDurationMs * 1000L)
                 .setEffects(Effects(emptyList(), emptyList()))
                 .build()
-            sequences += EditedMediaItemSequence.Builder(items).build()
+            sequences += items.fold(EditedMediaItemSequence.Builder()) { b, i -> b.addItem(i) }.build()
         }
 
         project.operations.filterIsInstance<AddSfx>().filter { it.enabled }.forEach { sfx ->
@@ -290,7 +288,7 @@ object ExportCoordinator {
                 .setDurationUs(sfxDurationMs * 1000L)
                 .setEffects(Effects(emptyList(), emptyList()))
                 .build()
-            sequences += EditedMediaItemSequence.Builder(items).build()
+            sequences += items.fold(EditedMediaItemSequence.Builder()) { b, i -> b.addItem(i) }.build()
         }
 
         return Composition.Builder(sequences).setEffects(Effects(emptyList(), videoEffects)).build()
