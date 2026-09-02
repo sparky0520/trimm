@@ -25,6 +25,10 @@ object OperationValidator {
                 is AddBgmEffect -> "audio-bgm-effect:${operation.target?.startMs}:${operation.target?.endMs}:${operation.url}"
                 is AddSfx -> "audio-sfx:${operation.target?.startMs}:${operation.target?.endMs}:${operation.url}"
                 is AddSectionTransition -> "video-transition:${operation.id}:${operation.preset}"
+                is SetRotation -> "video-rotation:${operation.itemId}:${operation.rotation}"
+                is ClearRotation -> "video-rotation-clear:${operation.itemId}"
+                is SetCrop -> "video-crop:${operation.itemId}:${operation.crop}"
+                is ClearCrop -> "video-crop-clear:${operation.itemId}"
                 is AddMotionPreset -> error("Unrendered operation reached render contract")
             }
         }
@@ -42,6 +46,10 @@ object OperationValidator {
         is AddSfx -> "Generated • ${operation.prompt}"
         is AddSectionTransition -> "Transition • ${operation.preset}"
         is AddMotionPreset -> "Unavailable • not rendered"
+        is SetRotation -> "Rotation • ${operation.itemId}"
+        is ClearRotation -> "Rotation cleared • ${operation.itemId}"
+        is SetCrop -> "Crop • ${operation.itemId}"
+        is ClearCrop -> "Crop cleared • ${operation.itemId}"
     }
 
     fun validate(project: MobileProject, proposed: List<EditOperation>, expectedRevision: Long = project.revision): List<EditOperation> {
@@ -93,6 +101,10 @@ object OperationValidator {
             is AddBgmEffect -> { require(op.prompt.isNotBlank()); validateTarget(project, op.target) }
             is AddSfx -> { require(op.prompt.isNotBlank()); validateTarget(project, op.target) }
             is AddSectionTransition -> { require(op.preset.isNotBlank()); validateTarget(project, op.target) }
+            is SetRotation -> { require(op.rotation in -360f..360f) }
+            is ClearRotation -> { }
+            is SetCrop -> { require(op.crop.x >= 0f && op.crop.y >= 0f && op.crop.width > 0f && op.crop.height > 0f && op.crop.x + op.crop.width <= 1f && op.crop.y + op.crop.height <= 1f) }
+            is ClearCrop -> { }
         } }
         return resolved
     }

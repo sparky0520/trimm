@@ -53,7 +53,7 @@ class VideoProcessor {
                 if (outputIndex >= 0) {
                     val outputBuffer = codec.getOutputBuffer(outputIndex)!!
                     val chunk = ShortArray(bufferInfo.size / 2)
-                    java.nio.ByteBuffer.wrap(outputBuffer).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(chunk)
+                    outputBuffer.duplicate().order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(chunk)
                     samples.addAll(chunk.toList())
                     codec.releaseOutputBuffer(outputIndex, false)
                     if (bufferInfo.flags and android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break

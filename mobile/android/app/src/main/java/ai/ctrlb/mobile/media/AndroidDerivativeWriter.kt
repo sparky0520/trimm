@@ -2,7 +2,7 @@ package ai.ctrlb.mobile.media
 
 import ai.ctrlb.mobile.domain.SourceMedia
 import ai.ctrlb.mobile.domain.TimeRange
-import ai.ctrlb.mobile.layer1.NormalizedRect
+import ai.ctrlb.mobile.domain.NormalizedRect
 import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever

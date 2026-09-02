@@ -1,7 +1,6 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const jwt = require('jsonwebtoken');
 
 function safeEqual(left, right) {
   const a = Buffer.from(left); const b = Buffer.from(right);
@@ -17,46 +16,60 @@ function bearer(request) {
 
 class Authenticator {
   constructor(options = {}) {
-    this.jwtSecret = String(options.jwtSecret || '');
+    this.jwksUrl = options.jwksUrl ? String(options.jwksUrl) : null;
     this.bootstrapToken = String(options.bootstrapToken || '');
     this.allowBootstrap = options.allowBootstrap === true;
     this.isRevoked = typeof options.isRevoked === 'function' ? options.isRevoked : async () => false;
+    // Lazily initialized JWKS set — cached across requests
+    this._jwks = null;
   }
 
-  configured() { return Boolean(this.jwtSecret || (this.allowBootstrap && this.bootstrapToken)); }
+  configured() { return Boolean(this.jwksUrl || (this.allowBootstrap && this.bootstrapToken)); }
 
   assertProductionConfigured(environment = process.env) {
-    if (environment.NODE_ENV === 'production' && !this.jwtSecret) {
+    if (environment.NODE_ENV === 'production' && !this.jwksUrl) {
       throw Object.assign(new Error('Production authentication is not configured.'), { code: 'auth_unconfigured' });
     }
   }
 
+  _getJwks() {
+    if (!this._jwks) {
+      // jose is ESM; require the CJS-compatible interop via dynamic import cached here
+      const { createRemoteJWKSet } = require('jose');
+      this._jwks = createRemoteJWKSet(new URL(this.jwksUrl));
+    }
+    return this._jwks;
+  }
+
   async authenticate(request) {
     const token = bearer(request);
-    
+
     // Check bootstrap token for development
     if (this.allowBootstrap && this.bootstrapToken && safeEqual(token, this.bootstrapToken)) {
-      return Object.freeze({ 
-        sub: `development:${crypto.createHash('sha256').update(token).digest('hex').slice(0, 16)}`, 
-        authentication: 'development-bootstrap' 
+      return Object.freeze({
+        sub: `development:${crypto.createHash('sha256').update(token).digest('hex').slice(0, 16)}`,
+        id: `development:${crypto.createHash('sha256').update(token).digest('hex').slice(0, 16)}`,
+        authentication: 'development-bootstrap',
       });
     }
-    
-    if (!this.jwtSecret) throw Object.assign(new Error('Production authentication is not configured.'), { status: 503, code: 'auth_unconfigured' });
-    
+
+    if (!this.jwksUrl) throw Object.assign(new Error('Production authentication is not configured.'), { status: 503, code: 'auth_unconfigured' });
+
     try {
-      const payload = jwt.verify(token, this.jwtSecret);
-      
+      const { jwtVerify } = require('jose');
+      const { payload } = await jwtVerify(token, this._getJwks());
+
       if (typeof payload.sub !== 'string' || !/^[^\s]{1,200}$/.test(payload.sub)) {
         throw new Error('Token subject is invalid.');
       }
-      
+
       if (await this.isRevoked({ subject: payload.sub, tokenId: typeof payload.jti === 'string' ? payload.jti : null })) {
         throw new Error('Token has been revoked.');
       }
-      
+
       return Object.freeze({
         sub: payload.sub,
+        id: payload.sub,
         authentication: 'supabase-auth',
       });
     } catch (err) {
@@ -66,11 +79,10 @@ class Authenticator {
 }
 
 function fromEnvironment(environment = process.env) {
-  const production = environment.NODE_ENV === 'production';
   const revokedTokenIds = new Set(String(environment.TRIMM_AUTH_REVOKED_TOKEN_IDS || '').split(',').map((value) => value.trim()).filter(Boolean));
-  
+
   return new Authenticator({
-    jwtSecret: environment.SUPABASE_JWT_SECRET,
+    jwksUrl: environment.SUPABASE_JWKS_URL,
     bootstrapToken: '',
     allowBootstrap: false,
     isRevoked: ({ tokenId }) => tokenId !== null && revokedTokenIds.has(tokenId),

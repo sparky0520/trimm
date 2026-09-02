@@ -1,6 +1,6 @@
 package ai.ctrlb.mobile.domain
 
-import ai.ctrlb.mobile.layer1.RequestShapedMediaIndex
+import ai.ctrlb.mobile.planning.RequestShapedMediaIndex
 import ai.ctrlb.mobile.planner.PersistedAgentRun
 import ai.ctrlb.mobile.planner.AgentPlanResponse
 import ai.ctrlb.mobile.evidence.TakeGroup

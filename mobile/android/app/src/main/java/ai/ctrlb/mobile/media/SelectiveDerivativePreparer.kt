@@ -2,7 +2,7 @@ package ai.ctrlb.mobile.media
 
 import ai.ctrlb.mobile.domain.SourceMedia
 import ai.ctrlb.mobile.domain.TimeRange
-import ai.ctrlb.mobile.layer1.NormalizedRect
+import ai.ctrlb.mobile.domain.NormalizedRect
 import ai.ctrlb.mobile.planner.AuthorizedEvidenceJob
 import kotlinx.serialization.Serializable
 import java.io.File

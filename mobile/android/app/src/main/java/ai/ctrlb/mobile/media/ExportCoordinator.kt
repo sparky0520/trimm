@@ -24,7 +24,7 @@ import androidx.media3.transformer.Transformer
 import androidx.media3.effect.Presentation
 import androidx.media3.effect.RgbAdjustment
 import androidx.media3.effect.OverlayEffect
-import androidx.media3.effect.Rotation
+import androidx.media3.effect.ScaleAndRotateTransformation
 import androidx.media3.effect.Crop
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -95,7 +95,7 @@ object ExportCoordinator {
                     project.operations.filterIsInstance<SetRotation>().lastOrNull { 
                         it.enabled && targets(it.itemId, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd) 
                     }?.let { rotOp ->
-                        itemVideoEffects.add(Rotation(rotOp.rotation))
+                        itemVideoEffects.add(ScaleAndRotateTransformation.Builder().setRotationDegrees(rotOp.rotation).build())
                     }
                     project.operations.filterIsInstance<SetCrop>().lastOrNull { 
                         it.enabled && targets(it.itemId, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd) 

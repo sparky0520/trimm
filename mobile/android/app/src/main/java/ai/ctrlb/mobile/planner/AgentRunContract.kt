@@ -20,7 +20,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.net.HttpURLConnection
 import java.net.URI
-import ai.ctrlb.mobile.layer1.RequestShapedMediaIndex
+import ai.ctrlb.mobile.planning.RequestShapedMediaIndex
 
 @Serializable
 enum class AgentRunStatus {

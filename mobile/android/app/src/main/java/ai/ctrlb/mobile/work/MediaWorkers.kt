@@ -8,8 +8,8 @@ import ai.ctrlb.mobile.BuildConfig
 import ai.ctrlb.mobile.auth.AuthTokenProvider
 import ai.ctrlb.mobile.planner.*
 import ai.ctrlb.mobile.evidence.*
-import ai.ctrlb.mobile.layer1.MediaIndexRequestPlanner
-import ai.ctrlb.mobile.layer1.RequestShapedMediaIndexBuilder
+import ai.ctrlb.mobile.planning.MediaIndexRequestPlanner
+import ai.ctrlb.mobile.planning.RequestShapedMediaIndexBuilder
 import ai.ctrlb.mobile.media.AndroidDerivativeWriter
 import ai.ctrlb.mobile.media.DerivativeAuthorization
 import ai.ctrlb.mobile.media.SelectiveDerivativePreparer

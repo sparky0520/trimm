@@ -643,6 +643,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         is AddBgmEffect -> op.copy(enabled = !op.enabled)
         is AddSfx -> op.copy(enabled = !op.enabled)
         is AddSectionTransition -> op.copy(enabled = !op.enabled)
+        is SetRotation -> op.copy(enabled = !op.enabled)
+        is ClearRotation -> op.copy(enabled = !op.enabled)
+        is SetCrop -> op.copy(enabled = !op.enabled)
+        is ClearCrop -> op.copy(enabled = !op.enabled)
     }
     private fun processingMessage(stage: String?, percent: Int): String = when {
         stage?.startsWith("transcript-") == true -> "Preparing speech analysis…"
@@ -674,6 +678,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         is AddBgmEffect -> "Added background music effect"
         is AddSfx -> "Added sound effect"
         is AddSectionTransition -> "Added section transition"
+        is SetRotation -> "Updated rotation"
+        is ClearRotation -> "Cleared rotation"
+        is SetCrop -> "Updated crop"
+        is ClearCrop -> "Cleared crop"
     }
 
     private suspend fun awaitWork(

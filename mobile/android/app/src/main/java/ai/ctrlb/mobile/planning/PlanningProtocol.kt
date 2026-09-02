@@ -25,12 +25,12 @@ sealed interface PlanningCommand {
 }
 
 @Serializable @SerialName("asset.probe")
-data class ProbeAsset(override val id: String, val sourceUri: String) : Layer1Command {
+data class ProbeAsset(override val id: String, val sourceUri: String) : PlanningCommand {
     override val requiredCapability = "asset.probe"
 }
 
 @Serializable @SerialName("asset.fingerprint")
-data class FingerprintAsset(override val id: String, val sourceUri: String) : Layer1Command {
+data class FingerprintAsset(override val id: String, val sourceUri: String) : PlanningCommand {
     override val requiredCapability = "asset.fingerprint"
 }
 
@@ -286,6 +286,6 @@ object PlanningProgramApplier {
                 reason = command.evidenceIds.firstOrNull() ?: "Layer 1 edit program"
             )
         }
-        return project.applyEditOperation(program.programId, operations)
+        return project.applyEditOperations(program.programId, operations)
     }
 }
