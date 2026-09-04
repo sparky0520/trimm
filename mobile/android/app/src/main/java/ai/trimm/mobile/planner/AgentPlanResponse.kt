@@ -30,7 +30,7 @@ import ai.trimm.mobile.planning.RequestShapedMediaIndex
 interface AgentRunGateway {
     suspend fun plan(request: AgentPlanRequest): AgentPlanResponse = error("Planning is not implemented by this gateway.")
     suspend fun executeStateless(request: AgentRunRequest): JsonObject = error("Stateless execution is not implemented by this gateway.")
-    suspend fun generateBgm(prompt: String, durationSecs: Float, isEffect: Boolean = false): String = error("BGM generation is not implemented by this gateway.")
+    suspend fun generateBgm(prompt: String, durationSecs: Float, isEffect: Boolean = false, chatId: String): String = error("BGM generation is not implemented by this gateway.")
     suspend fun generateSfx(prompt: String): String = error("SFX generation is not implemented by this gateway.")
 }
 

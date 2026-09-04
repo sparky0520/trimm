@@ -151,10 +151,10 @@ class AgentRunCoordinator(
                                 val bgmEndOutputMs = mapper.sourceToOutput(op.target?.endMs ?: projectDurationMs)
                                 val durationMs = bgmEndOutputMs - bgmStartOutputMs
                                 
-                                op = op.copy(url = gateway.generateBgm(op.prompt, durationMs / 1000f, isEffect = false))
+                                op = op.copy(url = gateway.generateBgm(op.prompt, durationMs / 1000f, isEffect = false, chatId = request.projectId))
                             } else if (op is ai.trimm.mobile.domain.AddBgmEffect && op.url.isBlank()) {
                                 onProgress("Generating music effect...", (index * 100) / tasks.size)
-                                op = op.copy(url = gateway.generateBgm(op.prompt, 12f, isEffect = true))
+                                op = op.copy(url = gateway.generateBgm(op.prompt, 12f, isEffect = true, chatId = request.projectId))
                             } else if (op is ai.trimm.mobile.domain.AddSfx && op.url.isBlank()) {
                                 onProgress("Generating sound effect...", (index * 100) / tasks.size)
                                 op = op.copy(url = gateway.generateSfx(op.prompt))
@@ -264,14 +264,14 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
         json.parseToJsonElement(responseText).jsonObject
     }
 
-    @Serializable private data class BgmRequest(val prompt: String, val durationSecs: Float, val beats: List<Float> = emptyList(), val isEffect: Boolean = false)
+    @Serializable private data class BgmRequest(val prompt: String, val durationSecs: Float, val beats: List<Float> = emptyList(), val isEffect: Boolean = false, val chatId: String)
     @Serializable private data class BgmResponse(val url: String)
     @Serializable private data class SfxRequest(val prompt: String)
     @Serializable private data class SfxResponse(val url: String)
 
-    override suspend fun generateBgm(prompt: String, durationSecs: Float, isEffect: Boolean): String = withContext(Dispatchers.IO) {
+    override suspend fun generateBgm(prompt: String, durationSecs: Float, isEffect: Boolean, chatId: String): String = withContext(Dispatchers.IO) {
         val endpoint = URI("${runsEndpoint.toString().trimEnd('/')}/audio/generate-bgm")
-        val responseText = postRaw(endpoint, json.encodeToString(BgmRequest.serializer(), BgmRequest(prompt, durationSecs, isEffect = isEffect)))
+        val responseText = postRaw(endpoint, json.encodeToString(BgmRequest.serializer(), BgmRequest(prompt, durationSecs, isEffect = isEffect, chatId = chatId)))
         json.decodeFromString(BgmResponse.serializer(), responseText).url
     }
 

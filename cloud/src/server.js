@@ -238,9 +238,9 @@ const server = http.createServer(async (request, response) => {
 
   if (request.method === 'POST' && requestUrl.pathname === '/v1/audio/generate-bgm') {
     try {
-      const { prompt, durationSecs, beats, isEffect } = await collect(request);
-      if (!prompt || !durationSecs) throw Object.assign(new Error('Missing prompt or durationSecs'), { status: 400 });
-      return json(response, 200, await audioGeneration.generateBgm(prompt, durationSecs, isEffect));
+      const { prompt, durationSecs, beats, isEffect, chatId } = await collect(request);
+      if (!prompt || !durationSecs || !chatId) throw Object.assign(new Error('Missing prompt, durationSecs, or chatId'), { status: 400 });
+      return json(response, 200, await audioGeneration.generateBgm(prompt, durationSecs, isEffect, chatId));
     } catch (error) {
       console.error('[audio-generate-bgm] request failed', { message: error?.message });
       return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message || 'BGM generation failed' });
@@ -358,6 +358,37 @@ const server = http.createServer(async (request, response) => {
 
       if (error) throw Object.assign(new Error(error.message), { status: 500 });
       
+      // Background Cleanup: Remove chat data and assets older than 20 chats
+      (async () => {
+        try {
+          const { data: oldChats } = await supabase.from('chats')
+            .select('id')
+            .eq('user_id', principal.sub)
+            .order('created_at', { ascending: false })
+            .range(20, 1000); // 21st and beyond
+          
+          if (oldChats && oldChats.length > 0) {
+            const oldChatIds = oldChats.map(c => c.id);
+            
+            const bgmBucket = process.env.SFX_S3_BUCKET || 'trimm-sfx-cache';
+            
+            // Delete BGM files for these chats
+            for (const oldChatId of oldChatIds) {
+              const { data: bgmFiles } = await supabase.storage.from(bgmBucket).list(`bgm/${oldChatId}`);
+              if (bgmFiles && bgmFiles.length > 0) {
+                const bgmPaths = bgmFiles.map(f => `bgm/${oldChatId}/${f.name}`);
+                await supabase.storage.from(bgmBucket).remove(bgmPaths);
+              }
+            }
+
+            // Finally, delete the old chats (this cascades to checkpoints)
+            await supabase.from('chats').delete().in('id', oldChatIds);
+          }
+        } catch (cleanupError) {
+          console.error('[projects-sync] Background cleanup failed:', cleanupError);
+        }
+      })();
+
       return json(response, 200, { success: true });
     } catch (error) {
       console.error('[projects-sync] request failed', { message: error?.message });

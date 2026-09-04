@@ -30,14 +30,6 @@ class ChatService {
         const stream = Readable.from(audioBuffer);
         const transcriptionResult = await transcriptionCore.transcribe(stream);
         transcript = transcriptionResult.text;
-        
-        // Save transcript asset
-        await supabase.from('assets').insert({
-          chat_id,
-          checkpoint_id: checkpointId,
-          type: 'transcript',
-          storage_url: 'local-transcript', // Just a placeholder, AssemblyAI text
-        });
       }
 
       // 3. Run LLM

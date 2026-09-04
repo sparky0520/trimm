@@ -7,21 +7,27 @@ import retrofit2.http.Header
 import retrofit2.http.POST
 import ai.trimm.mobile.BuildConfig
 
+import com.google.gson.annotations.SerializedName
+
 data class ChatEditRequest(
-    val prompt: String,
-    val parentId: String?,
-    val chatId: String,
-    val transcript: String?,
-    val videoUrl: String? = null
+    @SerializedName("prompt") val prompt: String,
+    @SerializedName("parentId") val parentId: String?,
+    @SerializedName("chatId") val chatId: String,
+    @SerializedName("transcript") val transcript: String?
 )
 
 data class ChatEditResponse(
-    val status: String,
-    val checkpointId: String
+    @SerializedName("status") val status: String,
+    @SerializedName("checkpointId") val checkpointId: String
 )
 
-data class ChatTitleRequest(val transcript: String)
-data class ChatTitleResponse(val title: String)
+data class ChatTitleRequest(
+    @SerializedName("transcript") val transcript: String
+)
+
+data class ChatTitleResponse(
+    @SerializedName("title") val title: String
+)
 
 interface ChatApiService {
     @POST("/v1/chats/edit")

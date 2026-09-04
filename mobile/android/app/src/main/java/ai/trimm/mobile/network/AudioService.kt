@@ -7,7 +7,8 @@ data class BgmRequest(
     val prompt: String,
     val durationSecs: Float,
     val beats: List<Float> = emptyList(),
-    val isEffect: Boolean = false
+    val isEffect: Boolean = false,
+    val chatId: String
 )
 
 data class BgmResponse(

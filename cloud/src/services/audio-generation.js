@@ -62,7 +62,9 @@ class AudioGeneration {
     return userPrompt;
   }
 
-  async generateBgm(prompt, durationSecs, isEffect = false) {
+  async generateBgm(prompt, durationSecs, isEffect = false, chatId) {
+    if (!chatId) throw new Error('chatId is required for BGM generation');
+
     let augmentedPrompt = await this.augmentPrompt(prompt, isEffect ? 'bgm_effect' : 'bgm');
     console.log(`[AudioGeneration] Generating BGM for prompt: "${augmentedPrompt}", duration: ${durationSecs}s`);
     
@@ -105,7 +107,7 @@ class AudioGeneration {
     const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY;
     
     if (supabaseUrl && supabaseKey) {
-       const cacheKey = `bgm/bgm_${Date.now()}.mp3`;
+       const cacheKey = `bgm/${chatId}/bgm_${Date.now()}.mp3`;
        const publicUrl = `${supabaseUrl}/storage/v1/object/public/${this.s3Bucket}/${cacheKey}`;
        
         try {

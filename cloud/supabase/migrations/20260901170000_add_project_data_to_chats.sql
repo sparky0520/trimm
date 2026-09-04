@@ -12,11 +12,6 @@ DROP POLICY IF EXISTS "Users can insert checkpoints to their chats" ON public.ch
 DROP POLICY IF EXISTS "Users can update checkpoints of their chats" ON public.checkpoints;
 DROP POLICY IF EXISTS "Users can view checkpoints of their chats" ON public.checkpoints;
 
-DROP POLICY IF EXISTS "Users can delete assets of their chats" ON public.assets;
-DROP POLICY IF EXISTS "Users can insert assets to their chats" ON public.assets;
-DROP POLICY IF EXISTS "Users can update assets of their chats" ON public.assets;
-DROP POLICY IF EXISTS "Users can view assets of their chats" ON public.assets;
-
 -- Allow Clerk IDs in user_id by changing it to TEXT and dropping the Supabase auth.users constraint
 ALTER TABLE public.chats DROP CONSTRAINT IF EXISTS chats_user_id_fkey;
 ALTER TABLE public.chats ALTER COLUMN user_id TYPE TEXT USING user_id::text;
@@ -32,8 +27,3 @@ CREATE POLICY "Users can delete checkpoints of their chats" ON public.checkpoint
 CREATE POLICY "Users can insert checkpoints to their chats" ON public.checkpoints FOR INSERT TO authenticated WITH CHECK (EXISTS (SELECT 1 FROM chats WHERE chats.id = checkpoints.chat_id AND chats.user_id = auth.uid()::text));
 CREATE POLICY "Users can update checkpoints of their chats" ON public.checkpoints FOR UPDATE TO authenticated USING (EXISTS (SELECT 1 FROM chats WHERE chats.id = checkpoints.chat_id AND chats.user_id = auth.uid()::text));
 CREATE POLICY "Users can view checkpoints of their chats" ON public.checkpoints FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM chats WHERE chats.id = checkpoints.chat_id AND chats.user_id = auth.uid()::text));
-
-CREATE POLICY "Users can delete assets of their chats" ON public.assets FOR DELETE TO authenticated USING (EXISTS (SELECT 1 FROM chats WHERE chats.id = assets.chat_id AND chats.user_id = auth.uid()::text));
-CREATE POLICY "Users can insert assets to their chats" ON public.assets FOR INSERT TO authenticated WITH CHECK (EXISTS (SELECT 1 FROM chats WHERE chats.id = assets.chat_id AND chats.user_id = auth.uid()::text));
-CREATE POLICY "Users can update assets of their chats" ON public.assets FOR UPDATE TO authenticated USING (EXISTS (SELECT 1 FROM chats WHERE chats.id = assets.chat_id AND chats.user_id = auth.uid()::text));
-CREATE POLICY "Users can view assets of their chats" ON public.assets FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM chats WHERE chats.id = assets.chat_id AND chats.user_id = auth.uid()::text));

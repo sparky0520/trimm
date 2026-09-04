@@ -302,42 +302,11 @@ class ChatEditWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val transcript = sourceTranscript(project.analysis.words, project.orderedSources)
         val apiService = ai.trimm.mobile.network.ChatApiService.create()
 
-        var videoStorageUrl: String? = null
-        if (inputData.getBoolean("uploadVideoContext", true)) {
-            val job = ai.trimm.mobile.planner.AuthorizedEvidenceJob(
-                id = java.util.UUID.randomUUID().toString(),
-                sourceId = project.orderedSources.firstOrNull()?.fingerprint ?: "",
-                type = "video",
-                purpose = "video-inspection",
-                range = ai.trimm.mobile.planner.EvidenceRange(0, 15000), // First 15 seconds
-                acceptedFormat = "video/mp4",
-                maximumBytes = 25_000_000,
-                maximumDurationMs = 15000,
-                resolution = "original",
-                expiresAt = java.time.Instant.now().plusSeconds(3600).toString(),
-                reused = false
-            )
-            try {
-                val derivative = preparer.prepare(DerivativeAuthorization(job), project.orderedSources)
-                val file = java.io.File(derivative.localPath)
-                val bucket = ai.trimm.mobile.network.supabase.storage.from("assets")
-                val path = "video-context/${project.id}/${java.util.UUID.randomUUID()}.mp4"
-                bucket.upload(path, file.readBytes()) {
-                    upsert = true
-                }
-                videoStorageUrl = bucket.publicUrl(path)
-                file.delete()
-            } catch (e: Exception) {
-                Log.e("ChatEditWorker", "Failed to upload video context", e)
-            }
-        }
-
         val request = ai.trimm.mobile.network.ChatEditRequest(
             prompt = message,
             parentId = project.analysis.appliedEditCheckpoints.lastOrNull()?.id,
             chatId = project.id,
-            transcript = transcript.joinToString(" ") { it.text },
-            videoUrl = videoStorageUrl
+            transcript = transcript.joinToString(" ") { it.text }
         )
         
         val token = ai.trimm.mobile.auth.AuthTokenProvider.currentToken()
