@@ -173,8 +173,15 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
             }.onFailure { error ->
                 Log.w("AnalysisWorker", "Agent run could not continue", error)
                 val detail = error.message?.takeIf { it.isNotBlank() } ?: "Retry when the connection is available."
+                val failedRun = analyzed.analysis.agentRun?.copy(status = AgentRunStatus.FAILED)
                 analyzed = analyzed.copy(analysis = analyzed.analysis.copy(
-                    warnings = analyzed.analysis.warnings + "Agent run could not continue: $detail"
+                    warnings = analyzed.analysis.warnings + "Agent run could not continue: $detail",
+                    agentRun = failedRun,
+                    revisionConversation = analyzed.analysis.revisionConversation.mapIndexed { index, turn -> 
+                        if (index == analyzed.analysis.revisionConversation.lastIndex) {
+                            turn.copy(isError = true, isPending = false, response = detail)
+                        } else turn
+                    }
                 ))
                 store.save(analyzed)
                 

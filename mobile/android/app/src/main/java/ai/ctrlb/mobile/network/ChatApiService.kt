@@ -56,6 +56,9 @@ interface ChatApiService {
     @retrofit2.http.GET("/v1/projects/{id}")
     suspend fun getProject(@Header("Authorization") authorization: String, @retrofit2.http.Path("id") id: String): com.google.gson.JsonObject
 
+    @retrofit2.http.DELETE("/v1/projects/{id}")
+    suspend fun deleteProject(@Header("Authorization") authorization: String, @retrofit2.http.Path("id") id: String): okhttp3.ResponseBody
+
     companion object {
         fun create(): ChatApiService {
             val retrofit = Retrofit.Builder()

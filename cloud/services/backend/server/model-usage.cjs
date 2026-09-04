@@ -59,5 +59,34 @@ function usageSummary(entries = []) {
     estimatedCostMicros: unique.reduce((sum, item) => sum + nonNegativeInteger(item.estimatedCostMicros), 0),
   };
 }
+function openaiUsage(response, { purpose, model = 'moonshot-v1-32k', callId, media } = {}) {
+  const metadata = response?.usage || {};
+  const inputTokens = nonNegativeInteger(metadata.prompt_tokens);
+  const outputTokens = nonNegativeInteger(metadata.completion_tokens);
+  const totalTokens = nonNegativeInteger(metadata.total_tokens);
+  
+  // Approximate pricing for moonshot-v1-32k (replace with accurate if needed)
+  const estimatedCostMicros = Math.ceil(
+    inputTokens * 0.012 + outputTokens * 0.012
+  );
 
-module.exports = { geminiUsage, usageSummary };
+  return {
+    callId: String(callId || response?.id || crypto.randomUUID()).slice(0, 200),
+    provider: 'openai-compatible',
+    model,
+    purpose: String(purpose || 'planning').slice(0, 100),
+    inputTokens,
+    outputTokens,
+    thinkingTokens: 0,
+    cachedTokens: 0,
+    totalTokens,
+    estimatedCostMicros,
+    textTokens: totalTokens,
+    videoTokens: 0,
+    occurredAt: new Date().toISOString(),
+    ...(media || {}),
+    costEstimated: true,
+  };
+}
+
+module.exports = { geminiUsage, openaiUsage, usageSummary };

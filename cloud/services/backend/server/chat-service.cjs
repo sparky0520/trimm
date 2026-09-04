@@ -1,12 +1,14 @@
 const { createClient } = require('@supabase/supabase-js');
 const transcriptionCore = require('./transcription-core.cjs');
-const { createGeminiDecisionProvider } = require('./gemini-agent.cjs');
+const { createOpenAIDecisionProvider } = require('./openai-agent.cjs');
+
+const fetch = require('node-fetch'); // or rely on global fetch in Node 18+
 
 const supabase = createClient(
   process.env.SUPABASE_URL || '',
   process.env.SUPABASE_SECRET_KEY || ''
 );
-const agentDecisionProvider = createGeminiDecisionProvider();
+const agentDecisionProvider = createOpenAIDecisionProvider();
 
 class ChatService {
   async processEditJob(checkpointId, chat_id, parent_id, audioBuffer, prompt) {

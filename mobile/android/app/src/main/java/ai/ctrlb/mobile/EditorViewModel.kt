@@ -51,7 +51,8 @@ data class EditorState(
     val initialRequest: String? = null,
     val pendingChatMessage: String? = null,
     val isProcessing: Boolean = false,
-    val pastChats: List<ai.ctrlb.mobile.data.ChatSummary> = emptyList()
+    val pastChats: List<ai.ctrlb.mobile.data.ChatSummary> = emptyList(),
+    val isLoadingPastChats: Boolean = false
 ) {
     val source: SourceMedia? get() = sources.firstOrNull()
 }
@@ -76,13 +77,29 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun refreshChats() {
+        viewModelScope.launch {
+            mutable.value = mutable.value.copy(isLoadingPastChats = true)
+            val chats = store.listAll()
+            mutable.value = mutable.value.copy(pastChats = chats, isLoadingPastChats = false)
+        }
+    }
+
+    fun deleteChat(id: String) {
+        viewModelScope.launch {
+            store.delete(id)
+            if (mutable.value.project?.id == id) {
+                newChat()
+            }
+            refreshChats()
+        }
+    }
+
     init {
         viewModelScope.launch {
-            mutable.value = mutable.value.copy(
-                creatorPreferences = store.loadCreatorPreferences(),
-                pastChats = store.listAll()
-            )
+            mutable.value = mutable.value.copy(creatorPreferences = store.loadCreatorPreferences())
         }
+        refreshChats()
     }
 
     fun newChat() {
@@ -600,12 +617,38 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun undo() { mutable.value.project?.let { updateProject(it.restoreCheckpoint()) } }
     fun undoCheckpoint(checkpointId: String) {
         val project = mutable.value.project ?: return
-        if (project.analysis.appliedEditCheckpoints.lastOrNull()?.id != checkpointId) {
-            mutable.value = mutable.value.copy(jobMessage = "Only the latest edit checkpoint can be undone.")
+        
+        // Find the checkpoint to determine which turn it belonged to
+        // If we can't find it, just return
+        val targetCheckpointIndex = project.analysis.appliedEditCheckpoints.indexOfFirst { it.id == checkpointId }
+        if (targetCheckpointIndex == -1) {
+            mutable.value = mutable.value.copy(jobMessage = "Checkpoint not found.")
             return
         }
-        updateProject(project.restoreCheckpoint(), preview = true)
-        mutable.value = mutable.value.copy(jobMessage = "Edit checkpoint undone")
+
+        // We want to undo this checkpoint, meaning we want to restore to the state BEFORE it was applied.
+        var currentProject = project
+        while (currentProject.analysis.appliedEditCheckpoints.any { it.id == checkpointId }) {
+            val nextProject = currentProject.restoreCheckpoint()
+            if (nextProject === currentProject) break // Reached the beginning
+            currentProject = nextProject
+        }
+        
+        // Find the turn that corresponds to the checkpoint to get its request text
+        // We can look at the active turn of the project right before the checkpoint was applied
+        // Wait, currentProject is the state BEFORE the checkpoint. The prompt that caused the checkpoint
+        // might be the last one in currentProject's activeConversationPath or we can just look at the 
+        // original project's activeConversationPath up to the turn that corresponds to it.
+        // Let's just find the first turn that happened after the restored state's revision.
+        val undoneTurn = project.analysis.revisionConversation.find { it.id == project.analysis.activeTurnId }
+        val promptText = undoneTurn?.request ?: ""
+
+        updateProject(currentProject, preview = true)
+        mutable.value = mutable.value.copy(
+            jobMessage = "Restored to previous state",
+            pendingChatMessage = promptText,
+            initialRequest = if (currentProject.analysis.appliedEditCheckpoints.isEmpty()) promptText else mutable.value.initialRequest
+        )
     }
     fun export() { mutable.value.project?.let { project ->
         val manager = WorkManager.getInstance(getApplication())

@@ -107,19 +107,7 @@ const PROPOSE_ADD_SECTION_TRANSITION_TOOL = operationTool(
 },
 );
 
-const colorAdjustmentTool = (parameter, minimum, maximum) => operationTool(
-  `propose_adjust_${parameter.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)}`,
-  `Adjust only ${parameter} in one exact source interval, based on cited visual evidence.`,
-  ['sourceId', 'startMs', 'endMs', 'value', 'reason'], {
-  ...targetRangeProperties, value: { type: 'number', minimum, maximum },
-},
-);
-const PROPOSE_COLOR_TOOLS = [
-  colorAdjustmentTool('exposure', -1, 1), colorAdjustmentTool('temperature', -1, 1),
-  colorAdjustmentTool('contrast', .75, 1.35), colorAdjustmentTool('saturation', .7, 1.3),
-  colorAdjustmentTool('highlights', -1, 1), colorAdjustmentTool('shadows', -1, 1),
-  colorAdjustmentTool('skinProtection', 0, 1),
-];
+
 
 const PROPOSE_ADD_BGM_TOOL = operationTool(
   'propose_add_bgm',
@@ -234,84 +222,21 @@ const PROPOSE_CLEAR_ROTATION_TOOL = Object.freeze({
   }
 });
 
-const PROPOSE_SET_CROP_TOOL = Object.freeze({
-  name: 'propose_set_crop',
-  description: 'Crop a video clip to a specific normalized rectangle.',
-  parameters: {
-    type: 'object', additionalProperties: false, required: ['itemId', 'crop', 'reason'], properties: {
-      itemId: { type: 'string' },
-      crop: {
-        type: 'object', additionalProperties: false, required: ['x', 'y', 'width', 'height'], properties: {
-          x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' }
-        }
-      },
-      reason: { type: 'string' }
-    }
-  }
-});
 
-const PROPOSE_CLEAR_CROP_TOOL = Object.freeze({
-  name: 'propose_clear_crop',
-  description: 'Remove any crop from a clip.',
-  parameters: {
-    type: 'object', additionalProperties: false, required: ['itemId', 'reason'], properties: {
-      itemId: { type: 'string' }, reason: { type: 'string' }
-    }
-  }
-});
 
-const PROPOSE_ADD_CALLOUT_TOOL = Object.freeze({
-  name: 'propose_add_callout',
-  description: 'Add a textual callout pointing to a specific normalized region of the screen.',
-  parameters: {
-    type: 'object', additionalProperties: false, required: ['text', 'target', 'reason'], properties: {
-      text: { type: 'string' },
-      target: {
-        type: 'object', additionalProperties: false, required: ['x', 'y', 'width', 'height'], properties: {
-          x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' }
-        }
-      },
-      reason: { type: 'string' }
-    }
-  }
-});
 
-const PROPOSE_ADD_SPOTLIGHT_TOOL = Object.freeze({
-  name: 'propose_add_spotlight',
-  description: 'Dim the background and spotlight a specific normalized region of the screen.',
-  parameters: {
-    type: 'object', additionalProperties: false, required: ['target', 'reason'], properties: {
-      target: {
-        type: 'object', additionalProperties: false, required: ['x', 'y', 'width', 'height'], properties: {
-          x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' }
-        }
-      },
-      reason: { type: 'string' }
-    }
-  }
-});
 
-const PROPOSE_ADD_MOTION_PRESET_TOOL = Object.freeze({
-  name: 'propose_add_motion_preset',
-  description: 'Apply a motion preset (like Ken Burns) to a clip (Mobile app).',
-  parameters: {
-    type: 'object', additionalProperties: false, required: ['preset', 'intensity', 'reason'], properties: {
-      preset: { type: 'string' }, intensity: { type: 'number' }, reason: { type: 'string' }
-    }
-  }
-});
+
 
 
 const AGENT_TOOLS = Object.freeze([
   PROPOSE_REMOVE_RANGES_TOOL,
   PROPOSE_DIALOGUE_LOUDNESS_TOOL, PROPOSE_MUSIC_DUCKING_TOOL,
-  PROPOSE_CAPTIONS_TOOL, PROPOSE_ASPECT_RATIO_TOOL, PROPOSE_TEXT_OVERLAY_TOOL, PROPOSE_ADD_SECTION_TRANSITION_TOOL, ...PROPOSE_COLOR_TOOLS,
+  PROPOSE_CAPTIONS_TOOL, PROPOSE_ASPECT_RATIO_TOOL, PROPOSE_TEXT_OVERLAY_TOOL, PROPOSE_ADD_SECTION_TRANSITION_TOOL,
   PROPOSE_ADD_BGM_TOOL, PROPOSE_ADD_BGM_EFFECT_TOOL, PROPOSE_ADD_SFX_TOOL,
   PROPOSE_SET_ROTATION_TOOL,
   PROPOSE_SET_SPEED_TOOL, PROPOSE_SET_VOLUME_TOOL,
-  PROPOSE_CLEAR_ROTATION_TOOL, PROPOSE_SET_CROP_TOOL, PROPOSE_CLEAR_CROP_TOOL,
-  PROPOSE_ADD_CALLOUT_TOOL, PROPOSE_ADD_SPOTLIGHT_TOOL,
-  PROPOSE_ADD_MOTION_PRESET_TOOL,
+  PROPOSE_CLEAR_ROTATION_TOOL,
   ASK_CLARIFICATION_TOOL, FINALIZE_EDIT_PROGRAM_TOOL,
   REMOVE_DRAFT_OPERATION_TOOL, FINISH_WITHOUT_PROPOSAL_TOOL,
 ]);

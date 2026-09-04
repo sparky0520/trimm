@@ -179,19 +179,36 @@ class MainActivity : ComponentActivity() {
                     }
                     val state by vm.state.collectAsStateWithLifecycle()
                     LazyColumn(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                        item { Text("Past Chats", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(8.dp)) }
+                        item { 
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Past Chats", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(8.dp))
+                                if (state.isLoadingPastChats) {
+                                    Spacer(Modifier.width(8.dp))
+                                    CircularProgressIndicator(modifier = Modifier.size(12.dp), color = Color.Gray, strokeWidth = 2.dp)
+                                }
+                            }
+                        }
                         items(state.pastChats.size) { index ->
                             val pastChat = state.pastChats[index]
-                            TextButton(
-                                onClick = { 
-                                    vm.loadProject(pastChat.id)
-                                    scope.launch { drawerState.close() }
-                                },
+                            Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-                                    ChatTitleText(pastChat)
+                                TextButton(
+                                    onClick = { 
+                                        vm.loadProject(pastChat.id)
+                                        scope.launch { drawerState.close() }
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                                ) {
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                                        ChatTitleText(pastChat)
+                                    }
+                                }
+                                IconButton(onClick = { vm.deleteChat(pastChat.id) }) {
+                                    Text("🗑️", fontSize = 16.sp)
                                 }
                             }
                         }
