@@ -122,6 +122,11 @@ object ExportCoordinator {
                         val crop = cropOp.crop
                         itemVideoEffects.add(Crop(crop.x, crop.y, crop.width, crop.height))
                     }
+                    project.operations.filterIsInstance<SetRotation>().lastOrNull { 
+                        it.enabled && targets(it.itemId, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd) 
+                    }?.let { rotateOp ->
+                        itemVideoEffects.add(ScaleAndRotateTransformation.Builder().setRotationDegrees(rotateOp.rotation).build())
+                    }
 
                     EditedMediaItem.Builder(item).setDurationUs(maxOf(1L, source.durationMs * 1000L))
                         .setEffects(Effects(audioEffects, itemVideoEffects)).build()

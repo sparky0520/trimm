@@ -299,7 +299,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
         
         operations.filterIsInstance<SetRotation>().lastOrNull { it.enabled }?.let { op ->
             val rotation = op.rotation
-            if (rotation == 90f || rotation == 270f) {
+            if (kotlin.math.abs(rotation % 180f) == 90f) {
                 targetRatio = if (targetRatio == AspectRatio.LANDSCAPE) AspectRatio.PORTRAIT else AspectRatio.LANDSCAPE
             }
         }
