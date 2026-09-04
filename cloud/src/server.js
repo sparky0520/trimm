@@ -239,7 +239,8 @@ const server = http.createServer(async (request, response) => {
   if (request.method === 'POST' && requestUrl.pathname === '/v1/audio/generate-bgm') {
     try {
       const { prompt, durationSecs, beats, isEffect, chatId } = await collect(request);
-      if (!prompt || !durationSecs || !chatId) throw Object.assign(new Error('Missing prompt, durationSecs, or chatId'), { status: 400 });
+      if (!chatId) throw Object.assign(new Error('chatId is strictly required to securely track and cleanup generated background music.'), { status: 400 });
+      if (!prompt || !durationSecs) throw Object.assign(new Error('Missing prompt or durationSecs'), { status: 400 });
       return json(response, 200, await audioGeneration.generateBgm(prompt, durationSecs, isEffect, chatId));
     } catch (error) {
       console.error('[audio-generate-bgm] request failed', { message: error?.message });
