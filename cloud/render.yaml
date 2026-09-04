@@ -6,10 +6,6 @@ services:
     healthCheckPath: /health
     autoDeployTrigger: commit
     envVars:
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: GEMINI_MODEL
-        value: gemini-3.6-flash
       - key: ASSEMBLYAI_API_KEY
         sync: false
       - key: MOONSHOT_API_KEY

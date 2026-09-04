@@ -291,9 +291,13 @@ const server = http.createServer(async (request, response) => {
   if (request.method === 'POST' && requestUrl.pathname === '/v1/chats/edit') {
     try {
       // Create a background job for chat editing
-      const { chat_id, parent_id, prompt } = await collect(request);
-      if (!chat_id || !prompt) {
-        throw Object.assign(new Error('Missing chat_id or prompt'), { status: 400 });
+      const body = await collect(request);
+      const chatId = body.chatId || body.chat_id;
+      const parentId = body.parentId || body.parent_id;
+      const prompt = body.prompt;
+
+      if (!chatId || !prompt) {
+        throw Object.assign(new Error('Missing chatId or prompt'), { status: 400 });
       }
       
       const principal = await authentication.authenticate(request);
@@ -307,8 +311,8 @@ const server = http.createServer(async (request, response) => {
       
       const { data, error } = await supabase.from('checkpoints')
         .insert({
-          chat_id,
-          parent_id: parent_id || null,
+          chat_id: chatId,
+          parent_id: parentId || null,
           status: 'pending',
           prompt
         })
@@ -320,10 +324,10 @@ const server = http.createServer(async (request, response) => {
 
       // 2. Start Background processing
       // We pass null for audioBuffer for now, as in this basic version we are testing JSON generation
-      chatService.processEditJob(checkpointId, chat_id, parent_id, null, prompt)
+      chatService.processEditJob(checkpointId, chatId, parentId, null, prompt)
         .catch(e => console.error('[v1/chats/edit] Background processing error:', e));
 
-      return json(response, 202, { checkpoint_id: checkpointId, status: 'pending' });
+      return json(response, 202, { checkpointId, checkpoint_id: checkpointId, status: 'pending' });
     } catch (error) {
       console.error('[chats-edit] request failed', { message: error?.message });
       return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message || 'Chat edit initiation failed' });
@@ -419,6 +423,31 @@ const server = http.createServer(async (request, response) => {
     } catch (error) {
       console.error('[project-get] request failed', { message: error?.message });
       return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message || 'Project fetch failed' });
+    }
+  }
+
+  if (request.method === 'DELETE' && requestUrl.pathname.match(/^\/v1\/projects\/([^\/]+)$/)) {
+    try {
+      const principal = await authentication.authenticate(request);
+      const projectId = requestUrl.pathname.split('/')[3];
+
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(
+        process.env.SUPABASE_URL || '',
+        process.env.SUPABASE_SECRET_KEY || ''
+      );
+      
+      const { error } = await supabase.from('chats')
+        .delete()
+        .eq('id', projectId)
+        .eq('user_id', principal.sub);
+
+      if (error) throw Object.assign(new Error(error.message), { status: 500 });
+      
+      return json(response, 204, {});
+    } catch (error) {
+      console.error('[project-delete] request failed', { message: error?.message });
+      return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message || 'Project deletion failed' });
     }
   }
 
