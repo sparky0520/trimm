@@ -24,10 +24,14 @@ class ProjectStore(context: Context) {
     private val apiService by lazy { ai.trimm.mobile.network.ChatApiService.create() }
 
     suspend fun save(project: MobileProject) = withContext(Dispatchers.IO) {
-        val projectJsonStr = json.encodeToString(MobileProject.serializer(), project)
-        val token = ai.trimm.mobile.auth.AuthTokenProvider.currentToken()
-        val requestBody = projectJsonStr.toRequestBody("application/json".toMediaType())
-        apiService.syncProject("Bearer $token", requestBody)
+        try {
+            val projectJsonStr = json.encodeToString(MobileProject.serializer(), project)
+            val token = ai.trimm.mobile.auth.AuthTokenProvider.currentToken()
+            val requestBody = projectJsonStr.toRequestBody("application/json".toMediaType())
+            apiService.syncProject("Bearer $token", requestBody)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         Unit
     }
 
@@ -38,19 +42,27 @@ class ProjectStore(context: Context) {
     }
 
     suspend fun delete(id: String) = withContext(Dispatchers.IO) {
-        val token = ai.trimm.mobile.auth.AuthTokenProvider.currentToken()
-        apiService.deleteProject("Bearer $token", id)
+        try {
+            val token = ai.trimm.mobile.auth.AuthTokenProvider.currentToken()
+            apiService.deleteProject("Bearer $token", id)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     suspend fun listAll(): List<ChatSummary> = withContext(Dispatchers.IO) {
         val summaries = mutableListOf<ChatSummary>()
-        val token = ai.trimm.mobile.auth.AuthTokenProvider.currentToken()
-        val response = apiService.getProjects("Bearer $token")
-        val projectsArray = response.getAsJsonArray("projects")
-        projectsArray.forEach { projectJson ->
-            val id = projectJson.asJsonObject.get("id").asString
-            val title = projectJson.asJsonObject.get("title").asString
-            summaries.add(ChatSummary(id, title))
+        try {
+            val token = ai.trimm.mobile.auth.AuthTokenProvider.currentToken()
+            val response = apiService.getProjects("Bearer $token")
+            val projectsArray = response.getAsJsonArray("projects")
+            projectsArray.forEach { projectJson ->
+                val id = projectJson.asJsonObject.get("id").asString
+                val title = projectJson.asJsonObject.get("title").asString
+                summaries.add(ChatSummary(id, title))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
         summaries
     }
