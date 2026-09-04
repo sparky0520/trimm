@@ -80,6 +80,8 @@ class Authenticator {
       return Object.freeze({
         sub: payload.sub,
         id: payload.sub,
+        scopes: payload.scopes || ['*'],
+        entitlements: payload.entitlements || [],
         authentication: 'supabase-auth',
       });
     } catch (err) {
