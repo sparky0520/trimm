@@ -1,0 +1,130 @@
+package ai.trimm.mobile.domain
+
+object InstructionValidator {
+    fun isRendered(operation: EditInstruction): Boolean = when (operation) {
+        is AddMotionPreset -> false
+        else -> true
+    }
+
+    fun isPlannerAvailable(operation: EditInstruction): Boolean = isRendered(operation)
+
+    fun visible(operations: List<EditInstruction>): List<EditInstruction> =
+        operations.filter(::isRendered)
+
+    fun renderFingerprint(operations: List<EditInstruction>): List<String> =
+        operations.filter { it.enabled && isRendered(it) }.map { operation ->
+            when (operation) {
+                is RemoveRanges -> "timeline-range:${operation.ranges}"
+                is SetColorGrade -> "video-color:${operation.grade}:${operation.target}:${operation.parameter}:${operation.value}"
+                is SetAudioLevels -> "dialogue-levels:${operation.dialogueLufs}:${operation.musicDuckDb}"
+                is NormaliseAudio -> "normalise-audio:${operation.parameter}:${operation.dialogueLufs}:${operation.musicDuckDb}"
+                is SetVolume -> "audio-volume:${operation.itemId}:${operation.volume}"
+                is SetSpeed -> "video-speed:${operation.itemId}:${operation.speed}"
+                is AddCaptions -> "video-captions:${operation.cues}:${operation.style}"
+                is SetAspectRatio -> "video-aspect-ratio:${operation.ratio.name}"
+                is AddTextOverlay -> "video-text-overlay:${operation.id}:${operation.text}"
+                is AddBgm -> "audio-bgm:${operation.url}"
+                is AddBgmEffect -> "audio-bgm-effect:${operation.target?.startMs}:${operation.target?.endMs}:${operation.url}"
+                is AddSfx -> "audio-sfx:${operation.target?.startMs}:${operation.target?.endMs}:${operation.url}"
+                is AddSectionTransition -> "video-transition:${operation.id}:${operation.preset}"
+                is SetRotation -> "video-rotation:${operation.itemId}:${operation.rotation}"
+                is ClearRotation -> "video-rotation-clear:${operation.itemId}"
+                is SetCrop -> "video-crop:${operation.itemId}:${operation.crop}"
+                is ClearCrop -> "video-crop-clear:${operation.itemId}"
+                is AddCallout -> "video-callout:${operation.id}:${operation.text}"
+                is AddSpotlight -> "video-spotlight:${operation.id}"
+                is AddMotionPreset -> error("Unrendered operation reached render contract")
+            }
+        }
+
+    fun basis(operation: EditInstruction): String = when (operation) {
+        is RemoveRanges -> "Transcript evidence • ${operation.reason.ifBlank { "Range removal" }}"
+        is SetColorGrade -> "Frame evidence"
+        is SetAudioLevels -> "Default • ${operation.dialogueLufs.toInt()} LUFS dialogue target"
+        is NormaliseAudio -> "Auto audio ducking"
+        is SetVolume -> "Volume adjustment"
+        is SetSpeed -> "Speed adjustment"
+        is AddCaptions -> "Transcript evidence • ${operation.cues.size} timed cues"
+        is SetAspectRatio -> "Aspect ratio: ${operation.ratio.name}"
+        is AddTextOverlay -> "Custom Text Overlay Graphics"
+        is AddBgm -> "Generated • ${operation.prompt}"
+        is AddBgmEffect -> "Generated • ${operation.prompt}"
+        is AddSfx -> "Generated • ${operation.prompt}"
+        is AddSectionTransition -> "Transition • ${operation.preset}"
+        is AddMotionPreset -> "Unavailable • not rendered"
+        is SetRotation -> "Rotation • ${operation.itemId}"
+        is ClearRotation -> "Rotation cleared • ${operation.itemId}"
+        is SetCrop -> "Crop • ${operation.itemId}"
+        is ClearCrop -> "Crop cleared • ${operation.itemId}"
+        is AddCallout -> "Callout • ${operation.text}"
+        is AddSpotlight -> "Spotlight"
+    }
+
+    fun validate(project: MobileProject, proposed: List<EditInstruction>, expectedRevision: Long = project.revision): List<EditInstruction> {
+        require(expectedRevision == project.revision) { "Stale edit proposal" }
+        require(proposed.map { it.id }.distinct().size == proposed.size) { "Duplicate operation id" }
+        require(proposed.all(::isPlannerAvailable)) { "Operation is unavailable without render support or frame evidence" }
+        val sourceOffsets = buildMap {
+            var offset = 0L
+            project.orderedSources.forEachIndexed { index, source -> 
+                put("${source.fingerprint}-$index", offset)
+                if (!containsKey(source.fingerprint)) put(source.fingerprint, offset)
+                offset += source.durationMs 
+            }
+        }
+        val resolved = proposed.map { op ->
+            if (op is AddCaptions && op.cues.isEmpty()) {
+                val words = project.analysis.words.filter { word ->
+                    val matchesSpeaker = op.speakerId == null || word.speakerId == op.speakerId
+                    val matchesTarget = op.target == null || (
+                        sourceOffsets[op.target.sourceId]?.let { offset ->
+                            word.range.startMs >= offset + op.target.startMs && word.range.endMs <= offset + op.target.endMs
+                        } ?: false
+                    )
+                    matchesSpeaker && matchesTarget
+                }
+                op.copy(cues = CaptionSegmenter.segment(words))
+            } else if (op is AddMotionPreset && op.range == null) {
+                op.copy(range = TimeRange(0, project.durationMs))
+            } else op
+        }
+        resolved.forEach { op -> when (op) {
+            is RemoveRanges -> { require(op.confidence in 0f..1f); require(op.ranges.isNotEmpty()); op.ranges.forEach { require(it.endMs <= project.durationMs) } }
+            is SetColorGrade -> {
+                require(op.grade != null || (op.parameter in setOf("exposure", "temperature", "contrast", "saturation", "highlights", "shadows", "skinProtection") && op.value != null))
+                validateTarget(project, op.target)
+            }
+            is NormaliseAudio -> {
+                if (op.parameter == "dialogue_loudness") require(op.dialogueLufs in -24f..-12f)
+                else if (op.parameter == "music_ducking") require(op.musicDuckDb in -18f..-3f)
+                else { require(op.dialogueLufs in -24f..-12f); require(op.musicDuckDb in -18f..-3f) }
+                require(op.attackMs in 0..2_000 && op.releaseMs in 0..5_000); validateTarget(project, op.target)
+            }
+            is SetVolume -> { require(op.volume in 0f..2f) }
+            is SetSpeed -> { require(op.speed > 0f) }
+            is AddCallout -> { validateTarget(project, OperationTarget(op.target.toString(), 0, 0)) }
+            is AddSpotlight -> { validateTarget(project, OperationTarget(op.target.toString(), 0, 0)) }
+            is SetAudioLevels -> { validateTarget(project, op.target) }
+            is SetAspectRatio -> { }
+            is AddMotionPreset -> { require(op.range != null && op.range.endMs <= project.durationMs); require(op.intensity in 0f..1f) }
+            is AddCaptions -> { require(op.cues.isNotEmpty()); op.cues.forEach { require(it.range.endMs <= project.durationMs); require(it.text.isNotBlank() && it.text.length <= 120) } }
+            is AddTextOverlay -> { require(op.text.isNotBlank()); validateTarget(project, op.target) }
+            is AddBgm -> { require(op.prompt.isNotBlank()); validateTarget(project, op.target) }
+            is AddBgmEffect -> { require(op.prompt.isNotBlank()); validateTarget(project, op.target) }
+            is AddSfx -> { require(op.prompt.isNotBlank()); validateTarget(project, op.target) }
+            is SetRotation -> { require(op.rotation in -360f..360f) }
+            is ClearRotation -> { }
+            is SetCrop -> { require(op.crop.x >= 0f && op.crop.y >= 0f && op.crop.width > 0f && op.crop.height > 0f && op.crop.x + op.crop.width <= 1f && op.crop.y + op.crop.height <= 1f) }
+            is ClearCrop -> { }
+            else -> { }
+        } }
+        return resolved
+    }
+
+    private fun validateTarget(project: MobileProject, target: OperationTarget?) {
+        if (target == null) return // Backward-compatible projects used whole-project effects.
+        val fingerprint = target.sourceId.substringBeforeLast("-")
+        val source = project.orderedSources.firstOrNull { it.fingerprint == fingerprint }
+        require(source != null && target.endMs <= source.durationMs) { "Operation target is outside its source" }
+    }
+}

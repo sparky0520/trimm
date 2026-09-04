@@ -17,7 +17,7 @@ val uploadKeyAlias = rootLocalEnv["TRIMM_ANDROID_UPLOAD_KEY_ALIAS"].orEmpty()
 val uploadKeyPassword = rootLocalEnv["TRIMM_ANDROID_UPLOAD_KEY_PASSWORD"].orEmpty()
 
 android {
-    namespace = "ai.ctrlb.mobile"
+    namespace = "ai.trimm.mobile"
     compileSdk = 37
 
     defaultConfig {
