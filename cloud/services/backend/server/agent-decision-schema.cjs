@@ -192,11 +192,126 @@ const FINISH_WITHOUT_PROPOSAL_TOOL = Object.freeze({
   parameters: { type: 'object', additionalProperties: false, required: ['reason'], properties: { reason: { type: 'string' } } },
 });
 
+const PROPOSE_SET_ROTATION_TOOL = Object.freeze({
+  name: 'propose_set_rotation',
+  description: 'Rotate a video clip by a specific angle (e.g., -90 for 90 degrees counter-clockwise, 90 for 90 degrees clockwise).',
+  parameters: {
+    type: 'object', additionalProperties: false, required: ['itemId', 'rotation', 'reason'], properties: {
+      itemId: { type: 'string', description: 'The sourceId or identifier of the clip to rotate' },
+      rotation: { type: 'number' },
+      reason: { type: 'string' }
+    }
+  }
+});
+
+const PROPOSE_SET_SPEED_TOOL = Object.freeze({
+  name: 'propose_set_speed',
+  description: 'Change the playback speed of a clip. (e.g., 2.0 for 2x fast, 0.5 for half speed).',
+  parameters: {
+    type: 'object', additionalProperties: false, required: ['itemId', 'speed', 'reason'], properties: {
+      itemId: { type: 'string' }, speed: { type: 'number' }, reason: { type: 'string' }
+    }
+  }
+});
+
+const PROPOSE_SET_VOLUME_TOOL = Object.freeze({
+  name: 'propose_set_volume',
+  description: 'Set the absolute volume for a clip (e.g. 0.0 to mute, 1.0 for normal, 2.0 for double volume).',
+  parameters: {
+    type: 'object', additionalProperties: false, required: ['itemId', 'volume', 'reason'], properties: {
+      itemId: { type: 'string' }, volume: { type: 'number' }, reason: { type: 'string' }
+    }
+  }
+});
+
+const PROPOSE_CLEAR_ROTATION_TOOL = Object.freeze({
+  name: 'propose_clear_rotation',
+  description: 'Reset a clip\'s rotation back to 0.',
+  parameters: {
+    type: 'object', additionalProperties: false, required: ['itemId', 'reason'], properties: {
+      itemId: { type: 'string' }, reason: { type: 'string' }
+    }
+  }
+});
+
+const PROPOSE_SET_CROP_TOOL = Object.freeze({
+  name: 'propose_set_crop',
+  description: 'Crop a video clip to a specific normalized rectangle.',
+  parameters: {
+    type: 'object', additionalProperties: false, required: ['itemId', 'crop', 'reason'], properties: {
+      itemId: { type: 'string' },
+      crop: {
+        type: 'object', additionalProperties: false, required: ['x', 'y', 'width', 'height'], properties: {
+          x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' }
+        }
+      },
+      reason: { type: 'string' }
+    }
+  }
+});
+
+const PROPOSE_CLEAR_CROP_TOOL = Object.freeze({
+  name: 'propose_clear_crop',
+  description: 'Remove any crop from a clip.',
+  parameters: {
+    type: 'object', additionalProperties: false, required: ['itemId', 'reason'], properties: {
+      itemId: { type: 'string' }, reason: { type: 'string' }
+    }
+  }
+});
+
+const PROPOSE_ADD_CALLOUT_TOOL = Object.freeze({
+  name: 'propose_add_callout',
+  description: 'Add a textual callout pointing to a specific normalized region of the screen.',
+  parameters: {
+    type: 'object', additionalProperties: false, required: ['text', 'target', 'reason'], properties: {
+      text: { type: 'string' },
+      target: {
+        type: 'object', additionalProperties: false, required: ['x', 'y', 'width', 'height'], properties: {
+          x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' }
+        }
+      },
+      reason: { type: 'string' }
+    }
+  }
+});
+
+const PROPOSE_ADD_SPOTLIGHT_TOOL = Object.freeze({
+  name: 'propose_add_spotlight',
+  description: 'Dim the background and spotlight a specific normalized region of the screen.',
+  parameters: {
+    type: 'object', additionalProperties: false, required: ['target', 'reason'], properties: {
+      target: {
+        type: 'object', additionalProperties: false, required: ['x', 'y', 'width', 'height'], properties: {
+          x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' }
+        }
+      },
+      reason: { type: 'string' }
+    }
+  }
+});
+
+const PROPOSE_ADD_MOTION_PRESET_TOOL = Object.freeze({
+  name: 'propose_add_motion_preset',
+  description: 'Apply a motion preset (like Ken Burns) to a clip (Mobile app).',
+  parameters: {
+    type: 'object', additionalProperties: false, required: ['preset', 'intensity', 'reason'], properties: {
+      preset: { type: 'string' }, intensity: { type: 'number' }, reason: { type: 'string' }
+    }
+  }
+});
+
+
 const AGENT_TOOLS = Object.freeze([
   PROPOSE_REMOVE_RANGES_TOOL,
   PROPOSE_DIALOGUE_LOUDNESS_TOOL, PROPOSE_MUSIC_DUCKING_TOOL,
   PROPOSE_CAPTIONS_TOOL, PROPOSE_ASPECT_RATIO_TOOL, PROPOSE_TEXT_OVERLAY_TOOL, PROPOSE_ADD_SECTION_TRANSITION_TOOL, ...PROPOSE_COLOR_TOOLS,
   PROPOSE_ADD_BGM_TOOL, PROPOSE_ADD_BGM_EFFECT_TOOL, PROPOSE_ADD_SFX_TOOL,
+  PROPOSE_SET_ROTATION_TOOL,
+  PROPOSE_SET_SPEED_TOOL, PROPOSE_SET_VOLUME_TOOL,
+  PROPOSE_CLEAR_ROTATION_TOOL, PROPOSE_SET_CROP_TOOL, PROPOSE_CLEAR_CROP_TOOL,
+  PROPOSE_ADD_CALLOUT_TOOL, PROPOSE_ADD_SPOTLIGHT_TOOL,
+  PROPOSE_ADD_MOTION_PRESET_TOOL,
   ASK_CLARIFICATION_TOOL, FINALIZE_EDIT_PROGRAM_TOOL,
   REMOVE_DRAFT_OPERATION_TOOL, FINISH_WITHOUT_PROPOSAL_TOOL,
 ]);
