@@ -542,16 +542,51 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             chatListenJob?.cancel()
             chatListenJob = launch {
                 repository.listenForCheckpoints(project.id).collect { checkpointData ->
+                    val status = checkpointData["status"]?.jsonPrimitive?.content
                     val currentProject = mutable.value.project ?: return@collect
-                    val finished = currentProject.copy(analysis = currentProject.analysis.copy(
-                        revisionConversation = currentProject.analysis.revisionConversation.map {
-                            if (it.id == turnId) it.copy(response = "Revised proposal ready to review", isPending = false, isError = false) else it
-                        }
-                    ))
-                    store.save(finished)
-                    mutable.value = mutable.value.copy(project = finished, jobMessage = "Applying edits...", isProcessing = false)
-                    // TODO: Apply edits
+                    
+                    if (status == "failed") {
+                        val failed = currentProject.copy(analysis = currentProject.analysis.copy(
+                            revisionConversation = currentProject.analysis.revisionConversation.map {
+                                if (it.id == turnId) it.copy(isPending = false, isError = true) else it
+                            }
+                        ))
+                        store.save(failed)
+                        mutable.value = mutable.value.copy(
+                            project = failed,
+                            errorMessage = "Agent run failure: backend processing failed.",
+                            jobMessage = null,
+                            isProcessing = false
+                        )
+                    } else {
+                        val finished = currentProject.copy(analysis = currentProject.analysis.copy(
+                            revisionConversation = currentProject.analysis.revisionConversation.map {
+                                if (it.id == turnId) it.copy(response = "Revised proposal ready to review", isPending = false, isError = false) else it
+                            }
+                        ))
+                        store.save(finished)
+                        mutable.value = mutable.value.copy(project = finished, jobMessage = "Applying edits...", isProcessing = false)
+                        // TODO: Apply edits
+                    }
                 }
+            }
+            
+            val info = awaitWork(workManager, request.id)
+            if (info.state == androidx.work.WorkInfo.State.FAILED) {
+                val errorMsg = info.outputData.getString("error") ?: "Failed to initiate chat edit."
+                val currentProject = mutable.value.project ?: return@launch
+                val failed = currentProject.copy(analysis = currentProject.analysis.copy(
+                    revisionConversation = currentProject.analysis.revisionConversation.map {
+                        if (it.id == turnId) it.copy(isPending = false, isError = true) else it
+                    }
+                ))
+                store.save(failed)
+                mutable.value = mutable.value.copy(
+                    project = failed,
+                    errorMessage = errorMsg,
+                    jobMessage = null,
+                    isProcessing = false
+                )
             }
         }
     }

@@ -27,7 +27,7 @@ class ChatRepository {
         
         return changes
             .filter { it.record["chat_id"]?.jsonPrimitive?.content == chatId }
-            .filter { it.record["status"]?.jsonPrimitive?.content == "completed" }
+            .filter { it.record["status"]?.jsonPrimitive?.content in listOf("completed", "failed") }
             .mapNotNull { it.record }
     }
 }
