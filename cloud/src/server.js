@@ -9,7 +9,6 @@ const __dirname = dirname(__filename);
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import OpenAI from 'openai';
 import * as transcriptionCore from './services/transcription-core.js';
 import { TranscriptionUploads } from './services/transcription-uploads.js';
 import { fromEnvironment as authenticationFromEnvironment } from './middleware/authentication.js';
@@ -277,7 +276,7 @@ const server = http.createServer(async (request, response) => {
   if (request.method === 'POST' && requestUrl.pathname === '/v1/agent/execute') {
     try {
       const payload = await collect(request, 5 * 1024 * 1024);
-      
+
       return json(response, 200, await agentDecisionProvider.executeTask(payload));
     } catch (error) {
       console.error('[agent-execute] request failed', { message: error?.message, status: error?.status, code: error?.code });
@@ -300,7 +299,7 @@ const server = http.createServer(async (request, response) => {
       if (!chatId || !prompt) {
         throw Object.assign(new Error('Missing chatId or prompt'), { status: 400 });
       }
-      
+
       const principal = await authentication.authenticate(request);
 
       // 1. Create Checkpoint as 'pending'
@@ -309,7 +308,7 @@ const server = http.createServer(async (request, response) => {
         process.env.SUPABASE_URL || '',
         process.env.SUPABASE_SECRET_KEY || ''
       );
-      
+
       const { data, error } = await supabase.from('checkpoints')
         .insert({
           chat_id: chatId,
@@ -319,7 +318,7 @@ const server = http.createServer(async (request, response) => {
         })
         .select()
         .single();
-        
+
       if (error) throw Object.assign(new Error(error.message), { status: 500 });
       const checkpointId = data.id;
 
@@ -346,7 +345,7 @@ const server = http.createServer(async (request, response) => {
         process.env.SUPABASE_URL || '',
         process.env.SUPABASE_SECRET_KEY || ''
       );
-      
+
       // Upsert the project in the chats table
       // We use the service_role key to bypass RLS, ensuring we can insert even if the Clerk user ID is not a valid auth.users UUID
       const { error } = await supabase.from('chats')
@@ -358,7 +357,7 @@ const server = http.createServer(async (request, response) => {
         }, { onConflict: 'id' });
 
       if (error) throw Object.assign(new Error(error.message), { status: 500 });
-      
+
       // Background Cleanup: Remove chat data and assets older than 20 chats
       (async () => {
         try {
@@ -367,12 +366,12 @@ const server = http.createServer(async (request, response) => {
             .eq('user_id', principal.sub)
             .order('created_at', { ascending: false })
             .range(20, 1000); // 21st and beyond
-          
+
           if (oldChats && oldChats.length > 0) {
             const oldChatIds = oldChats.map(c => c.id);
-            
+
             const bgmBucket = process.env.SFX_S3_BUCKET || 'trimm-sfx-cache';
-            
+
             // Delete BGM files for these chats
             for (const oldChatId of oldChatIds) {
               const { data: bgmFiles } = await supabase.storage.from(bgmBucket).list(`bgm/${oldChatId}`);
@@ -406,23 +405,23 @@ const server = http.createServer(async (request, response) => {
         process.env.SUPABASE_URL || '',
         process.env.SUPABASE_SECRET_KEY || ''
       );
-      
+
       const { data, error } = await supabase.from('chats')
         .select('project_data')
         .eq('user_id', principal.sub)
         .not('project_data', 'is', null);
 
       if (error) throw Object.assign(new Error(error.message), { status: 500 });
-      
+
       const projects = data.map(row => {
-          const pd = row.project_data;
-          let title = pd.title;
-          if (title === 'New Edit' || title === 'Talking head edit' || !title) {
-              const words = pd.analysis?.words || [];
-              const text = words.slice(0, 4).map(w => w.text).join(' ');
-              title = text ? text : 'Untitled Chat';
-          }
-          return { id: pd.id, title: title, modifiedAt: pd.analysis?.completedAtEpochMs || 0 };
+        const pd = row.project_data;
+        let title = pd.title;
+        if (title === 'New Edit' || title === 'Talking head edit' || !title) {
+          const words = pd.analysis?.words || [];
+          const text = words.slice(0, 4).map(w => w.text).join(' ');
+          title = text ? text : 'Untitled Chat';
+        }
+        return { id: pd.id, title: title, modifiedAt: pd.analysis?.completedAtEpochMs || 0 };
       });
       projects.sort((a, b) => b.modifiedAt - a.modifiedAt);
       return json(response, 200, { projects });
@@ -442,7 +441,7 @@ const server = http.createServer(async (request, response) => {
         process.env.SUPABASE_URL || '',
         process.env.SUPABASE_SECRET_KEY || ''
       );
-      
+
       const { data, error } = await supabase.from('chats')
         .select('project_data')
         .eq('id', projectId)
@@ -450,7 +449,7 @@ const server = http.createServer(async (request, response) => {
         .single();
 
       if (error || !data) throw Object.assign(new Error(error?.message || 'Not found'), { status: 404 });
-      
+
       return json(response, 200, data.project_data);
     } catch (error) {
       console.error('[project-get] request failed', { message: error?.message });
@@ -468,14 +467,14 @@ const server = http.createServer(async (request, response) => {
         process.env.SUPABASE_URL || '',
         process.env.SUPABASE_SECRET_KEY || ''
       );
-      
+
       const { error } = await supabase.from('chats')
         .delete()
         .eq('id', projectId)
         .eq('user_id', principal.sub);
 
       if (error) throw Object.assign(new Error(error.message), { status: 500 });
-      
+
       return json(response, 204, {});
     } catch (error) {
       console.error('[project-delete] request failed', { message: error?.message });
@@ -494,14 +493,14 @@ const server = http.createServer(async (request, response) => {
         process.env.SUPABASE_URL || '',
         process.env.SUPABASE_SECRET_KEY || ''
       );
-      
+
       // We first check if the chat belongs to the user
       const { data: chatData, error: chatError } = await supabase.from('chats')
         .select('id')
         .eq('id', chatId)
         .eq('user_id', principal.sub)
         .single();
-        
+
       if (chatError) throw Object.assign(new Error('Chat not found or unauthorized'), { status: 404 });
 
       const { data, error } = await supabase.from('checkpoints')
@@ -510,7 +509,7 @@ const server = http.createServer(async (request, response) => {
         .eq('status', 'completed');
 
       if (error) throw Object.assign(new Error(error.message), { status: 500 });
-      
+
       return json(response, 200, { checkpoints: data });
     } catch (error) {
       console.error('[checkpoints-get] request failed', { message: error?.message });

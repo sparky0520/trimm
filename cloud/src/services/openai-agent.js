@@ -2,12 +2,19 @@
 import { openaiUsage } from '../schema/model-usage.js';
 import { AGENT_TOOLS } from '../schema/agent-decision-schema.js';
 
+import OpenAI from 'openai';
+
 function createOpenAIDecisionProvider({
   apiKey = process.env.LLM_API_KEY,
   baseURL = process.env.LLM_OPENAI_BASE_URL || 'https://api.moonshot.ai/v1',
   model = process.env.MODEL || 'kimi-k3',
 } = {}) {
   
+  const openai = new OpenAI({
+    apiKey,
+    baseURL,
+  });
+
   async function generate({
     systemPolicy, contents, temperature, purpose = 'planning',
     responseFormat = null, tools = true,
@@ -34,6 +41,7 @@ function createOpenAIDecisionProvider({
     const requestPayload = {
       model,
       messages,
+      ...(temperature !== undefined ? { temperature } : {}),
       ...(responseFormat ? { response_format: responseFormat } : {}),
       ...(tools && AGENT_TOOLS.length > 0 ? { tools: AGENT_TOOLS.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })) } : {}),
     };
@@ -41,35 +49,13 @@ function createOpenAIDecisionProvider({
     console.log('[DEBUG] OpenAI Request:', JSON.stringify(requestPayload, null, 2));
 
     let response;
-    let lastErr;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const res = await fetch(`${baseURL.replace(/\/+$/, '')}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
-          body: JSON.stringify(requestPayload)
-        });
-        
-        if (!res.ok) {
-          const errorText = await res.text();
-          throw new Error(`OpenAI API error ${res.status}: ${errorText}`);
-        }
-        
-        response = await res.json();
-        console.log('[DEBUG] OpenAI Response:', JSON.stringify(response, null, 2));
-        lastErr = null;
-        break;
-      } catch (err) {
-        lastErr = err;
-        console.error(`[DEBUG] OpenAI API Error (Attempt ${attempt}):`, err);
-        if (attempt === 3) throw err;
-        await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
-      }
+    try {
+      response = await openai.chat.completions.create(requestPayload, { maxRetries: 4 });
+      console.log('[DEBUG] OpenAI Response:', JSON.stringify(response, null, 2));
+    } catch (err) {
+      console.error(`[DEBUG] OpenAI API Error:`, err);
+      throw err;
     }
-    if (lastErr) throw lastErr;
     
     const choice = response.choices[0];
     const message = choice.message;
