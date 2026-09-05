@@ -14,17 +14,19 @@ services:
         value: https://api.moonshot.ai/v1
       - key: MODEL
         value: kimi-k3
-      - key: TRIMM_DESKTOP_AI_PROVIDER
-        value: kimi
-      - key: TRIMM_PLANNER_CLIENT_TOKEN
-        sync: false
-      - key: TRIMM_CLERK_PUBLISHABLE_KEY
-        sync: false
-      - key: TRIMM_AUTH_AUDIENCE
-        sync: false
-      - key: TRIMM_AUTH_AUTHORIZED_PARTIES
-        sync: false
-      - key: TRIMM_AUTH_DEFAULT_SCOPES
-        value: plan:create transcribe:create derivatives:create
       - key: SUPABASE_DB_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_JWKS_URL
+        sync: false
+      - key: ELEVENLABS_API_TOKEN
+        sync: false
+      - key: REPLICATE_API_TOKEN
+        sync: false
+      - key: SFX_S3_BUCKET
         sync: false
