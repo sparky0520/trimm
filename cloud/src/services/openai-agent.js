@@ -28,12 +28,7 @@ function createOpenAIDecisionProvider({
     }
 
     if (Array.isArray(contents)) {
-      // Map history from gemini style if needed, but we can assume we send standard openai role/content
-      messages = messages.concat(contents.map(c => {
-        if (c.role === 'model') return { role: 'assistant', content: c.parts?.[0]?.text || '', tool_calls: c.parts?.filter(p => p.functionCall).map(p => ({ id: p.functionCall.id || 'call_123', type: 'function', function: { name: p.functionCall.name, arguments: JSON.stringify(p.functionCall.args) } })) };
-        if (c.role === 'user') return { role: 'user', content: c.parts?.[0]?.text || '' };
-        return c; // if already openai format
-      }));
+      messages = messages.concat(contents);
     } else {
       messages.push({ role: 'user', content: String(contents) });
     }
