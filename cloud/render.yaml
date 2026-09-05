@@ -8,11 +8,11 @@ services:
     envVars:
       - key: ASSEMBLYAI_API_KEY
         sync: false
-      - key: MOONSHOT_API_KEY
+      - key: LLM_API_KEY
         sync: false
-      - key: MOONSHOT_BASE_URL
+      - key: LLM_OPENAI_BASE_URL
         value: https://api.moonshot.ai/v1
-      - key: MOONSHOT_MODEL
+      - key: MODEL
         value: kimi-k3
       - key: TRIMM_DESKTOP_AI_PROVIDER
         value: kimi

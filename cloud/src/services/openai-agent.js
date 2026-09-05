@@ -4,8 +4,8 @@ import { AGENT_TOOLS } from '../schema/agent-decision-schema.js';
 
 function createOpenAIDecisionProvider({
   apiKey = process.env.LLM_API_KEY,
-  baseURL = process.env.LLM_OPENAI_BASE_URL || 'https://api.moonshot.cn/v1',
-  model = process.env.MODEL || 'moonshot-v1-32k',
+  baseURL = process.env.LLM_OPENAI_BASE_URL || 'https://api.moonshot.ai/v1',
+  model = process.env.MODEL || 'kimi-k3',
 } = {}) {
   
   async function generate({

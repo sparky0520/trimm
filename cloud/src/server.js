@@ -22,9 +22,9 @@ import { AudioGeneration } from './services/audio-generation.js';
 import { ChatService } from './services/chat-service.js';
 
 const port = Number(process.env.PORT || 8787);
-const apiKey = process.env.MOONSHOT_API_KEY;
-const baseURL = process.env.MOONSHOT_BASE_URL || 'https://api.moonshot.ai/v1';
-const model = process.env.MOONSHOT_MODEL || 'kimi-k3';
+const apiKey = process.env.LLM_API_KEY;
+const baseURL = process.env.LLM_OPENAI_BASE_URL || 'https://api.moonshot.ai/v1';
+const model = process.env.MODEL || 'kimi-k3';
 const MAX_BODY_BYTES = 512 * 1024;
 const privacyPolicy = fs.readFileSync(path.join(__dirname, 'privacy.html'));
 const transcriptionUploads = new TranscriptionUploads();
