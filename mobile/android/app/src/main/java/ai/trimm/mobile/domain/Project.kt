@@ -206,7 +206,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val agentRun: PersistedAgentRun? = null,
     val editorialPlan: StagedEditorialPlan? = null,
     val pendingProposal: PendingEditorialProposal? = null,
-    @SerialName("revisionConversation") val chatHistory: List<EditorialConversationTurn> = emptyList(),
+    val chatHistory: List<EditorialConversationTurn> = emptyList(),
     val appliedEditCheckpoints: List<AppliedEditCheckpoint> = emptyList(),
     val settledConstraints: List<SettledEditorialConstraint> = emptyList(),
     val warnings: List<String> = emptyList(),
