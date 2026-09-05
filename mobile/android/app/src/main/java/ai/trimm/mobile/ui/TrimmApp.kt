@@ -113,10 +113,7 @@ import kotlinx.serialization.json.jsonPrimitive
             override fun onAvailable(network: android.net.Network) { isOnline = true }
             override fun onLost(network: android.net.Network) { isOnline = false }
         }
-        val request = android.net.NetworkRequest.Builder()
-            .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
-        connectivityManager.registerNetworkCallback(request, callback)
+        connectivityManager.registerDefaultNetworkCallback(callback)
         
         val activeNetwork = connectivityManager.activeNetwork
         val caps = connectivityManager.getNetworkCapabilities(activeNetwork)

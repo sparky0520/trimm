@@ -146,7 +146,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun import(uris: List<Uri>) = viewModelScope.launch {
         val sources = uris.distinct().map { uri -> readSource(uri) }
         require(sources.isNotEmpty()) { "Choose at least one video." }
-        mutable.value = EditorState(sources = sources, creatorPreferences = mutable.value.creatorPreferences)
+        mutable.value = EditorState(
+            sources = sources,
+            creatorPreferences = mutable.value.creatorPreferences,
+            pastChats = mutable.value.pastChats
+        )
     }
 
     fun relinkVideo(uri: Uri) = viewModelScope.launch {
@@ -225,8 +229,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             maxOf(capability.recommendedWidth, capability.recommendedHeight),
             minOf(capability.recommendedWidth, capability.recommendedHeight)
         )
-        val project = MobileProject(title = "New Edit", source = source, sources = sources, preferences = preferences, creatorPreferences = current.creatorPreferences, analysis = Analysis(words = words, speechHints = candidates), operations = operations,
+        
+        val baseProject = current.project ?: MobileProject(title = "New Edit", source = source, sources = sources, preferences = preferences, creatorPreferences = current.creatorPreferences, analysis = Analysis(words = words, speechHints = candidates), operations = operations,
             export = ExportSettings(exportSize.width, exportSize.height, if (capability.allow4k) "video/hevc" else "video/avc", if (capability.allow4k) 45_000_000 else 16_000_000))
+        val project = baseProject.copy(
+            preferences = preferences,
+            analysis = baseProject.analysis.copy(words = words, speechHints = candidates),
+            operations = operations
+        )
+        
         mutable.value = current.copy(
             project = project,
             preferences = preferences,
@@ -236,15 +247,16 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             initialRequest = brief,
             isProcessing = true,
         )
-        viewModelScope.launch { 
-            store.save(project) 
-        }
+        
         val request = OneTimeWorkRequestBuilder<AnalysisWorker>().setInputData(
             Data.Builder().putString("projectId", project.id).putString("prompt", brief).build()
         ).addTag("analysis:${project.id}").build()
         val workManager = WorkManager.getInstance(getApplication())
-        workManager.enqueue(request)
-        viewModelScope.launch {
+        
+        viewModelScope.launch { 
+            store.save(project) 
+            workManager.enqueue(request)
+            
             val info = awaitWork(workManager, request.id) { running ->
                 val stage = running.progress.getString("stage")
                 val percent = running.progress.getInt("percent", 0)
