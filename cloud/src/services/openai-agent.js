@@ -41,7 +41,6 @@ function createOpenAIDecisionProvider({
     const requestPayload = {
       model,
       messages,
-      ...(temperature !== undefined ? { temperature } : {}),
       ...(responseFormat ? { response_format: responseFormat } : {}),
       ...(tools && AGENT_TOOLS.length > 0 ? { tools: AGENT_TOOLS.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })) } : {}),
     };
