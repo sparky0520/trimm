@@ -31,10 +31,11 @@ function createOpenAIDecisionProvider({
       messages.push({ role: 'user', content: String(contents) });
     }
 
+    const isO1Model = model.startsWith('o1') || model.startsWith('o3');
     const requestPayload = {
       model,
       messages,
-      temperature,
+      ...(isO1Model ? { temperature: 1 } : (temperature !== undefined ? { temperature } : {})),
       ...(responseFormat ? { response_format: responseFormat } : {}),
       ...(tools && AGENT_TOOLS.length > 0 ? { tools: AGENT_TOOLS.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })) } : {}),
     };
