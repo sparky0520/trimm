@@ -83,7 +83,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 
-@Composable fun AppWithDrawer(vm: EditorViewModel = viewModel()) {
+@Composable fun AppWithDrawer(vm: ChatViewModel = viewModel()) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     

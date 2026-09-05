@@ -34,12 +34,11 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import ai.trimm.mobile.network.ChatApiService
 import ai.trimm.mobile.network.ChatRepository
-import ai.trimm.mobile.network.ChatEditRequest
 import ai.trimm.mobile.network.supabase
 import io.github.jan.supabase.storage.storage
 import java.security.MessageDigest
 
-data class EditorState(
+data class ChatState(
     val sources: List<SourceMedia> = emptyList(),
     val preferences: WizardPreferences = WizardPreferences(),
     val creatorPreferences: CreatorPreferenceProfile = CreatorPreferenceProfile(),

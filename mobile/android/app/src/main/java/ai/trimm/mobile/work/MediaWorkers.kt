@@ -106,7 +106,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                 editorialProfile = null,
                 storyGraph = null,
                 mediaIndex = null,
-                revisionConversation = listOf(EditorialConversationTurn(
+                chatHistory = listOf(EditorialConversationTurn(
                     request = initialPrompt,
                     response = "I analyzed the clips and prepared an evidence-backed first cut."
                 )),
@@ -128,7 +128,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                 java.io.File(applicationContext.cacheDir, "agent-derivatives"),
                 AndroidDerivativeWriter(applicationContext)
             )
-            val coordinator = AgentRunCoordinator(
+            val coordinator = ChatCompletionCoordinator(
                 AgentRunClient(BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken),
                 AgentEvidenceFulfiller { job ->
                     val derivative = preparer.prepare(DerivativeAuthorization(job), project.orderedSources)
@@ -142,6 +142,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                         deviceSessionId = deviceSessionId,
                         projectRevision = analyzed.revision,
                         intent = initialPrompt,
+                        history = listOf(ChatMessage("user", initialPrompt)),
                         sources = project.orderedSources.mapIndexed { index, source ->
                             Layer2SourceInventory(
                                 "${source.fingerprint}-$index", source.fingerprint, source.durationMs,
@@ -170,7 +171,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                     analyzed = analyzed.copy(analysis = analyzed.analysis.copy(
                         agentRun = completedRun,
                         pendingProposal = proposal,
-                        revisionConversation = listOf(EditorialConversationTurn(
+                        chatHistory = listOf(EditorialConversationTurn(
                             request = initialPrompt,
                             response = proposal.summary,
                             evidenceIds = proposal.evidenceIds
@@ -185,8 +186,8 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                 analyzed = analyzed.copy(analysis = analyzed.analysis.copy(
                     warnings = analyzed.analysis.warnings + "Agent run could not continue: $detail",
                     agentRun = failedRun,
-                    revisionConversation = analyzed.analysis.revisionConversation.mapIndexed { index, turn -> 
-                        if (index == analyzed.analysis.revisionConversation.lastIndex) {
+                    chatHistory = analyzed.analysis.chatHistory.mapIndexed { index, turn -> 
+                        if (index == analyzed.analysis.chatHistory.lastIndex) {
                             turn.copy(isError = true, isPending = false, response = detail)
                         } else turn
                     }
@@ -295,34 +296,4 @@ private fun Throwable.detailedMessage(fallback: String): String =
         .joinToString(" → ")
         .ifBlank { fallback }
 
-class ChatEditWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
-    override suspend fun doWork(): Result = runCatching {
-        val projectId = requireNotNull(inputData.getString("projectId"))
-        val message = requireNotNull(inputData.getString("message"))
-        val turnId = requireNotNull(inputData.getString("turnId"))
-        
-        val store = ProjectStore(applicationContext)
-        val project = store.load(projectId)
-        
-        val preparer = SelectiveDerivativePreparer(
-            java.io.File(applicationContext.cacheDir, "agent-derivatives"), AndroidDerivativeWriter(applicationContext)
-        )
-        val transcript = sourceTranscript(project.analysis.words, project.orderedSources)
-        val apiService = ai.trimm.mobile.network.ChatApiService.create()
 
-        val request = ai.trimm.mobile.network.ChatEditRequest(
-            prompt = message,
-            parentId = project.analysis.appliedEditCheckpoints.lastOrNull()?.id,
-            chatId = project.id,
-            transcript = transcript.joinToString(" ") { it.text }
-        )
-        
-        val token = ai.trimm.mobile.auth.AuthTokenProvider.currentToken()
-        apiService.submitEdit("Bearer $token", request)
-        
-        Result.success()
-    }.getOrElse { error ->
-        Log.e("ChatEditWorker", "Edit failed", error)
-        Result.failure(Data.Builder().putString("error", error.message).build())
-    }
-}

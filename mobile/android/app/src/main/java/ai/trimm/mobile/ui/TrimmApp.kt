@@ -83,7 +83,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 
-@Composable fun TrimmApp(vm: EditorViewModel, onOpenDrawer: () -> Unit) {
+@Composable fun TrimmApp(vm: ChatViewModel, onOpenDrawer: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var isOnline by rememberSaveable { mutableStateOf(true) }
@@ -125,9 +125,9 @@ import kotlinx.serialization.json.jsonPrimitive
     Box(Modifier.fillMaxSize()) {
         when {
             state.source == null -> ImportScreen(LocalContext.current as Activity, vm::import, state.isLoadingPastChats, onOpenDrawer)
-            state.project != null -> EditorScreen(
+            state.project != null -> ChatView(
                 state, vm::undo, vm::export, vm::applyProposal, vm::rejectProposal,
-                vm::undoCheckpoint,
+                vm::undoCheckpoint, vm::undoTurn,
                 vm::reviseStory, vm::retryTurn, vm::switchBranch, vm::recoverAgent, vm::cancelAnalysis,
                 vm::relinkVideo,
                 isOnline,

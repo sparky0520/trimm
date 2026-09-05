@@ -9,16 +9,10 @@ import ai.trimm.mobile.BuildConfig
 
 import com.google.gson.annotations.SerializedName
 
-data class ChatEditRequest(
-    @SerializedName("prompt") val prompt: String,
-    @SerializedName("parentId") val parentId: String?,
-    @SerializedName("chatId") val chatId: String,
-    @SerializedName("transcript") val transcript: String?
-)
-
-data class ChatEditResponse(
-    @SerializedName("status") val status: String,
-    @SerializedName("checkpointId") val checkpointId: String
+data class ChatCompletionResponse(
+    @SerializedName("type") val type: String,
+    @SerializedName("operations") val operations: List<com.google.gson.JsonObject>,
+    @SerializedName("summary") val summary: String? = null
 )
 
 data class ChatTitleRequest(
@@ -30,11 +24,11 @@ data class ChatTitleResponse(
 )
 
 interface ChatApiService {
-    @POST("/v1/chats/edit")
-    suspend fun submitEdit(
+    @POST("/v1/chat/completion")
+    suspend fun chatCompletion(
         @Header("Authorization") authorization: String,
-        @Body request: ChatEditRequest
-    ): ChatEditResponse
+        @Body request: ai.trimm.mobile.planner.AgentRunRequest
+    ): ChatCompletionResponse
 
     @POST("/v1/chats/title")
     suspend fun generateTitle(
@@ -53,11 +47,7 @@ interface ChatApiService {
         @Header("Authorization") authorization: String
     ): com.google.gson.JsonObject
 
-    @retrofit2.http.GET("/v1/chats/{chatId}/checkpoints")
-    suspend fun getCheckpoints(
-        @Header("Authorization") authorization: String,
-        @retrofit2.http.Path("chatId") chatId: String
-    ): com.google.gson.JsonObject
+
 
     @retrofit2.http.GET("/v1/projects/{id}")
     suspend fun getProject(@Header("Authorization") authorization: String, @retrofit2.http.Path("id") id: String): com.google.gson.JsonObject

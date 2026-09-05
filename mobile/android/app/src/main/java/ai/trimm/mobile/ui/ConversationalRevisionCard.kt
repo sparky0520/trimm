@@ -90,8 +90,8 @@ import kotlinx.serialization.json.jsonPrimitive
 ) {
     var request by rememberSaveable { mutableStateOf("") }
     ReviewSurface("REVISE", "Keep editing conversationally") {
-        project.analysis.activeConversationPath.takeLast(3).forEach { turn ->
-            val siblings = project.analysis.revisionConversation.filter { it.parentId == turn.parentId }
+        project.analysis.activeChatPath.takeLast(3).forEach { turn ->
+            val siblings = project.analysis.chatHistory.filter { it.parentId == turn.parentId }
             val index = siblings.indexOf(turn)
             
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {

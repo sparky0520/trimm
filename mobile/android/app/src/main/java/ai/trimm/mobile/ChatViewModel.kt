@@ -36,15 +36,15 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import ai.trimm.mobile.network.ChatApiService
 import ai.trimm.mobile.network.ChatRepository
-import ai.trimm.mobile.network.ChatEditRequest
 import ai.trimm.mobile.network.supabase
 import io.github.jan.supabase.storage.storage
 import java.security.MessageDigest
+import okhttp3.MediaType.Companion.toMediaType
 
 
 
-class EditorViewModel(application: Application) : AndroidViewModel(application) {
-    private val mutable = MutableStateFlow(EditorState())
+class ChatViewModel(application: Application) : AndroidViewModel(application) {
+    private val mutable = MutableStateFlow(ChatState())
     val state = mutable.asStateFlow()
     private val store = ProjectStore(application)
 
@@ -92,7 +92,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun newChat() {
-        mutable.value = EditorState(
+        mutable.value = ChatState(
             creatorPreferences = mutable.value.creatorPreferences,
             pastChats = mutable.value.pastChats
         )
@@ -123,26 +123,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 isProcessing = false
             )
 
-            // Recover missed checkpoints from the background
-            runCatching {
-                val token = ai.trimm.mobile.auth.AuthTokenProvider.currentToken()
-                val apiService = ai.trimm.mobile.network.ChatApiService.create()
-                val response = apiService.getCheckpoints("Bearer $token", id)
-                val checkpoints = response.getAsJsonArray("checkpoints")
-                
-                if (checkpoints.size() > 0) {
-                    val currentProject = mutable.value.project ?: return@runCatching
-                    
-                    // Simple recovery: if we had a pending conversation turn, and we have completed checkpoints, mark it finished
-                    val finished = currentProject.copy(analysis = currentProject.analysis.copy(
-                        revisionConversation = currentProject.analysis.revisionConversation.map { turn ->
-                            if (turn.isPending) turn.copy(response = "Revised proposal ready to review (recovered)", isPending = false, isError = false) else turn
-                        }
-                    ))
-                    store.save(finished)
-                    mutable.value = mutable.value.copy(project = finished)
-                }
-            }
+
         } catch (e: Exception) {
             mutable.value = mutable.value.copy(errorMessage = "Failed to load chat: ${e.message}")
         }
@@ -151,7 +132,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun import(uris: List<Uri>) = viewModelScope.launch {
         val sources = uris.distinct().map { uri -> readSource(uri) }
         require(sources.isNotEmpty()) { "Choose at least one video." }
-        mutable.value = EditorState(
+        mutable.value = ChatState(
             sources = sources,
             creatorPreferences = mutable.value.creatorPreferences,
             pastChats = mutable.value.pastChats
@@ -360,7 +341,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (text.isBlank() || mutable.value.isProcessing) return
         val currentProject = mutable.value.project ?: return
         val turnId = java.util.UUID.randomUUID().toString()
-        val parentId = currentProject.analysis.activeTurnId ?: currentProject.analysis.revisionConversation.lastOrNull()?.id
+        val parentId = currentProject.analysis.activeTurnId ?: currentProject.analysis.chatHistory.lastOrNull()?.id
         val pendingTurn = EditorialConversationTurn(
             id = turnId,
             parentId = parentId,
@@ -371,7 +352,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         )
         val updatedProject = currentProject.copy(
             analysis = currentProject.analysis.copy(
-                revisionConversation = (currentProject.analysis.revisionConversation + pendingTurn).takeLast(50),
+                chatHistory = (currentProject.analysis.chatHistory + pendingTurn).takeLast(50),
                 activeTurnId = turnId
             )
         )
@@ -388,7 +369,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 when (val result = ConversationalRevisionEngine.revise(updatedProject, text)) {
                     is ConversationalRevisionResult.Answer -> {
                         val finished = updatedProject.copy(analysis = updatedProject.analysis.copy(
-                            revisionConversation = updatedProject.analysis.revisionConversation.map {
+                            chatHistory = updatedProject.analysis.chatHistory.map {
                                 if (it.id == turnId) it.copy(response = result.text, isPending = false, isError = false) else it
                             }
                         ))
@@ -397,7 +378,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     }
                     is ConversationalRevisionResult.Clarification -> {
                         val finished = updatedProject.copy(analysis = updatedProject.analysis.copy(
-                            revisionConversation = updatedProject.analysis.revisionConversation.map {
+                            chatHistory = updatedProject.analysis.chatHistory.map {
                                 if (it.id == turnId) it.copy(response = result.question, isPending = false, isError = false) else it
                             }
                         ))
@@ -406,7 +387,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     }
                     is ConversationalRevisionResult.Revision -> {
                         val finished = result.project.copy(analysis = result.project.analysis.copy(
-                            revisionConversation = result.project.analysis.revisionConversation.map {
+                            chatHistory = result.project.analysis.chatHistory.map {
                                 if (it.id == turnId) it.copy(response = "Revised proposal ready to review", isPending = false, isError = false) else it
                             }
                         ))
@@ -432,10 +413,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun retryTurn(turnId: String) {
         val project = mutable.value.project ?: return
-        val turn = project.analysis.revisionConversation.firstOrNull { it.id == turnId } ?: return
+        val turn = project.analysis.chatHistory.firstOrNull { it.id == turnId } ?: return
         val updatedProject = project.copy(
             analysis = project.analysis.copy(
-                revisionConversation = project.analysis.revisionConversation.map {
+                chatHistory = project.analysis.chatHistory.map {
                     if (it.id == turnId) it.copy(response = "Trimm is thinking…", isPending = true, isError = false) else it
                 }
             )
@@ -469,7 +450,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 java.io.File(getApplication<Application>().cacheDir, "agent-derivatives"),
                 AndroidDerivativeWriter(getApplication())
             )
-            val coordinator = AgentRunCoordinator(
+            val coordinator = ChatCompletionCoordinator(
                 AgentRunClient(BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken),
                 AgentEvidenceFulfiller { job ->
                     val derivative = preparer.prepare(DerivativeAuthorization(job), project.orderedSources)
@@ -481,7 +462,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 projectId = project.id,
                 deviceSessionId = deviceSessionId,
                 projectRevision = previous.projectRevision,
-                intent = project.analysis.revisionConversation.firstOrNull()?.request
+                intent = project.analysis.chatHistory.firstOrNull()?.request
                     ?: "Make this video publishable",
                 sources = project.orderedSources.mapIndexed { index, source ->
                     Layer2SourceInventory(
@@ -542,69 +523,104 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val uploadVideoContext = true // Boolean flag to control video upload
 
     private fun continueChatConversation(project: MobileProject, turnId: String, message: String) {
-        val workManager = androidx.work.WorkManager.getInstance(getApplication())
-        val data = androidx.work.Data.Builder()
-            .putString("projectId", project.id)
-            .putString("message", message)
-            .putString("turnId", turnId)
-            .putBoolean("uploadVideoContext", uploadVideoContext)
-            .build()
-        val request = androidx.work.OneTimeWorkRequestBuilder<ai.trimm.mobile.work.ChatEditWorker>()
-            .setInputData(data)
-            .setConstraints(androidx.work.Constraints.Builder().setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build())
-            .build()
-        workManager.enqueue(request)
+        val currentProject = mutable.value.project ?: return
+        
+        mutable.value = mutable.value.copy(jobMessage = "Uploading video context (background)...", isProcessing = true)
 
-        mutable.value = mutable.value.copy(jobMessage = "Uploading video context (background)...")
-
-        val repository = ChatRepository()
         viewModelScope.launch {
-            // Start listening to the realtime updates for this checkpoint in case the app stays open
-            chatListenJob?.cancel()
-            chatListenJob = launch {
-                repository.listenForCheckpoints(project.id).collect { checkpointData ->
-                    val status = checkpointData["status"]?.jsonPrimitive?.content
-                    val currentProject = mutable.value.project ?: return@collect
-                    
-                    if (status == "failed") {
-                        val failed = currentProject.copy(analysis = currentProject.analysis.copy(
-                            revisionConversation = currentProject.analysis.revisionConversation.map {
-                                if (it.id == turnId) it.copy(isPending = false, isError = true) else it
-                            }
-                        ))
-                        store.save(failed)
-                        mutable.value = mutable.value.copy(
-                            project = failed,
-                            errorMessage = "Agent run failure: backend processing failed.",
-                            jobMessage = null,
-                            isProcessing = false
-                        )
-                    } else {
-                        val finished = currentProject.copy(analysis = currentProject.analysis.copy(
-                            revisionConversation = currentProject.analysis.revisionConversation.map {
-                                if (it.id == turnId) it.copy(response = "Revised proposal ready to review", isPending = false, isError = false) else it
-                            }
-                        ))
-                        store.save(finished)
-                        mutable.value = mutable.value.copy(project = finished, jobMessage = "Applying edits...", isProcessing = false)
-                        // TODO: Apply edits
-                    }
+            val deviceSessionId = "android-${project.id}"
+            val uploadClient = DerivativeUploadClient(
+                BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken, project.id, deviceSessionId
+            )
+            val preparer = SelectiveDerivativePreparer(
+                java.io.File(getApplication<Application>().cacheDir, "agent-derivatives"),
+                AndroidDerivativeWriter(getApplication())
+            )
+            val coordinator = ChatCompletionCoordinator(
+                AgentRunClient(BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken),
+                AgentEvidenceFulfiller { job ->
+                    val derivative = preparer.prepare(DerivativeAuthorization(job), project.orderedSources)
+                    try { uploadClient.upload(derivative) }
+                    finally { java.io.File(derivative.localPath).delete() }
+                }
+            )
+
+            // Prepare history
+            val history = mutableListOf<ChatMessage>()
+            project.analysis.chatHistory.filter { it.isPending == false && it.isError == false }.forEach { turn ->
+                history.add(ChatMessage("user", turn.request))
+                if (turn.response != null) {
+                    history.add(ChatMessage("assistant", turn.response))
                 }
             }
-            
-            val info = awaitWork(workManager, request.id)
-            if (info.state == androidx.work.WorkInfo.State.FAILED) {
-                val errorMsg = info.outputData.getString("error") ?: "Failed to initiate chat edit."
-                val currentProject = mutable.value.project ?: return@launch
-                val failed = currentProject.copy(analysis = currentProject.analysis.copy(
-                    revisionConversation = currentProject.analysis.revisionConversation.map {
-                        if (it.id == turnId) it.copy(isPending = false, isError = true) else it
+            history.add(ChatMessage("user", message)) // Current turn is already in project with isPending=true, we just append the message to history request.
+
+            val request = AgentRunRequest(
+                projectId = project.id,
+                deviceSessionId = deviceSessionId,
+                projectRevision = project.revision,
+                intent = message,
+                history = history,
+                sources = project.orderedSources.mapIndexed { index, source ->
+                    Layer2SourceInventory(
+                        "${source.fingerprint}-$index", source.fingerprint, source.durationMs,
+                        source.width, source.height, source.hasAudio
+                    )
+                },
+                transcript = sourceTranscript(project.analysis.words, project.orderedSources),
+                existingOperations = project.operations.map { operation ->
+                    val json = Json { encodeDefaults = true }
+                    json.encodeToJsonElement(EditInstruction.serializer(), operation).jsonObject
+                },
+                uploadInitialVideoContext = false
+            )
+
+            runCatching {
+                coordinator.orchestrateStateless(
+                    request = request,
+                    projectDurationMs = project.durationMs,
+                    onProgress = { stage, percent ->
+                        mutable.value = mutable.value.copy(jobMessage = processingMessage(stage, percent))
+                    },
+                    onPersist = { snapshot, plan ->
+                        // Optional persist
+                    }
+                )
+            }.onSuccess { snapshot ->
+                AgentDecisionMapper.pendingProposal(snapshot)?.let { proposal ->
+                    val latest = store.load(project.id)
+                    InstructionValidator.validate(latest, proposal.operations, proposal.expectedRevision)
+                    val updated = latest.copy(analysis = latest.analysis.copy(
+                        agentRun = snapshot,
+                        pendingProposal = proposal,
+                        chatHistory = latest.analysis.chatHistory.map {
+                            if (it.id == turnId) it.copy(response = proposal.summary, isPending = false, isError = false) else it
+                        }
+                    ))
+                    store.save(updated)
+                    mutable.value = mutable.value.copy(project = updated, isProcessing = false, jobMessage = "Proposed edit ready to review")
+                } ?: run {
+                    val latest = store.load(project.id)
+                    val updated = latest.copy(analysis = latest.analysis.copy(
+                        agentRun = snapshot,
+                        chatHistory = latest.analysis.chatHistory.map {
+                            if (it.id == turnId) it.copy(isPending = false, isError = true, response = "No proposal generated") else it
+                        }
+                    ))
+                    store.save(updated)
+                    mutable.value = mutable.value.copy(project = updated, isProcessing = false, errorMessage = "Agent returned no proposal")
+                }
+            }.onFailure { error ->
+                val latest = store.load(project.id)
+                val failed = latest.copy(analysis = latest.analysis.copy(
+                    chatHistory = latest.analysis.chatHistory.map {
+                        if (it.id == turnId) it.copy(isPending = false, isError = true, response = error.message ?: "Unknown error") else it
                     }
                 ))
                 store.save(failed)
                 mutable.value = mutable.value.copy(
                     project = failed,
-                    errorMessage = errorMsg,
+                    errorMessage = error.message ?: "Chat processing failed",
                     jobMessage = null,
                     isProcessing = false
                 )
@@ -615,10 +631,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun answerClarification(turnId: String, optionId: String, label: String) {
         val project = mutable.value.project ?: return
-        val turn = project.analysis.revisionConversation.firstOrNull { it.id == turnId } ?: return
+        val turn = project.analysis.chatHistory.firstOrNull { it.id == turnId } ?: return
         val updatedProject = project.copy(
             analysis = project.analysis.copy(
-                revisionConversation = project.analysis.revisionConversation.map {
+                chatHistory = project.analysis.chatHistory.map {
                     if (it.id == turnId) it.copy(response = "Choice: $label", isPending = false, isError = false) else it
                 }
             )
@@ -658,37 +674,96 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun undoCheckpoint(checkpointId: String) {
         val project = mutable.value.project ?: return
         
-        // Find the checkpoint to determine which turn it belonged to
-        // If we can't find it, just return
         val targetCheckpointIndex = project.analysis.appliedEditCheckpoints.indexOfFirst { it.id == checkpointId }
         if (targetCheckpointIndex == -1) {
             mutable.value = mutable.value.copy(jobMessage = "Checkpoint not found.")
             return
         }
 
-        // We want to undo this checkpoint, meaning we want to restore to the state BEFORE it was applied.
         var currentProject = project
         while (currentProject.analysis.appliedEditCheckpoints.any { it.id == checkpointId }) {
             val nextProject = currentProject.restoreCheckpoint()
-            if (nextProject === currentProject) break // Reached the beginning
+            if (nextProject === currentProject) break 
             currentProject = nextProject
         }
         
-        // Find the turn that corresponds to the checkpoint to get its request text
-        // We can look at the active turn of the project right before the checkpoint was applied
-        // Wait, currentProject is the state BEFORE the checkpoint. The prompt that caused the checkpoint
-        // might be the last one in currentProject's activeConversationPath or we can just look at the 
-        // original project's activeConversationPath up to the turn that corresponds to it.
-        // Let's just find the first turn that happened after the restored state's revision.
-        val undoneTurn = project.analysis.revisionConversation.find { it.id == project.analysis.activeTurnId }
-        val promptText = undoneTurn?.request ?: ""
+        // Also truncate the conversation history to this point
+        val activeConversationIdx = currentProject.analysis.chatHistory.indexOfFirst { it.id == currentProject.analysis.activeTurnId }
+        val truncatedConversation = if (activeConversationIdx != -1) {
+            currentProject.analysis.chatHistory.take(activeConversationIdx + 1)
+        } else {
+            currentProject.analysis.chatHistory
+        }
+
+        currentProject = currentProject.copy(analysis = currentProject.analysis.copy(chatHistory = truncatedConversation))
+        
+        val promptText = truncatedConversation.lastOrNull()?.request ?: ""
 
         updateProject(currentProject, preview = true)
+        
+        // Push the truncated project to Supabase via sync
+        viewModelScope.launch {
+            runCatching {
+                val apiService = ai.trimm.mobile.network.ChatApiService.create()
+                val token = ai.trimm.mobile.auth.AuthTokenProvider.currentToken()
+                val projectJson = kotlinx.serialization.json.Json { encodeDefaults = true }.encodeToString(MobileProject.serializer(), currentProject)
+                val requestBody = okhttp3.RequestBody.create("application/json".toMediaType(), projectJson)
+                apiService.syncProject("Bearer $token", requestBody)
+            }
+        }
+
         mutable.value = mutable.value.copy(
             jobMessage = "Restored to previous state",
             pendingChatMessage = promptText,
             initialRequest = if (currentProject.analysis.appliedEditCheckpoints.isEmpty()) promptText else mutable.value.initialRequest
         )
+    }
+    
+    fun undoTurn(turnId: String) {
+        val project = mutable.value.project ?: return
+        
+        cancelAnalysis()
+        mutable.value = mutable.value.copy(isProcessing = true, jobMessage = "Restoring previous state...")
+        
+        val targetTurnIndex = project.analysis.chatHistory.indexOfFirst { it.id == turnId }
+        if (targetTurnIndex == -1) {
+            mutable.value = mutable.value.copy(isProcessing = false)
+            return
+        }
+        
+        var currentProject = project
+        while (currentProject.analysis.chatHistory.indexOfFirst { it.id == currentProject.analysis.activeTurnId } >= targetTurnIndex) {
+            val nextProject = currentProject.restoreCheckpoint()
+            if (nextProject === currentProject) break 
+            currentProject = nextProject
+        }
+
+        val truncatedConversation = currentProject.analysis.chatHistory.take(targetTurnIndex)
+        currentProject = currentProject.copy(analysis = currentProject.analysis.copy(
+            chatHistory = truncatedConversation,
+            activeTurnId = truncatedConversation.lastOrNull()?.id
+        ))
+        
+        val promptText = truncatedConversation.lastOrNull()?.request ?: ""
+
+        updateProject(currentProject, preview = true)
+        
+        viewModelScope.launch {
+            runCatching {
+                val apiService = ai.trimm.mobile.network.ChatApiService.create()
+                val token = ai.trimm.mobile.auth.AuthTokenProvider.currentToken()
+                val projectJson = kotlinx.serialization.json.Json { encodeDefaults = true }.encodeToString(MobileProject.serializer(), currentProject)
+                val requestBody = okhttp3.RequestBody.create("application/json".toMediaType(), projectJson)
+                apiService.syncProject("Bearer $token", requestBody)
+            }
+            
+            mutable.value = mutable.value.copy(
+                isProcessing = false,
+                jobMessage = "Restored to previous state",
+                pendingChatMessage = promptText,
+                initialRequest = if (currentProject.analysis.appliedEditCheckpoints.isEmpty()) promptText else mutable.value.initialRequest
+            )
+        }
     }
     fun export() { mutable.value.project?.let { project ->
         val manager = WorkManager.getInstance(getApplication())

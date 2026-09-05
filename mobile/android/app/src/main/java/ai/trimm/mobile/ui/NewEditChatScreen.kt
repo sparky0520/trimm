@@ -83,7 +83,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 
-@Composable fun NewEditChatScreen(state: EditorState, createDraft: (String) -> Unit, moveClip: (Int, Int) -> Unit, onRelink: (Uri) -> Unit, isOnline: Boolean, onOpenDrawer: () -> Unit) {
+@Composable fun NewEditChatScreen(state: ChatState, createDraft: (String) -> Unit, moveClip: (Int, Int) -> Unit, onRelink: (Uri) -> Unit, isOnline: Boolean, onOpenDrawer: () -> Unit) {
     val relinkLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { if (it != null) onRelink(it) }
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     var message by rememberSaveable { mutableStateOf("") }

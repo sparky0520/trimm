@@ -18,7 +18,6 @@ import { PostgresDerivativeJobs } from './db/postgres-derivative-jobs.js';
 
 import { createOpenAIDecisionProvider } from './services/openai-agent.js';
 import { AudioGeneration } from './services/audio-generation.js';
-import { ChatService } from './services/chat-service.js';
 
 const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.LLM_API_KEY;
@@ -38,7 +37,6 @@ const derivativeJobs = process.env.SUPABASE_DB_URL
   ? new PostgresDerivativeJobs({ databaseUrl: process.env.SUPABASE_DB_URL })
   : new DerivativeJobs({});
 const agentDecisionProvider = createOpenAIDecisionProvider();
-const chatService = new ChatService();
 
 const audioGeneration = new AudioGeneration();
 const derivativeCleanupTimer = setInterval(() => {
@@ -56,7 +54,7 @@ function policyFor(request, pathname) {
     resourceType: 'derivative_job',
   };
   if (pathname.startsWith('/v1/transcribe')) return { scope: 'transcribe:create', action: request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'update' : 'create', resourceType: 'transcription' };
-  if (pathname.startsWith('/v1/audio') || pathname === '/v1/agent/plan' || pathname === '/v1/agent/execute') {
+  if (pathname.startsWith('/v1/audio') || pathname === '/v1/chat/completion') {
     return { scope: 'plan:create', action: 'create', resourceType: 'plan' };
   }
   return null;
@@ -258,79 +256,17 @@ const server = http.createServer(async (request, response) => {
     }
   }
 
-  if (request.method === 'POST' && requestUrl.pathname === '/v1/agent/plan') {
-    try {
-      const body = await collect(request, 1024 * 1024);
-      const { prompt } = body;
-      return json(response, 200, await agentDecisionProvider.generatePlan({ prompt }));
-    } catch (error) {
-      console.error('[agent-plan] request failed', { message: error?.message, status: error?.status, code: error?.code });
-      return json(response, Number.isInteger(error?.status) ? error.status : 500, {
-        error: error?.message || 'Failed to generate plan.',
-        code: error?.code || 'agent_plan_failed',
-        requestId,
-      });
-    }
-  }
-
-  if (request.method === 'POST' && requestUrl.pathname === '/v1/agent/execute') {
+  if (request.method === 'POST' && requestUrl.pathname === '/v1/chat/completion') {
     try {
       const payload = await collect(request, 5 * 1024 * 1024);
-
-      return json(response, 200, await agentDecisionProvider.executeTask(payload));
+      return json(response, 200, await agentDecisionProvider.chatCompletion(payload));
     } catch (error) {
-      console.error('[agent-execute] request failed', { message: error?.message, status: error?.status, code: error?.code });
+      console.error('[chat-completion] request failed', { message: error?.message, status: error?.status, code: error?.code });
       return json(response, Number.isInteger(error?.status) ? error.status : 500, {
-        error: error?.message || 'Failed to execute task.',
-        code: error?.code || 'agent_execute_failed',
+        error: error?.message || 'Failed to generate chat completion.',
+        code: error?.code || 'chat_completion_failed',
         requestId,
       });
-    }
-  }
-
-  if (request.method === 'POST' && requestUrl.pathname === '/v1/chats/edit') {
-    try {
-      // Create a background job for chat editing
-      const body = await collect(request);
-      const chatId = body.chatId || body.chat_id;
-      const parentId = body.parentId || body.parent_id;
-      const prompt = body.prompt;
-
-      if (!chatId || !prompt) {
-        throw Object.assign(new Error('Missing chatId or prompt'), { status: 400 });
-      }
-
-      const principal = await authentication.authenticate(request);
-
-      // 1. Create Checkpoint as 'pending'
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabase = createClient(
-        process.env.SUPABASE_URL || '',
-        process.env.SUPABASE_SECRET_KEY || ''
-      );
-
-      const { data, error } = await supabase.from('checkpoints')
-        .insert({
-          chat_id: chatId,
-          parent_id: parentId || null,
-          status: 'pending',
-          prompt
-        })
-        .select()
-        .single();
-
-      if (error) throw Object.assign(new Error(error.message), { status: 500 });
-      const checkpointId = data.id;
-
-      // 2. Start Background processing
-      // We pass null for audioBuffer for now, as in this basic version we are testing JSON generation
-      chatService.processEditJob(checkpointId, chatId, parentId, null, prompt)
-        .catch(e => console.error('[v1/chats/edit] Background processing error:', e));
-
-      return json(response, 202, { checkpointId, checkpoint_id: checkpointId, status: 'pending' });
-    } catch (error) {
-      console.error('[chats-edit] request failed', { message: error?.message });
-      return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message || 'Chat edit initiation failed' });
     }
   }
 
@@ -483,39 +419,7 @@ const server = http.createServer(async (request, response) => {
   }
 
 
-  if (request.method === 'GET' && requestUrl.pathname.startsWith('/v1/chats/') && requestUrl.pathname.endsWith('/checkpoints')) {
-    try {
-      const principal = await authentication.authenticate(request);
-      const chatId = requestUrl.pathname.split('/')[3];
 
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabase = createClient(
-        process.env.SUPABASE_URL || '',
-        process.env.SUPABASE_SECRET_KEY || ''
-      );
-
-      // We first check if the chat belongs to the user
-      const { data: chatData, error: chatError } = await supabase.from('chats')
-        .select('id')
-        .eq('id', chatId)
-        .eq('user_id', principal.sub)
-        .single();
-
-      if (chatError) throw Object.assign(new Error('Chat not found or unauthorized'), { status: 404 });
-
-      const { data, error } = await supabase.from('checkpoints')
-        .select('*')
-        .eq('chat_id', chatId)
-        .eq('status', 'completed');
-
-      if (error) throw Object.assign(new Error(error.message), { status: 500 });
-
-      return json(response, 200, { checkpoints: data });
-    } catch (error) {
-      console.error('[checkpoints-get] request failed', { message: error?.message });
-      return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message || 'Checkpoints fetch failed' });
-    }
-  }
 
   return json(response, 404, { error: 'Not found' });
 });

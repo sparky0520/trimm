@@ -23,6 +23,9 @@ import java.net.URI
 import ai.trimm.mobile.planning.RequestShapedMediaIndex
 
 @Serializable
+data class ChatMessage(val role: String, val content: String)
+
+@Serializable
 data class AgentRunRequest(
     val projectId: String,
     val deviceSessionId: String,
@@ -30,6 +33,7 @@ data class AgentRunRequest(
     val intent: String,
     val sources: List<Layer2SourceInventory>,
     val transcript: List<Layer2TranscriptWord> = emptyList(),
+    val history: List<ChatMessage> = emptyList(),
     val evidenceJobIds: List<String> = emptyList(),
     val existingOperations: List<JsonObject> = emptyList(),
     val uploadInitialVideoContext: Boolean = false,

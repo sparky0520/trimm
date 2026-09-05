@@ -206,7 +206,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val agentRun: PersistedAgentRun? = null,
     val editorialPlan: StagedEditorialPlan? = null,
     val pendingProposal: PendingEditorialProposal? = null,
-    val revisionConversation: List<EditorialConversationTurn> = emptyList(),
+    @SerialName("revisionConversation") val chatHistory: List<EditorialConversationTurn> = emptyList(),
     val appliedEditCheckpoints: List<AppliedEditCheckpoint> = emptyList(),
     val settledConstraints: List<SettledEditorialConstraint> = emptyList(),
     val warnings: List<String> = emptyList(),
@@ -214,11 +214,11 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val activeTurnId: String? = null,
     val activeCheckpointId: String? = null
 ) {
-    val activeConversationPath: List<EditorialConversationTurn> get() {
+    val activeChatPath: List<EditorialConversationTurn> get() {
         val path = mutableListOf<EditorialConversationTurn>()
-        var currentId = activeTurnId ?: revisionConversation.lastOrNull()?.id
+        var currentId = activeTurnId ?: chatHistory.lastOrNull()?.id
         while (currentId != null) {
-            val turn = revisionConversation.firstOrNull { it.id == currentId }
+            val turn = chatHistory.firstOrNull { it.id == currentId }
             if (turn != null) {
                 path.add(0, turn)
                 currentId = turn.parentId

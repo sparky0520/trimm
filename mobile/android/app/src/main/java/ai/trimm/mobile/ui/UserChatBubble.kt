@@ -35,6 +35,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -83,20 +84,53 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 
-@Composable fun UserChatBubble(text: String) {
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable fun UserChatBubble(text: String, onUndo: (() -> Unit)? = null) {
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current // Fallback since LocalClipboard might require newer compose versions, but let's keep it safe or suppress
+    var menuExpanded by remember { mutableStateOf(false) }
+
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        Surface(
-            color = UserBlue,
-            shape = RoundedCornerShape(12.dp, 12.dp, 4.dp, 12.dp),
-            modifier = Modifier.widthIn(max = 320.dp)
-        ) {
-            Text(
-                text,
-                color = CreamRaised,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-            )
+        Box {
+            Surface(
+                color = UserBlue,
+                shape = RoundedCornerShape(12.dp, 12.dp, 4.dp, 12.dp),
+                modifier = Modifier
+                    .widthIn(max = 320.dp)
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = { menuExpanded = true }
+                    )
+            ) {
+                Text(
+                    text,
+                    color = CreamRaised,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                )
+            }
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false },
+                modifier = Modifier.background(Raised)
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Copy", color = Cream) },
+                    onClick = {
+                        clipboard.setText(androidx.compose.ui.text.AnnotatedString(text))
+                        menuExpanded = false
+                    }
+                )
+                if (onUndo != null) {
+                    DropdownMenuItem(
+                        text = { Text("Undo to this step", color = Coral) },
+                        onClick = {
+                            onUndo()
+                            menuExpanded = false
+                        }
+                    )
+                }
+            }
         }
     }
 }

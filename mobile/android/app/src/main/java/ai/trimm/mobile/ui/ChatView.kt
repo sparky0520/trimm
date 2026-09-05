@@ -83,13 +83,14 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 
-@Composable fun EditorScreen(
-    state: EditorState,
+@Composable fun ChatView(
+    state: ChatState,
     undo: () -> Unit,
     export: () -> Unit,
     applyProposal: () -> Unit,
     rejectProposal: () -> Unit,
     undoCheckpoint: (String) -> Unit,
+    undoTurn: (String) -> Unit,
     reviseStory: (String) -> Unit,
     retryTurn: (String) -> Unit,
     switchBranch: (String) -> Unit,
@@ -160,7 +161,7 @@ import kotlinx.serialization.json.jsonPrimitive
         ) {
             val chatElements = buildList {
                 state.initialRequest
-                    ?.takeIf { initial -> project.analysis.revisionConversation.none { it.request == initial } }
+                    ?.takeIf { initial -> project.analysis.chatHistory.none { it.request == initial } }
                     ?.let { initial -> add(ChatElement.InitialRequest(0L, initial)) }
 
                 project.analysis.completedAtEpochMs?.let { time ->
@@ -169,7 +170,7 @@ import kotlinx.serialization.json.jsonPrimitive
                     }
                 }
 
-                project.analysis.activeConversationPath.forEach { turn ->
+                project.analysis.activeChatPath.forEach { turn ->
                     add(ChatElement.Turn(turn.createdAtEpochMs, turn))
                 }
                 
@@ -188,12 +189,12 @@ import kotlinx.serialization.json.jsonPrimitive
                     }
                     is ChatElement.Turn -> {
                         val turn = element.turn
-                        val siblings = project.analysis.revisionConversation.filter { it.parentId == turn.parentId }
+                        val siblings = project.analysis.chatHistory.filter { it.parentId == turn.parentId }
                         val index = siblings.indexOf(turn)
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                                 Box(modifier = Modifier.weight(1f)) {
-                                    UserChatBubble(turn.request)
+                                    UserChatBubble(turn.request, onUndo = { undoTurn(turn.id) })
                                 }
                                 if (siblings.size > 1) {
                                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 8.dp)) {
@@ -307,7 +308,7 @@ import kotlinx.serialization.json.jsonPrimitive
                     AgentPlanBubble(project.analysis.agentPlan, project.analysis.agentRun)
                 }
             }
-            if (state.isProcessing && project.analysis.revisionConversation.none { it.isPending }) {
+            if (state.isProcessing && project.analysis.chatHistory.none { it.isPending }) {
                 state.jobMessage?.let { message ->
                     item(key = "job-status") {
                         AssistantChatBubble(accent = Lavender) {

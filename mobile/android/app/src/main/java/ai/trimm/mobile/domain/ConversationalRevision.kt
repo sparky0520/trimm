@@ -153,7 +153,7 @@ object ConversationalRevisionEngine {
             .filterNot { it.kind == constraint.kind } + constraint.copy(sourceTurnId = turn.id)
         val updated = project.copy(analysis = project.analysis.copy(
             pendingProposal = proposal,
-            revisionConversation = (project.analysis.revisionConversation + turn).takeLast(100),
+            chatHistory = (project.analysis.chatHistory + turn).takeLast(100),
             settledConstraints = settled
         ))
         return ConversationalRevisionResult.Revision(updated, proposal)
@@ -166,7 +166,7 @@ object ConversationalRevisionEngine {
 
     private fun appendTurn(project: MobileProject, request: String, response: String, evidenceIds: List<String>): MobileProject =
         project.copy(analysis = project.analysis.copy(
-            revisionConversation = (project.analysis.revisionConversation +
+            chatHistory = (project.analysis.chatHistory +
                 EditorialConversationTurn(request = request, response = response, evidenceIds = evidenceIds)).takeLast(100)
         ))
 }

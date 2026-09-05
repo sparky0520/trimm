@@ -134,54 +134,10 @@ Effect description: ${description}`;
     }
   };
 
-  const generatePlan = async ({ prompt }) => {
-    const systemPolicy = `You are the Trimm Router Agent. Your job is to break down a complex video editing request into a sequence of simpler tasks.
-Each task must be a natural language prompt that can be independently executed by a Worker Agent.
-Use the 'dependsOn' field to enforce sequential execution.
-If the request is too vague, return a clarification object instead of tasks.
-
-Return ONLY a valid JSON matching the schema (tasks array or clarification object).
-Schema for tasks:
-{
-  "tasks": [
-    {
-      "id": "unique-task-id",
-      "description": "Natural language description of the task",
-      "prompt": "Natural language prompt to be independently executed by a Worker Agent",
-      "dependsOn": ["optional-dependency-task-id"]
-    }
-  ]
-}`;
-
-    let history = [];
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      const response = await generate({
-        systemPolicy,
-        contents: history.length > 0 ? history : prompt,
-        temperature: 0.1,
-        purpose: 'planning',
-        tools: false,
-        responseFormat: { type: 'json_object' }
-      });
-
-      try {
-        return JSON.parse(response.rawText);
-      } catch (e) {
-        if (attempt === 3) throw Object.assign(new Error("Failed to parse router plan response"), { code: 'router_plan_error' });
-        history = [
-          { role: 'user', content: prompt },
-          { role: 'assistant', content: response.rawText || '' },
-          { role: 'user', content: "The response was not valid JSON. Please fix it. Error: " + e.message }
-        ];
-      }
-    }
-  };
-
-  const executeTask = async ({ intent, sources = [], transcript = [], existingOperations = [] }) => {
-    const systemPolicy = `You are a specialized Worker Agent for a video editor.
-Your job is to execute the user's specific editing intent by calling the appropriate tool(s).
-DO NOT use the ask_clarification tool.
-If you decide no edits are needed, or if you cannot execute the task, you MUST call the finish_without_proposal tool and thoroughly explain WHY in the reason field.
+  const chatCompletion = async ({ history = [], sources = [], transcript = [], existingOperations = [] }) => {
+    const systemPolicy = `You are an AI video editor Agent.
+Your job is to execute the user's editing requests by proposing operations using the appropriate tool(s).
+You have access to the chat history, transcript, source media, and the current project state (existing operations).
 
 Available Sources:
 ${JSON.stringify(sources)}
@@ -191,28 +147,29 @@ ${JSON.stringify(existingOperations)}
 
 Transcript Data (use this to detect dead space, silences, and timings):
 ${JSON.stringify(transcript)}
-`;
 
-    const contents = [{ role: 'user', content: `Task Intent: ${intent}` }];
+If you decide no edits are needed, or if you cannot execute the task, you MUST call the finish_without_proposal tool and thoroughly explain WHY in the reason field. DO NOT use the ask_clarification tool.`;
+
+    const contents = history.map(msg => ({ role: msg.role, content: msg.content }));
 
     const response = await generate({
       systemPolicy,
       contents,
-      temperature: 0.1,
+      temperature: 0.2, // Slightly higher than 0.1 for conversational fluidity
       purpose: 'execution',
       tools: true,
     });
 
     const failure = response.toolCalls.find(tc => tc.name === 'finish_without_proposal');
     if (failure) {
-      return { type: "edit_program", operations: [] };
+      return { type: "edit_program", operations: [], summary: failure.args.reason };
     }
 
     if (!response.toolCalls || response.toolCalls.length === 0) {
       if (response.rawText) {
-        return { type: "edit_program", operations: [] };
+        return { type: "edit_program", operations: [], summary: response.rawText };
       }
-      throw Object.assign(new Error("Worker agent did not return any operations."), { code: 'worker_execution_error' });
+      throw Object.assign(new Error("Agent did not return any operations or text response."), { code: 'worker_execution_error' });
     }
 
     const clarification = response.toolCalls.find(tc => tc.name === 'ask_clarification');
@@ -243,11 +200,12 @@ ${JSON.stringify(transcript)}
         }
 
         return { type: operationName, target, ...payload };
-      })
+      }),
+      summary: response.rawText || "Proposed edit"
     };
   };
 
-  return { generateTextOverlayConfig, generateTransitionConfig, generatePlan, executeTask };
+  return { generateTextOverlayConfig, generateTransitionConfig, chatCompletion };
 }
 
 export { createOpenAIDecisionProvider };
