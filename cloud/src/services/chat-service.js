@@ -14,10 +14,17 @@ const agentDecisionProvider = createOpenAIDecisionProvider();
 class ChatService {
   async processEditJob(checkpointId, chat_id, parent_id, audioBuffer, prompt) {
     try {
-      // 1. Mark as processing (already done by the caller, but good to ensure)
-      await supabase.from('checkpoints')
+      // 1. Mark as processing ONLY if it's currently pending to avoid race conditions
+      const { data, error } = await supabase.from('checkpoints')
         .update({ status: 'processing' })
-        .eq('id', checkpointId);
+        .eq('id', checkpointId)
+        .eq('status', 'pending')
+        .select();
+
+      if (error || !data || data.length === 0) {
+        console.warn(`[ChatService] Checkpoint ${checkpointId} is not pending. It might be already processed.`);
+        return;
+      }
 
       // 2. Transcribe Audio (if provided)
       let transcript = null;

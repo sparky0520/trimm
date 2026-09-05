@@ -160,7 +160,18 @@ Each task must be a natural language prompt that can be independently executed b
 Use the 'dependsOn' field to enforce sequential execution.
 If the request is too vague, return a clarification object instead of tasks.
 
-Return ONLY a valid JSON matching the schema (tasks array or clarification object).`;
+Return ONLY a valid JSON matching the schema (tasks array or clarification object).
+Schema for tasks:
+{
+  "tasks": [
+    {
+      "id": "unique-task-id",
+      "description": "Natural language description of the task",
+      "prompt": "Natural language prompt to be independently executed by a Worker Agent",
+      "dependsOn": ["optional-dependency-task-id"]
+    }
+  ]
+}`;
 
     let history = [];
     for (let attempt = 1; attempt <= 3; attempt++) {
