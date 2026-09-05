@@ -86,6 +86,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable fun UserChatBubble(text: String, onUndo: (() -> Unit)? = null) {
+    @Suppress("DEPRECATION")
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current // Fallback since LocalClipboard might require newer compose versions, but let's keep it safe or suppress
     var menuExpanded by remember { mutableStateOf(false) }
 

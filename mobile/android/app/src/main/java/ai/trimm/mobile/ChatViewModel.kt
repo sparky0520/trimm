@@ -42,10 +42,12 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
 import java.security.MessageDigest
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 
 
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
+    private val defaultJson = Json { encodeDefaults = true }
     private val mutable = MutableStateFlow(ChatState())
     val state = mutable.asStateFlow()
     private val store = ProjectStore(application)
@@ -483,8 +485,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 },
                 transcript = sourceTranscript(project.analysis.words, project.orderedSources),
                 existingOperations = project.operations.map { operation ->
-                    val json = Json { encodeDefaults = true }
-                           json.encodeToJsonElement(EditInstruction.serializer(), operation).jsonObject
+                    defaultJson.encodeToJsonElement(EditInstruction.serializer(), operation).jsonObject
                 },
                 uploadInitialVideoContext = false
             )
@@ -560,9 +561,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val history = mutableListOf<ChatMessage>()
             project.analysis.chatHistory.filter { it.isPending == false && it.isError == false }.forEach { turn ->
                 history.add(ChatMessage("user", turn.request))
-                if (turn.response != null) {
-                    history.add(ChatMessage("assistant", turn.response))
-                }
+                history.add(ChatMessage("assistant", turn.response))
             }
             history.add(ChatMessage("user", message)) // Current turn is already in project with isPending=true, we just append the message to history request.
 
@@ -580,8 +579,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 },
                 transcript = sourceTranscript(project.analysis.words, project.orderedSources),
                 existingOperations = project.operations.map { operation ->
-                    val json = Json { encodeDefaults = true }
-                    json.encodeToJsonElement(EditInstruction.serializer(), operation).jsonObject
+                    defaultJson.encodeToJsonElement(EditInstruction.serializer(), operation).jsonObject
                 },
                 uploadInitialVideoContext = false
             )
@@ -717,8 +715,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             runCatching {
                 val apiService = ai.trimm.mobile.network.ChatApiService.create()
                 val token = ai.trimm.mobile.auth.AuthTokenProvider.currentToken()
-                val projectJson = kotlinx.serialization.json.Json { encodeDefaults = true }.encodeToString(MobileProject.serializer(), currentProject)
-                val requestBody = okhttp3.RequestBody.create("application/json".toMediaType(), projectJson)
+                val projectJson = defaultJson.encodeToString(MobileProject.serializer(), currentProject)
+                val requestBody = projectJson.toRequestBody("application/json".toMediaType())
                 apiService.syncProject("Bearer $token", requestBody)
             }
         }
@@ -763,8 +761,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             runCatching {
                 val apiService = ai.trimm.mobile.network.ChatApiService.create()
                 val token = ai.trimm.mobile.auth.AuthTokenProvider.currentToken()
-                val projectJson = kotlinx.serialization.json.Json { encodeDefaults = true }.encodeToString(MobileProject.serializer(), currentProject)
-                val requestBody = okhttp3.RequestBody.create("application/json".toMediaType(), projectJson)
+                val projectJson = defaultJson.encodeToString(MobileProject.serializer(), currentProject)
+                val requestBody = projectJson.toRequestBody("application/json".toMediaType())
                 apiService.syncProject("Bearer $token", requestBody)
             }
             
