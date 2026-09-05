@@ -9,7 +9,7 @@ function createOpenAIDecisionProvider({
   baseURL = process.env.LLM_OPENAI_BASE_URL || 'https://api.moonshot.ai/v1',
   model = process.env.MODEL || 'kimi-k3',
 } = {}) {
-  
+
   const openai = new OpenAI({
     apiKey,
     baseURL,
@@ -20,13 +20,13 @@ function createOpenAIDecisionProvider({
     responseFormat = null, tools = true,
   }) {
     if (!apiKey) throw Object.assign(new Error('API key is not configured'), { status: 503, code: 'provider_unconfigured' });
-    
+
     // contents can be a string or an array of message objects.
     let messages = [];
     if (systemPolicy) {
       messages.push({ role: 'system', content: systemPolicy });
     }
-    
+
     if (Array.isArray(contents)) {
       // Map history from gemini style if needed, but we can assume we send standard openai role/content
       messages = messages.concat(contents.map(c => {
@@ -55,15 +55,15 @@ function createOpenAIDecisionProvider({
       console.error(`[DEBUG] OpenAI API Error:`, err);
       throw err;
     }
-    
+
     const choice = response.choices[0];
     const message = choice.message;
     const functionCalls = message.tool_calls || [];
-    
+
     if (!message.content && functionCalls.length === 0) {
       throw Object.assign(new Error('Model returned no decision.'), { status: 502, code: 'empty_provider_response' });
     }
-    
+
     return {
       rawText: message.content || null,
       toolCalls: functionCalls.map(tc => ({ name: tc.function.name, args: JSON.parse(tc.function.arguments), id: tc.id })),
@@ -232,7 +232,7 @@ ${JSON.stringify(transcript)}
       operations: validOperations.map(tc => {
         const operationName = tc.name.startsWith('propose_') ? tc.name.replace('propose_', '') : tc.name;
         let payload = tc.args.operation || tc.args;
-        
+
         let target = undefined;
         if (payload.sourceId !== undefined && payload.startMs !== undefined && payload.endMs !== undefined) {
           target = { sourceId: payload.sourceId, startMs: payload.startMs, endMs: payload.endMs };
@@ -255,4 +255,4 @@ ${JSON.stringify(transcript)}
   return { generateTextOverlayConfig, generateTransitionConfig, generatePlan, executeTask };
 }
 
-export {  createOpenAIDecisionProvider  };
+export { createOpenAIDecisionProvider };
