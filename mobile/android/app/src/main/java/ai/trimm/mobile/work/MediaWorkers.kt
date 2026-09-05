@@ -31,12 +31,18 @@ abstract class ProgressWorker(context: Context, params: WorkerParameters) : Coro
 class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorker(context, params) {
     override suspend fun doWork(): Result = runCatching {
         val projectId = requireNotNull(inputData.getString("projectId"))
+        val projectJson = inputData.getString("projectJson")
         val initialPrompt = inputData.getString("prompt")
             ?.trim()
             ?.takeIf(String::isNotEmpty)
             ?: "Create a polished, conservative first cut using the supplied evidence and preferences."
         val store = ProjectStore(applicationContext)
-        val project = store.load(projectId)
+        
+        val project = if (projectJson != null) {
+            kotlinx.serialization.json.Json.decodeFromString(MobileProject.serializer(), projectJson)
+        } else {
+            store.load(projectId)
+        }
         
         val words = mutableListOf<TranscriptWord>()
         val analysisWarnings = mutableListOf<String>()
@@ -89,7 +95,9 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
         }
 
         progress("persist", 90)
+        val newTitle = words.take(5).joinToString(" ") { it.text }.takeIf { it.isNotBlank() } ?: project.title
         var analyzed = project.copy(
+            title = newTitle,
             analysis = Analysis(
                 words = words,
                 captions = emptyList(),

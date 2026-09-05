@@ -1,0 +1,282 @@
+
+> trimm-cloud@0.3.3 test
+> node --test src/test/*.test.js
+
+✔ account export combines bounded identity and trimm-owned data (3.590917ms)
+✔ deletion revokes sessions before remote data and identity and is idempotent (0.869417ms)
+✔ partial deletion records progress and resumes after the failed step (0.539708ms)
+✔ Clerk adapter exports only bounded profile fields and revokes active sessions (0.463792ms)
+✔ development bootstrap authentication is explicit and visibly non-user (0.843ms)
+✔ Supabase JWKS URL provides a provider-neutral issuer and JWKS boundary (0.073958ms)
+✔ OIDC authentication verifies signature, issuer, audience, expiry, and canonical subject (45.869084ms)
+✔ Supabase principal exposes only safe non-PII claims from the verified JWT (23.974709ms)
+✔ authorization separates authentication, scope, entitlement, and opaque ownership checks (0.514542ms)
+✔ rate limiting keys authenticated users canonically and bounds network fallback (0.341167ms)
+✔ audit events contain bounded identifiers and no request secrets (3.203625ms)
+✔ versioned speech evaluation manifest covers every required delivery context (1.551667ms)
+✔ fixed words, confidence, pauses, and quality cannot independently authorize a speech cut (0.177042ms)
+✔ speech operation authorization requires meaning, complete delivery, adaptive context, and uncertainty handling (0.270417ms)
+✔ cloud publishes one versioned public contract manifest (0.999542ms)
+✔ production derivative state, bytes and semantic caches are private durable tables (1.190292ms)
+✔ production selects transactional Postgres derivative storage (0.879916ms)
+✔ mobile transcription accepts only bounded audio and video bodies (0.443916ms)
+✔ AssemblyAI transcript normalization returns safe timestamped words (0.371792ms)
+✔ transcription sends the media stream only to the server-side AssemblyAI client (0.122667ms)
+[audit] {
+  timestamp: '2026-09-05T11:25:31.685Z',
+  requestId: 'policy-test',
+  userId: 'canonical-user',
+  action: 'create',
+  resourceType: 'plan',
+  outcome: 'allowed'
+}
+[audit] {
+  timestamp: '2026-09-05T11:25:31.688Z',
+  requestId: 'a5b43a57-578a-48ac-919f-8366450945da',
+  userId: 'user',
+  action: 'create',
+  resourceType: 'plan',
+  outcome: 'denied',
+  reason: 'insufficient_scope'
+}
+✔ request policy attaches only the authenticated canonical principal (2.8ms)
+✔ request policy returns safe authorization errors with correlation IDs (0.9735ms)
+✔ cache survives a service restart and records reuse cost metrics (2.097959ms)
+✔ cache reuse requires owner, exact range, transform, model and analyzer versions (0.432917ms)
+✔ source changes invalidate only overlapping ranges and owner deletion is immediate (0.410625ms)
+✔ provider context and media indexes use separate cache namespaces (0.17875ms)
+✔ expired cache entries are not reused and retention cleanup removes them (0.17475ms)
+✖ shared backend is configured as a non-secret package script (1.403542ms)
+✔ Render backend serves the public privacy policy without authentication (0.165875ms)
+✔ resumable transcription uploads enforce ordered offsets and declared size (4.541209ms)
+✔ uploads are owner-scoped, bounded, cancellable, and expire (0.666917ms)
+✔ failed chunks roll back partial bytes so retry offsets remain safe (1.985125ms)
+✔ cleanup removes expired, malformed, and unreferenced upload objects (1.125583ms)
+ℹ tests 33
+ℹ suites 0
+ℹ pass 32
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 162.749208
+
+✖ failing tests:
+
+test at src/test/server.test.js:10:1
+✖ shared backend is configured as a non-secret package script (1.403542ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /process\.env\.MOONSHOT_API_KEY/. Input:
+  
+  'import "./env.js";\n' +
+    "import { fileURLToPath } from 'node:url';\n" +
+    "import { dirname } from 'node:path';\n" +
+    'const __filename = fileURLToPath(import.meta.url);\n' +
+    'const __dirname = dirname(__filename);\n' +
+    '\n' +
+    '// Production HTTP entrypoint for the shared trimm backend.\n' +
+    '\n' +
+    "import http from 'node:http';\n" +
+    "import fs from 'node:fs';\n" +
+    "import path from 'node:path';\n" +
+    "import * as transcriptionCore from './services/transcription-core.js';\n" +
+    "import { TranscriptionUploads } from './services/transcription-uploads.js';\n" +
+    "import { fromEnvironment as authenticationFromEnvironment } from './middleware/authentication.js';\n" +
+    "import { IdentityRateLimiter, auditEvent, correlationId, requireScope } from './middleware/authorization.js';\n" +
+    "import { DerivativeJobs } from './services/derivative-jobs.js';\n" +
+    "import { PostgresDerivativeJobs } from './db/postgres-derivative-jobs.js';\n" +
+    '\n' +
+    "import { createOpenAIDecisionProvider } from './services/openai-agent.js';\n" +
+    "import { AudioGeneration } from './services/audio-generation.js';\n" +
+    "import { ChatService } from './services/chat-service.js';\n" +
+    '\n' +
+    'const port = Number(process.env.PORT || 8787);\n' +
+    'const apiKey = process.env.LLM_API_KEY;\n' +
+    "const baseURL = process.env.LLM_OPENAI_BASE_URL || 'https://api.moonshot.ai/v1';\n" +
+    "const model = process.env.MODEL || 'kimi-k3';\n" +
+    'const MAX_BODY_BYTES = 512 * 1024;\n' +
+    "const privacyPolicy = fs.readFileSync(path.join(__dirname, 'privacy.html'));\n" +
+    'const transcriptionUploads = new TranscriptionUploads();\n' +
+    'const uploadCleanupTimer = setInterval(() => transcriptionUploads.cleanup(), 15 * 60 * 1000);\n' +
+    'uploadCleanupTimer.unref();\n' +
+    'const authentication = authenticationFromEnvironment();\n' +
+    'const rateLimiter = new IdentityRateLimiter({ limit: Number(process.env.TRIMM_RATE_LIMIT_PER_MINUTE) || 120 });\n' +
+    "if (process.env.NODE_ENV === 'production' && !process.env.SUPABASE_DB_URL) {\n" +
+    "  throw new Error('Production database is not configured; derivative jobs persistence requires it.');\n" +
+    '}\n' +
+    'const derivativeJobs = process.env.SUPABASE_DB_URL\n' +
+    '  ? new PostgresDerivativeJobs({ databaseUrl: process.env.SUPABASE_DB_URL })\n' +
+    '  : new DerivativeJobs({});\n' +
+    'const agentDecisionProvider = createOpenAIDecisionProvider();\n' +
+    'const chatService = new ChatService();\n' +
+    '\n' +
+    'const audioGeneration = new AudioGeneration();\n' +
+    'const derivativeCleanupTimer = setInterval(() => {\n' +
+    '  Promise.resolve(derivativeJobs.cleanup()).catch((error) => {\n' +
+    "    console.error(JSON.stringify({ event: 'derivative_cleanup_failed', message: error.message }));\n" +
+    '  });\n' +
+    '}, 15 * 60 * 1000);\n' +
+    'derivativeCleanupTimer.unref();\n' +
+    'authentication.assertProductionConfigured();\n' +
+    '\n' +
+    'function policyFor(request, pathname) {\n' +
+    "  if (pathname.startsWith('/v1/derivatives/')) return {\n" +
+    "    scope: 'derivatives:create',\n" +
+    "    action: pathname === '/v1/derivatives/activity' ? 'read' : request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'upload' : 'authorize',\n" +
+    "    resourceType: 'derivative_job',\n" +
+    '  };\n' +
+    "  if (pathname.startsWith('/v1/transcribe')) return { scope: 'transcribe:create', action: request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'update' : 'create', resourceType: 'transcription' };\n" +
+    "  if (pathname.startsWith('/v1/audio') || pathname === '/v1/agent/plan' || pathname === '/v1/agent/execute') {\n" +
+    "    return { scope: 'plan:create', action: 'create', resourceType: 'plan' };\n" +
+    '  }\n' +
+    '  return null;\n' +
+    '}\n' +
+    '\n' +
+    "function audit(entry) { console.info('[audit]', auditEvent(entry)); }\n" +
+    '\n' +
+    'function json(response, status, body, headers = {}) {\n' +
+    '  const encoded = Buffer.from(JSON.stringify(body));\n' +
+    '  response.writeHead(status, {\n' +
+    "    'content-type': 'application/json',\n" +
+    "    'content-length': encoded.length,\n" +
+    "    'cache-control': 'no-store',\n" +
+    '    ...headers,\n' +
+    '  });\n' +
+    '  response.end(encoded);\n' +
+    '}\n' +
+    '\n' +
+    '\n' +
+    '\n' +
+    'function html(response, status, body) {\n' +
+    '  response.writeHead(status, {\n' +
+    "    'content-type': 'text/html; charset=utf-8',\n" +
+    "    'content-length': body.length,\n" +
+    "    'cache-control': 'public, max-age=3600',\n" +
+    "    'x-content-type-options': 'nosniff',\n" +
+    '  });\n' +
+    '  response.end(body);\n' +
+    '}\n' +
+    '\n' +
+    'function derivativeView(job) {\n' +
+    '  return {\n' +
+    '    id: job.id, projectId: job.projectId, deviceSessionId: job.deviceSessionId,\n' +
+    '    purpose: job.purpose, type: job.type, acceptedFormat: job.acceptedFormat,\n' +
+    '    maximumBytes: job.maximumBytes, maximumDurationMs: job.maximumDurationMs,\n' +
+    '    maximumCount: job.maximumCount, status: job.status, offset: job.offset, createdAt: new Date(job.createdAt).toISOString(),\n' +
+    '    expiresAt: new Date(job.expiresAt).toISOString(),\n' +
+    '    mediaMode: job.mediaMode, selectionReason: job.selectionReason,\n' +
+    '    timelineReferences: job.timelineReferences, consent: job.consent,\n' +
+    '    providerDisclosures: job.providerDisclosures, resolution: job.resolution,\n' +
+    '    retentionUntil: new Date(job.deleteAt).toISOString(),\n' +
+    '    deletedAt: job.deletedAt ? new Date(job.deletedAt).toISOString() : null,\n' +
+    '  };\n' +
+    '}\n' +
+    '\n' +
+    'function derivativeContext(request) {\n' +
+    '  return {\n' +
+    "    projectId: String(request.headers['x-trimm-project-id'] || ''),\n" +
+    "    deviceSessionId: String(request.headers['x-trimm-device-session-id'] || ''),\n" +
+    '  };\n' +
+    '}\n' +
+    '\n' +
+    '\n' +
+    '\n' +
+    'async function collect(request, maxBytes = MAX_BODY_BYTES) {\n' +
+    '  const chunks = []; let size = 0;\n' +
+    "  for await (const chunk of request) { size += chunk.length; if (size > maxBytes) throw Object.assign(new Error('Request too large'), { status: 413 }); chunks.push(chunk); }\n" +
+    "  return JSON.parse(Buffer.concat(chunks).toString('utf8'));\n" +
+    '}\n' +
+    '\n' +
+    'async function collectBuffer(request, maxBytes = 256 * 1024) {\n' +
+    '  const chunks = []; let size = 0;\n' +
+    '  for await (const chunk of request) {\n' +
+    '    size += chunk.length;\n' +
+    "    if (size > maxBytes) throw Object.assign(new Error('Request too large'), { status: 413 });\n" +
+    '    chunks.push(chunk);\n' +
+    '  }\n' +
+    '  return Buffer.concat(chunks);\n' +
+    '}\n' +
+    '\n' +
+    '\n' +
+    '\n' +
+    'const server = http.createServer(async (request, response) => {\n' +
+    "  const requestUrl = new URL(request.url, 'http://localhost');\n" +
+    "  if (request.method === 'GET' && requestUrl.pathname === '/health') return json(response, 200, { ok: true, model, authentication: authentication.configured() });\n" +
+    "  if (request.method === 'GET' && (requestUrl.pathname === '/privacy' || requestUrl.pathname === '/privacy/')) {\n" +
+    '    return html(response, 200, privacyPolicy);\n' +
+    '  }\n' +
+    '  let principal;\n' +
+    '  const requestId = correlationId(request);\n' +
+    "  if (requestUrl.pathname.startsWith('/v1/')) {\n" +
+    '    const policy = policyFor(request, requestUrl.pathname);\n' +
+    '    try {\n' +
+    '      principal = await authentication.authenticate(request);\n' +
+    '      if (policy?.scope) requireScope(principal, policy.scope);\n' +
+    '      rateLimiter.consume(request, principal);\n' +
+    "      if (policy) audit({ principal, ...policy, outcome: 'allowed', requestId });\n" +
+    '    } catch (error) {\n' +
+    '      if (!principal) {\n' +
+    '        try { rateLimiter.consume(request, null); }\n' +
+    '        catch (rateError) { error = rateError; }\n' +
+    '      }\n' +
+    "      if (policy) audit({ principal, ...policy, outcome: 'denied', reason: error?.code, requestId });\n" +
+    "      return json(response, Number.isInteger(error?.status) ? error.status : 401, { error: error?.message || 'Unauthorized', code: error?.code || 'unauthorized', requestId });\n" +
+    '    }\n' +
+    '  }\n' +
+    '\n' +
+    '  const derivativeMatch = requestUrl.pathname.match(/^\\/v1\\/derivatives\\/jobs\\/([0-9a-f-]{36})(\\/complete)?$/i);\n' +
+    "  if (request.method === 'POST' && requestUrl.pathname === '/v1/derivatives/jobs') {\n" +
+    '    try {\n' +
+    '      await derivativeJobs.cleanup();\n' +
+    '      const authorized = await derivativeJobs.authorize(principal, await collect(request, 16 * 1024));\n' +
+    '      return json(response, authorized.reused ? 200 : 201, { ...derivativeView(authorized.job), reused: authorized.reused, chunkSize: 4 * 1024 * 1024, requestId });\n' +
+    '    } catch (error) {\n' +
+    "      return json(response, Number.isInteger(error?.status) ? error.status : 400, { error: error?.message || 'Could not authorize derivative.', code: error?.code, requestId });\n" +
+    '    }\n' +
+    '  }\n' +
+    "  if (request.method === 'GET' && requestUrl.pathname === '/v1/derivatives/activity') {\n" +
+    "    return json(response, 200, { activity: await derivativeJobs.listActivity(principal, requestUrl.searchParams.get('projectId')), requestId });\n" +
+    '  }\n' +
+    "  if (derivativeMatch && request.method === 'HEAD' && !derivativeMatch[2]) {\n" +
+    '    try {\n' +
+    '      const job = await derivativeJobs.read(derivativeMatch[1], principal, derivativeContext(request));\n' +
+    "      const fileExists = fs.existsSync(derivativeJobs.mediaPath ? derivativeJobs.mediaPath(job.id) : '');\n" +
+    '      const isExpired = job.expiresAt <= Date.now() || (job.deleteAt && job.deleteAt <= Date.now());\n' +
+    '      const offset = (!fileExists || isExpired) ? 0 : job.offset;\n' +
+    "      response.writeHead(204, { 'upload-offset': offset, 'upload-expires': new Date(job.expiresAt).toISOString(), 'cache-control': 'no-store' });\n" +
+    '      return response.end();\n' +
+    '    } catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message, code: error?.code, requestId }); }\n' +
+    '  }\n' +
+    "  if (derivativeMatch && request.method === 'PUT' && !derivativeMatch[2]) {\n" +
+    '    try {\n' +
+    "      const job = await derivativeJobs.append(derivativeMatch[1], principal, request.headers['upload-offset'], request, derivativeContext(request));\n" +
+    '      return json(response, 200, { offset: job.offset, requestId });\n' +
+    '    } catch (error) {\n' +
+    '      return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message, code: error?.code, offset: error?.offset, requestId });\n' +
+    '    }\n' +
+    '  }\n' +
+    "  if (derivativeMatch && request.method === 'DELETE' && !derivativeMatch[2]) {\n" +
+    '    try { await derivativeJobs.delete(derivativeMatch[1], principal, derivativeContext(request)); response.writeHead(204); return response.end(); }\n' +
+    '    catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message, code: error?.code, requestId }); }\n' +
+    '  }\n' +
+    "  if (derivativeMatch && request.method === 'POST' && derivativeMatch[2]) {\n" +
+    '    try {\n' +
+    '      const completed = await derivativeJobs.complete(derivativeMatch[1], principal, await collect(request, 4096), derivativeContext(request));\n' +
+    '      return json(response, 200, {\n' +
+    '        ...derivativeView(completed.job), reused: completed.reused,\n' +
+    '        requestId,\n' +
+    '      });\n' +
+    '    } catch (error) {\n' +
+    '      return json(response, Number.isInteger(error?.statu'... 15268 more characters
+  
+      at TestContext.<anonymous> (file:///Users/darsh/trimm/cloud/src/test/server.test.js:14:10)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.start (node:internal/test_runner/test:1257:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: `import "./env.js";\nimport { fileURLToPath } from 'node:url';\nimport { dirname } from 'node:path';\nconst __filename = fileURLToPath(import.meta.url);\nconst __dirname = dirname(__filename);\n\n// Production HTTP entrypoint for the shared trimm backend.\n\nimport http from 'node:http';\nimport fs from 'node:fs';\nimport path from 'node:path';\nimport * as transcriptionCore from './services/transcription-core.js';\nimport { TranscriptionUploads } from './services/transcription-uploads.js';\nimport { fromEnvironment as authenticationFromEnvironment } from './middleware/authentication.js';\nimport { IdentityRateLimiter, auditEvent, correlationId, requireScope } from './middleware/authorization.js';\nimport { DerivativeJobs } from './services/derivative-jobs.js';\nimport { PostgresDerivativeJobs } from './db/postgres-derivative-jobs.js';\n\nimport { createOpenAIDecisionProvider } from './services/openai-agent.js';\nimport { AudioGeneration } from './services/audio-generation.js';\nimport { ChatService } from './services/chat-service.js';\n\nconst port = Number(process.env.PORT || 8787);\nconst apiKey = process.env.LLM_API_KEY;\nconst baseURL = process.env.LLM_OPENAI_BASE_URL || 'https://api.moonshot.ai/v1';\nconst model = process.env.MODEL || 'kimi-k3';\nconst MAX_BODY_BYTES = 512 * 1024;\nconst privacyPolicy = fs.readFileSync(path.join(__dirname, 'privacy.html'));\nconst transcriptionUploads = new TranscriptionUploads();\nconst uploadCleanupTimer = setInterval(() => transcriptionUploads.cleanup(), 15 * 60 * 1000);\nuploadCleanupTimer.unref();\nconst authentication = authenticationFromEnvironment();\nconst rateLimiter = new IdentityRateLimiter({ limit: Number(process.env.TRIMM_RATE_LIMIT_PER_MINUTE) || 120 });\nif (process.env.NODE_ENV === 'production' && !process.env.SUPABASE_DB_URL) {\n  throw new Error('Production database is not configured; derivative jobs persistence requires it.');\n}\nconst derivativeJobs = process.env.SUPABASE_DB_URL\n  ? new PostgresDerivativeJobs({ databaseUrl: process.env.SUPABASE_DB_URL })\n  : new DerivativeJobs({});\nconst agentDecisionProvider = createOpenAIDecisionProvider();\nconst chatService = new ChatService();\n\nconst audioGeneration = new AudioGeneration();\nconst derivativeCleanupTimer = setInterval(() => {\n  Promise.resolve(derivativeJobs.cleanup()).catch((error) => {\n    console.error(JSON.stringify({ event: 'derivative_cleanup_failed', message: error.message }));\n  });\n}, 15 * 60 * 1000);\nderivativeCleanupTimer.unref();\nauthentication.assertProductionConfigured();\n\nfunction policyFor(request, pathname) {\n  if (pathname.startsWith('/v1/derivatives/')) return {\n    scope: 'derivatives:create',\n    action: pathname === '/v1/derivatives/activity' ? 'read' : request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'upload' : 'authorize',\n    resourceType: 'derivative_job',\n  };\n  if (pathname.startsWith('/v1/transcribe')) return { scope: 'transcribe:create', action: request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'update' : 'create', resourceType: 'transcription' };\n  if (pathname.startsWith('/v1/audio') || pathname === '/v1/agent/plan' || pathname === '/v1/agent/execute') {\n    return { scope: 'plan:create', action: 'create', resourceType: 'plan' };\n  }\n  return null;\n}\n\nfunction audit(entry) { console.info('[audit]', auditEvent(entry)); }\n\nfunction json(response, status, body, headers = {}) {\n  const encoded = Buffer.from(JSON.stringify(body));\n  response.writeHead(status, {\n    'content-type': 'application/json',\n    'content-length': encoded.length,\n    'cache-control': 'no-store',\n    ...headers,\n  });\n  response.end(encoded);\n}\n\n\n\nfunction html(response, status, body) {\n  response.writeHead(status, {\n    'content-type': 'text/html; charset=utf-8',\n    'content-length': body.length,\n    'cache-control': 'public, max-age=3600',\n    'x-content-type-options': 'nosniff',\n  });\n  response.end(body);\n}\n\nfunction derivativeView(job) {\n  return {\n    id: job.id, projectId: job.projectId, deviceSessionId: job.deviceSessionId,\n    purpose: job.purpose, type: job.type, acceptedFormat: job.acceptedFormat,\n    maximumBytes: job.maximumBytes, maximumDurationMs: job.maximumDurationMs,\n    maximumCount: job.maximumCount, status: job.status, offset: job.offset, createdAt: new Date(job.createdAt).toISOString(),\n    expiresAt: new Date(job.expiresAt).toISOString(),\n    mediaMode: job.mediaMode, selectionReason: job.selectionReason,\n    timelineReferences: job.timelineReferences, consent: job.consent,\n    providerDisclosures: job.providerDisclosures, resolution: job.resolution,\n    retentionUntil: new Date(job.deleteAt).toISOString(),\n    deletedAt: job.deletedAt ? new Date(job.deletedAt).toISOString() : null,\n  };\n}\n\nfunction derivativeContext(request) {\n  return {\n    projectId: String(request.headers['x-trimm-project-id'] || ''),\n    deviceSessionId: String(request.headers['x-trimm-device-session-id'] || ''),\n  };\n}\n\n\n\nasync function collect(request, maxBytes = MAX_BODY_BYTES) {\n  const chunks = []; let size = 0;\n  for await (const chunk of request) { size += chunk.length; if (size > maxBytes) throw Object.assign(new Error('Request too large'), { status: 413 }); chunks.push(chunk); }\n  return JSON.parse(Buffer.concat(chunks).toString('utf8'));\n}\n\nasync function collectBuffer(request, maxBytes = 256 * 1024) {\n  const chunks = []; let size = 0;\n  for await (const chunk of request) {\n    size += chunk.length;\n    if (size > maxBytes) throw Object.assign(new Error('Request too large'), { status: 413 });\n    chunks.push(chunk);\n  }\n  return Buffer.concat(chunks);\n}\n\n\n\nconst server = http.createServer(async (request, response) => {\n  const requestUrl = new URL(request.url, 'http://localhost');\n  if (request.method === 'GET' && requestUrl.pathname === '/health') return json(response, 200, { ok: true, model, authentication: authentication.configured() });\n  if (request.method === 'GET' && (requestUrl.pathname === '/privacy' || requestUrl.pathname === '/privacy/')) {\n    return html(response, 200, privacyPolicy);\n  }\n  let principal;\n  const requestId = correlationId(request);\n  if (requestUrl.pathname.startsWith('/v1/')) {\n    const policy = policyFor(request, requestUrl.pathname);\n    try {\n      principal = await authentication.authenticate(request);\n      if (policy?.scope) requireScope(principal, policy.scope);\n      rateLimiter.consume(request, principal);\n      if (policy) audit({ principal, ...policy, outcome: 'allowed', requestId });\n    } catch (error) {\n      if (!principal) {\n        try { rateLimiter.consume(request, null); }\n        catch (rateError) { error = rateError; }\n      }\n      if (policy) audit({ principal, ...policy, outcome: 'denied', reason: error?.code, requestId });\n      return json(response, Number.isInteger(error?.status) ? error.status : 401, { error: error?.message || 'Unauthorized', code: error?.code || 'unauthorized', requestId });\n    }\n  }\n\n  const derivativeMatch = requestUrl.pathname.match(/^\\/v1\\/derivatives\\/jobs\\/([0-9a-f-]{36})(\\/complete)?$/i);\n  if (request.method === 'POST' && requestUrl.pathname === '/v1/derivatives/jobs') {\n    try {\n      await derivativeJobs.cleanup();\n      const authorized = await derivativeJobs.authorize(principal, await collect(request, 16 * 1024));\n      return json(response, authorized.reused ? 200 : 201, { ...derivativeView(authorized.job), reused: authorized.reused, chunkSize: 4 * 1024 * 1024, requestId });\n    } catch (error) {\n      return json(response, Number.isInteger(error?.status) ? error.status : 400, { error: error?.message || 'Could not authorize derivative.', code: error?.code, requestId });\n    }\n  }\n  if (request.method === 'GET' && requestUrl.pathname === '/v1/derivatives/activity') {\n    return json(response, 200, { activity: await derivativeJobs.listActivity(principal, requestUrl.searchParams.get('projectId')), requestId });\n  }\n  if (derivativeMatch && request.method === 'HEAD' && !derivativeMatch[2]) {\n    try {\n      const job = await derivativeJobs.read(derivativeMatch[1], principal, derivativeContext(request));\n      const fileExists = fs.existsSync(derivativeJobs.mediaPath ? derivativeJobs.mediaPath(job.id) : '');\n      const isExpired = job.expiresAt <= Date.now() || (job.deleteAt && job.deleteAt <= Date.now());\n      const offset = (!fileExists || isExpired) ? 0 : job.offset;\n      response.writeHead(204, { 'upload-offset': offset, 'upload-expires': new Date(job.expiresAt).toISOString(), 'cache-control': 'no-store' });\n      return response.end();\n    } catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message, code: error?.code, requestId }); }\n  }\n  if (derivativeMatch && request.method === 'PUT' && !derivativeMatch[2]) {\n    try {\n      const job = await derivativeJobs.append(derivativeMatch[1], principal, request.headers['upload-offset'], request, derivativeContext(request));\n      return json(response, 200, { offset: job.offset, requestId });\n    } catch (error) {\n      return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message, code: error?.code, offset: error?.offset, requestId });\n    }\n  }\n  if (derivativeMatch && request.method === 'DELETE' && !derivativeMatch[2]) {\n    try { await derivativeJobs.delete(derivativeMatch[1], principal, derivativeContext(request)); response.writeHead(204); return response.end(); }\n    catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message, code: error?.code, requestId }); }\n  }\n  if (derivativeMatch && request.method === 'POST' && derivativeMatch[2]) {\n    try {\n      const completed = await derivativeJobs.complete(derivativeMatch[1], principal, await collect(request, 4096), derivativeContext(request));\n      return json(response, 200, {\n        ...derivativeView(completed.job), reused: completed.reused,\n        requestId,\n      });\n    } catch (error) {\n      return json(response, Number.isInteger(error?.statu`... 15268 more characters,
+    expected: /process\.env\.MOONSHOT_API_KEY/,
+    operator: 'match',
+    diff: 'simple'
+  }

@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -253,12 +254,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         )
         
         val request = OneTimeWorkRequestBuilder<AnalysisWorker>().setInputData(
-            Data.Builder().putString("projectId", project.id).putString("prompt", brief).build()
+            Data.Builder()
+                .putString("projectId", project.id)
+                .putString("projectJson", Json.encodeToString(MobileProject.serializer(), project))
+                .putString("prompt", brief)
+                .build()
         ).addTag("analysis:${project.id}").build()
         val workManager = WorkManager.getInstance(getApplication())
         
         viewModelScope.launch { 
-            store.save(project) 
             workManager.enqueue(request)
             
             val info = awaitWork(workManager, request.id) { running ->
@@ -278,6 +282,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 val analyzed = store.load(project.id)
                 mutable.value = mutable.value.copy(project = analyzed, jobMessage = "Analysis complete", isProcessing = false)
                 renderPreview(analyzed, simulatePendingProposal = analyzed.analysis.pendingProposal != null)
+                refreshChats()
             }
             else mutable.value = mutable.value.copy(
                 errorMessage = info.outputData.getString("error") ?: "Video analysis failed.",

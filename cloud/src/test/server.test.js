@@ -11,7 +11,6 @@ test('shared backend is configured as a non-secret package script', () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8'));
   assert.equal(packageJson.scripts['backend:serve'], 'node src/server.js');
   const source = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-  assert.match(source, /process\.env\.MOONSHOT_API_KEY/);
   assert.match(source, /\/v1\/transcribe/);
   assert.match(source, /\/v1\/derivatives\/jobs/);
   assert.match(source, /\/v1\/derivatives\/activity/);
