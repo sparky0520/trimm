@@ -31,11 +31,11 @@ function createOpenAIDecisionProvider({
       messages.push({ role: 'user', content: String(contents) });
     }
 
-    const isO1Model = model.startsWith('o1') || model.startsWith('o3');
+    const isReasoningModel = model.startsWith('o1') || model.startsWith('o3') || model.includes('kimi-k3');
     const requestPayload = {
       model,
       messages,
-      ...(isO1Model ? { temperature: 1 } : (temperature !== undefined ? { temperature } : {})),
+      ...(isReasoningModel ? { temperature: 1 } : (temperature !== undefined ? { temperature } : {})),
       ...(responseFormat ? { response_format: responseFormat } : {}),
       ...(tools && AGENT_TOOLS.length > 0 ? { tools: AGENT_TOOLS.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })) } : {}),
     };
