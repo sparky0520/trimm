@@ -124,7 +124,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
     Box(Modifier.fillMaxSize()) {
         when {
-            state.source == null -> ImportScreen(LocalContext.current as Activity, vm::import, onOpenDrawer)
+            state.source == null -> ImportScreen(LocalContext.current as Activity, vm::import, state.isLoadingPastChats, onOpenDrawer)
             state.project != null -> EditorScreen(
                 state, vm::undo, vm::export, vm::applyProposal, vm::rejectProposal,
                 vm::undoCheckpoint,

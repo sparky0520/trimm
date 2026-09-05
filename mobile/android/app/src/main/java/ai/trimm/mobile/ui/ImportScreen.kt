@@ -83,7 +83,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 
-@Composable fun ImportScreen(activity: Activity, onImport: (List<Uri>) -> Unit, onOpenDrawer: (() -> Unit)? = null) {
+@Composable fun ImportScreen(activity: Activity, onImport: (List<Uri>) -> Unit, isLoadingPastChats: Boolean = false, onOpenDrawer: (() -> Unit)? = null) {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { if (it.isNotEmpty()) onImport(it) }
     val sessionStatus by supabase.auth.sessionStatus.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -132,9 +132,25 @@ import kotlinx.serialization.json.jsonPrimitive
                         )
                 )
             } else {
-                Button(onClick = { launcher.launch(arrayOf("video/*")) }, modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Coral, contentColor = DarkText)) {
-                    Text("Select clips to edit", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                Button(
+                    onClick = { launcher.launch(arrayOf("video/*")) },
+                    enabled = !isLoadingPastChats,
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Coral,
+                        contentColor = DarkText,
+                        disabledContainerColor = Coral.copy(alpha = 0.5f),
+                        disabledContentColor = DarkText.copy(alpha = 0.5f)
+                    )
+                ) {
+                    if (isLoadingPastChats) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = DarkText, strokeWidth = 2.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Text("Loading...", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    } else {
+                        Text("Select clips to edit", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    }
                 }
             }
         }

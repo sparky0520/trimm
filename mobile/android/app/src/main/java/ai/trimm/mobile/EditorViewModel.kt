@@ -27,6 +27,7 @@ import kotlinx.coroutines.delay
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToJsonElement
@@ -61,8 +62,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private var fetchChatsJob: kotlinx.coroutines.Job? = null
+
     fun refreshChats() {
-        viewModelScope.launch {
+        if (fetchChatsJob?.isActive == true) return
+        fetchChatsJob = viewModelScope.launch {
             mutable.value = mutable.value.copy(isLoadingPastChats = true)
             val chats = store.listAll()
             mutable.value = mutable.value.copy(pastChats = chats, isLoadingPastChats = false)

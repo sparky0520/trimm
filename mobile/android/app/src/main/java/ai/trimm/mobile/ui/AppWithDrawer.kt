@@ -96,6 +96,7 @@ import kotlinx.serialization.json.jsonPrimitive
                 modifier = Modifier.width(300.dp)
             ) {
                 Column(Modifier.fillMaxSize()) {
+                    val state by vm.state.collectAsStateWithLifecycle()
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(16.dp).statusBarsPadding(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -112,12 +113,14 @@ import kotlinx.serialization.json.jsonPrimitive
                                 maxLines = 1,
                             )
                         }
-                        IconButton(onClick = {
-                            vm.newChat()
-                            scope.launch { drawerState.close() }
-                        }) { Text("+", fontSize = 24.sp, color = Cream) }
+                        IconButton(
+                            onClick = {
+                                vm.newChat()
+                                scope.launch { drawerState.close() }
+                            },
+                            enabled = !state.isLoadingPastChats
+                        ) { Text("+", fontSize = 24.sp, color = if (state.isLoadingPastChats) Color.Gray else Cream) }
                     }
-                    val state by vm.state.collectAsStateWithLifecycle()
                     LazyColumn(Modifier.weight(1f).padding(horizontal = 8.dp)) {
                         item { 
                             Row(verticalAlignment = Alignment.CenterVertically) {
