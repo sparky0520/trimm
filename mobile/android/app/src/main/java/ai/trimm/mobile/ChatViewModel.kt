@@ -38,6 +38,8 @@ import ai.trimm.mobile.network.ChatApiService
 import ai.trimm.mobile.network.ChatRepository
 import ai.trimm.mobile.network.supabase
 import io.github.jan.supabase.storage.storage
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.status.SessionStatus
 import java.security.MessageDigest
 import okhttp3.MediaType.Companion.toMediaType
 
@@ -87,6 +89,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             mutable.value = mutable.value.copy(creatorPreferences = store.loadCreatorPreferences())
+        }
+        viewModelScope.launch {
+            supabase.auth.sessionStatus.collect { status ->
+                when (status) {
+                    is SessionStatus.Authenticated -> refreshChats()
+                    is SessionStatus.NotAuthenticated -> mutable.value = mutable.value.copy(pastChats = emptyList())
+                    else -> {}
+                }
+            }
         }
         refreshChats()
     }
