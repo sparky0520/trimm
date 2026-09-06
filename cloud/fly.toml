@@ -6,6 +6,10 @@
 app = 'trimm'
 primary_region = 'sin'
 
+# NOTE: Fly does not support specifying machine count directly in fly.toml.
+# We have scaled this to 1 machine via `fly scale count 1`.
+# The CI/CD deployment script uses `--ha=false` to prevent Fly from auto-provisioning a 2nd machine.
+
 [env]
   NODE_ENV = 'production'
   PORT = '8080'

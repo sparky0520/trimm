@@ -12,6 +12,7 @@ import path from 'node:path';
 import * as transcriptionCore from './services/transcription-core.js';
 import { TranscriptionUploads } from './services/transcription-uploads.js';
 import { fromEnvironment as authenticationFromEnvironment } from './middleware/authentication.js';
+import { IdentityRateLimiter, auditEvent, correlationId, requireScope } from './middleware/authorization.js';
 import { createOpenAIDecisionProvider } from './services/openai-agent.js';
 import { AudioGeneration } from './services/audio-generation.js';
 
