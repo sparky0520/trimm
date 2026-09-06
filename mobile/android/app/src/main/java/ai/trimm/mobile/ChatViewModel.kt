@@ -456,20 +456,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val previous = project.analysis.agentRun ?: return
         viewModelScope.launch {
             val deviceSessionId = "android-${project.id}"
-            val uploadClient = DerivativeUploadClient(
-                BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken, project.id, deviceSessionId
-            )
-            val preparer = SelectiveDerivativePreparer(
-                java.io.File(getApplication<Application>().cacheDir, "agent-derivatives"),
-                AndroidDerivativeWriter(getApplication())
-            )
             val coordinator = ChatCompletionCoordinator(
-                AgentRunClient(BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken),
-                AgentEvidenceFulfiller { job ->
-                    val derivative = preparer.prepare(DerivativeAuthorization(job), project.orderedSources)
-                    try { uploadClient.upload(derivative) }
-                    finally { java.io.File(derivative.localPath).delete() }
-                }
+                AgentRunClient(BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken)
             )
             val request = AgentRunRequest(
                 projectId = project.id,
@@ -541,20 +529,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             val deviceSessionId = "android-${project.id}"
-            val uploadClient = DerivativeUploadClient(
-                BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken, project.id, deviceSessionId
-            )
-            val preparer = SelectiveDerivativePreparer(
-                java.io.File(getApplication<Application>().cacheDir, "agent-derivatives"),
-                AndroidDerivativeWriter(getApplication())
-            )
             val coordinator = ChatCompletionCoordinator(
-                AgentRunClient(BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken),
-                AgentEvidenceFulfiller { job ->
-                    val derivative = preparer.prepare(DerivativeAuthorization(job), project.orderedSources)
-                    try { uploadClient.upload(derivative) }
-                    finally { java.io.File(derivative.localPath).delete() }
-                }
+                AgentRunClient(BuildConfig.PLANNER_URL, AuthTokenProvider::currentToken)
             )
 
             // Prepare history

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>trimm Cost Visualizer</title>
+  <style>
+    :root { color-scheme: dark; font: 16px/1.6 system-ui, sans-serif; }
+    body { margin: 0; background: #09090B; color: #FAFAFA; } /* Ink background, Cream text */
+    main { max-width: 760px; margin: 0 auto; padding: 64px 24px 96px; }
+    h1, h2, h3 { line-height: 1.2; font-family: system-ui, sans-serif; }
+    h1 { font-size: clamp(2rem, 7vw, 3.5rem); margin-bottom: .25rem; font-weight: 600; letter-spacing: -1px; }
+    h2 { margin-top: 2.25rem; font-size: 20px; font-weight: bold; }
+    .muted { color: #A1A1AA; font-size: 14px; } /* Muted */
+    a { color: #FAFAFA; text-decoration: underline; }
+    
+    .card { background: #18181B; padding: 32px; border-radius: 12px; margin-bottom: 24px; border: 1px solid #3F3F46; } /* Workspace, Border */
+    .slider-container { margin: 32px 0; }
+    input[type=range] { width: 100%; cursor: pointer; accent-color: #FAFAFA; height: 6px; }
+    .cost-value { font-size: 3rem; font-weight: 800; color: #FAFAFA; letter-spacing: -1px; margin-top: 8px; }
+    
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px; }
+    th, td { padding: 16px; text-align: left; border-bottom: 1px solid #3F3F46; }
+    th { color: #A1A1AA; font-weight: bold; font-size: 12px; text-transform: uppercase; letter-spacing: 1.4px; }
+    td:last-child, th:last-child { text-align: right; }
+    
+    ul { font-size: 14px; }
+    ul li { margin-bottom: 12px; color: #D4D4D8; } /* Lavender */
+    strong { color: #FAFAFA; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Infrastructure Costs</h1>
+    <p class="muted">Interactive cost visualizer for the trimm backend.</p>
+
+    <div class="card">
+      <h2 style="margin-top: 0;">Monthly Active Users (MAU)</h2>
+      <div class="slider-container">
+        <input type="range" id="mau-slider" min="0" max="100000" step="1000" value="1000">
+        <p style="font-size: 1.25rem;">Estimated Users: <span id="mau-display" style="font-weight: bold; color: #fff;">1,000</span></p>
+      </div>
+      
+      <div style="margin-top: 48px;">
+        <h2 style="margin: 0; color: #a9a9b2; font-size: 1.1rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Estimated Monthly Cost</h2>
+        <div class="cost-value">$<span id="total-cost">0.00</span></div>
+      </div>
+    </div>
+
+    <h2>Breakdown</h2>
+    <div class="card" style="padding: 16px 32px;">
+      <table id="cost-breakdown">
+        <thead>
+          <tr>
+            <th>Service</th>
+            <th>Type</th>
+            <th>Estimated Cost</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Rows injected by JS -->
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Assumptions & Pricing</h2>
+    <ul>
+      <li><strong>Fly.io (Compute):</strong> Fixed at ~$2.00/mo for intermittent wakes (Variable bursts on high load).</li>
+      <li><strong>Supabase (DB & Auth):</strong> $0.00/mo under 50,000 MAU. Pro plan ($25) required above that limit.</li>
+      <li><strong>Moonshot AI (LLM):</strong> Estimated at ~$0.05 per user per month, optimized via context caching.</li>
+      <li><strong>AssemblyAI (Transcription):</strong> Estimated at ~$0.10 per user per month.</li>
+      <li><strong>Generative Audio:</strong> Estimated at ~$0.05 per user per month, relying on aggressive SFX caching.</li>
+    </ul>
+
+  </main>
+  <script>
+    const slider = document.getElementById('mau-slider');
+    const mauDisplay = document.getElementById('mau-display');
+    const totalCostDisplay = document.getElementById('total-cost');
+    const tbody = document.querySelector('#cost-breakdown tbody');
+
+    function updateCosts() {
+      const mau = parseInt(slider.value, 10);
+      mauDisplay.textContent = mau.toLocaleString();
+
+      const flyCost = mau > 0 ? 2.00 : 0.00;
+      const supabaseCost = mau > 50000 ? 25.00 : 0.00;
+      const llmCost = mau * 0.05;
+      const transcribeCost = mau * 0.10;
+      const audioCost = mau * 0.05;
+
+      const total = flyCost + supabaseCost + llmCost + transcribeCost + audioCost;
+      totalCostDisplay.textContent = total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      tbody.innerHTML = `
+        <tr><td>Fly.io (Compute)</td><td style="color:#a9a9b2;">Fixed / Base</td><td style="font-weight:500;">$${flyCost.toFixed(2)}</td></tr>
+        <tr><td>Supabase (DB & Auth)</td><td style="color:#a9a9b2;">Fixed</td><td style="font-weight:500;">$${supabaseCost.toFixed(2)}</td></tr>
+        <tr><td>Moonshot AI (LLM)</td><td style="color:#a9a9b2;">Variable</td><td style="font-weight:500;">$${llmCost.toFixed(2)}</td></tr>
+        <tr><td>AssemblyAI (Transcribe)</td><td style="color:#a9a9b2;">Variable</td><td style="font-weight:500;">$${transcribeCost.toFixed(2)}</td></tr>
+        <tr><td>Audio (11Labs/Replicate)</td><td style="color:#a9a9b2;">Variable</td><td style="font-weight:500;">$${audioCost.toFixed(2)}</td></tr>
+      `;
+    }
+
+    slider.addEventListener('input', updateCosts);
+    updateCosts();
+  </script>
+</body>
+</html>

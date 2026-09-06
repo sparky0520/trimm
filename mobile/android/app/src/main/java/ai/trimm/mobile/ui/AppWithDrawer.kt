@@ -162,7 +162,10 @@ import kotlinx.serialization.json.jsonPrimitive
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        AccountControl(LocalContext.current as Activity)
+                        val activity = androidx.activity.compose.LocalActivity.current
+                        if (activity != null) {
+                            AccountControl(activity)
+                        }
                     }
                 }
             }

@@ -12,10 +12,6 @@ import path from 'node:path';
 import * as transcriptionCore from './services/transcription-core.js';
 import { TranscriptionUploads } from './services/transcription-uploads.js';
 import { fromEnvironment as authenticationFromEnvironment } from './middleware/authentication.js';
-import { IdentityRateLimiter, auditEvent, correlationId, requireScope } from './middleware/authorization.js';
-import { DerivativeJobs } from './services/derivative-jobs.js';
-import { PostgresDerivativeJobs } from './db/postgres-derivative-jobs.js';
-
 import { createOpenAIDecisionProvider } from './services/openai-agent.js';
 import { AudioGeneration } from './services/audio-generation.js';
 
@@ -30,29 +26,12 @@ const uploadCleanupTimer = setInterval(() => transcriptionUploads.cleanup(), 15 
 uploadCleanupTimer.unref();
 const authentication = authenticationFromEnvironment();
 const rateLimiter = new IdentityRateLimiter({ limit: Number(process.env.TRIMM_RATE_LIMIT_PER_MINUTE) || 120 });
-if (process.env.NODE_ENV === 'production' && !process.env.SUPABASE_DB_URL) {
-  throw new Error('Production database is not configured; derivative jobs persistence requires it.');
-}
-const derivativeJobs = process.env.SUPABASE_DB_URL
-  ? new PostgresDerivativeJobs({ databaseUrl: process.env.SUPABASE_DB_URL })
-  : new DerivativeJobs({});
 const agentDecisionProvider = createOpenAIDecisionProvider();
 
 const audioGeneration = new AudioGeneration();
-const derivativeCleanupTimer = setInterval(() => {
-  Promise.resolve(derivativeJobs.cleanup()).catch((error) => {
-    console.error(JSON.stringify({ event: 'derivative_cleanup_failed', message: error.message }));
-  });
-}, 15 * 60 * 1000);
-derivativeCleanupTimer.unref();
 authentication.assertProductionConfigured();
 
 function policyFor(request, pathname) {
-  if (pathname.startsWith('/v1/derivatives/')) return {
-    scope: 'derivatives:create',
-    action: pathname === '/v1/derivatives/activity' ? 'read' : request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'upload' : 'authorize',
-    resourceType: 'derivative_job',
-  };
   if (pathname.startsWith('/v1/transcribe')) return { scope: 'transcribe:create', action: request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'update' : 'create', resourceType: 'transcription' };
   if (pathname.startsWith('/v1/audio') || pathname === '/v1/chat/completion') {
     return { scope: 'plan:create', action: 'create', resourceType: 'plan' };
@@ -83,28 +62,6 @@ function html(response, status, body) {
     'x-content-type-options': 'nosniff',
   });
   response.end(body);
-}
-
-function derivativeView(job) {
-  return {
-    id: job.id, projectId: job.projectId, deviceSessionId: job.deviceSessionId,
-    purpose: job.purpose, type: job.type, acceptedFormat: job.acceptedFormat,
-    maximumBytes: job.maximumBytes, maximumDurationMs: job.maximumDurationMs,
-    maximumCount: job.maximumCount, status: job.status, offset: job.offset, createdAt: new Date(job.createdAt).toISOString(),
-    expiresAt: new Date(job.expiresAt).toISOString(),
-    mediaMode: job.mediaMode, selectionReason: job.selectionReason,
-    timelineReferences: job.timelineReferences, consent: job.consent,
-    providerDisclosures: job.providerDisclosures, resolution: job.resolution,
-    retentionUntil: new Date(job.deleteAt).toISOString(),
-    deletedAt: job.deletedAt ? new Date(job.deletedAt).toISOString() : null,
-  };
-}
-
-function derivativeContext(request) {
-  return {
-    projectId: String(request.headers['x-trimm-project-id'] || ''),
-    deviceSessionId: String(request.headers['x-trimm-device-session-id'] || ''),
-  };
 }
 
 
@@ -167,52 +124,6 @@ const server = http.createServer(async (request, response) => {
     }
   }
 
-  const derivativeMatch = requestUrl.pathname.match(/^\/v1\/derivatives\/jobs\/([0-9a-f-]{36})(\/complete)?$/i);
-  if (request.method === 'POST' && requestUrl.pathname === '/v1/derivatives/jobs') {
-    try {
-      await derivativeJobs.cleanup();
-      const authorized = await derivativeJobs.authorize(principal, await collect(request, 16 * 1024));
-      return json(response, authorized.reused ? 200 : 201, { ...derivativeView(authorized.job), reused: authorized.reused, chunkSize: 4 * 1024 * 1024, requestId });
-    } catch (error) {
-      return json(response, Number.isInteger(error?.status) ? error.status : 400, { error: error?.message || 'Could not authorize derivative.', code: error?.code, requestId });
-    }
-  }
-  if (request.method === 'GET' && requestUrl.pathname === '/v1/derivatives/activity') {
-    return json(response, 200, { activity: await derivativeJobs.listActivity(principal, requestUrl.searchParams.get('projectId')), requestId });
-  }
-  if (derivativeMatch && request.method === 'HEAD' && !derivativeMatch[2]) {
-    try {
-      const job = await derivativeJobs.read(derivativeMatch[1], principal, derivativeContext(request));
-      const fileExists = fs.existsSync(derivativeJobs.mediaPath ? derivativeJobs.mediaPath(job.id) : '');
-      const isExpired = job.expiresAt <= Date.now() || (job.deleteAt && job.deleteAt <= Date.now());
-      const offset = (!fileExists || isExpired) ? 0 : job.offset;
-      response.writeHead(204, { 'upload-offset': offset, 'upload-expires': new Date(job.expiresAt).toISOString(), 'cache-control': 'no-store' });
-      return response.end();
-    } catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message, code: error?.code, requestId }); }
-  }
-  if (derivativeMatch && request.method === 'PUT' && !derivativeMatch[2]) {
-    try {
-      const job = await derivativeJobs.append(derivativeMatch[1], principal, request.headers['upload-offset'], request, derivativeContext(request));
-      return json(response, 200, { offset: job.offset, requestId });
-    } catch (error) {
-      return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message, code: error?.code, offset: error?.offset, requestId });
-    }
-  }
-  if (derivativeMatch && request.method === 'DELETE' && !derivativeMatch[2]) {
-    try { await derivativeJobs.delete(derivativeMatch[1], principal, derivativeContext(request)); response.writeHead(204); return response.end(); }
-    catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message, code: error?.code, requestId }); }
-  }
-  if (derivativeMatch && request.method === 'POST' && derivativeMatch[2]) {
-    try {
-      const completed = await derivativeJobs.complete(derivativeMatch[1], principal, await collect(request, 4096), derivativeContext(request));
-      return json(response, 200, {
-        ...derivativeView(completed.job), reused: completed.reused,
-        requestId,
-      });
-    } catch (error) {
-      return json(response, Number.isInteger(error?.status) ? error.status : 400, { error: error?.message, code: error?.code, requestId });
-    }
-  }
   const uploadMatch = requestUrl.pathname.match(/^\/v1\/transcribe\/uploads\/([0-9a-f-]{36})(\/complete)?$/i);
   if (request.method === 'POST' && requestUrl.pathname === '/v1/transcribe/uploads') {
     try {

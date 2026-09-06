@@ -22,12 +22,8 @@ import java.net.HttpURLConnection
 import java.net.URI
 import ai.trimm.mobile.planning.RequestShapedMediaIndex
 
-@Serializable
-private data class EvidenceRequestDecision(val type: String, val tool: String, val jobs: List<AuthorizedEvidenceJob>)
-
 class ChatCompletionCoordinator(
-    private val gateway: AgentRunGateway,
-    private val fulfiller: AgentEvidenceFulfiller
+    private val gateway: AgentRunGateway
 ) {
     private val json = Json { ignoreUnknownKeys = true }
     private val allowedActivityTypes = setOf(
@@ -64,18 +60,6 @@ class ChatCompletionCoordinator(
                 var currentRequest = request
                 var outcome = gateway.chatCompletion(currentRequest)
                 
-                // advance stateless
-                while (outcome["type"]?.jsonPrimitive?.content == "tool_request") {
-                    val evidence = json.decodeFromJsonElement(EvidenceRequestDecision.serializer(), outcome)
-                    require(evidence.tool == "inspect_video_range" && evidence.jobs.isNotEmpty())
-                    val completed = evidence.jobs.map { job -> fulfiller.fulfill(job) }
-                    
-                    currentRequest = currentRequest.copy(
-                        evidenceJobIds = currentRequest.evidenceJobIds + completed
-                    )
-                    outcome = gateway.chatCompletion(currentRequest)
-                }
-
                 if (outcome["type"]?.jsonPrimitive?.content == "edit_program") {
                     val existingRemovals = request.existingOperations.mapNotNull { opElem ->
                         val decoded = json.decodeFromJsonElement(EditInstruction.serializer(), opElem)
