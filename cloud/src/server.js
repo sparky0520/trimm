@@ -136,7 +136,6 @@ const server = http.createServer(async (request, response) => {
       uptime_seconds: process.uptime(),
       memory_usage: process.memoryUsage(),
       configuration: {
-        environment: process.env.NODE_ENV || 'development',
         port: port,
         llm_model: model,
         llm_base_url: baseURL,
