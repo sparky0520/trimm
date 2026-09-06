@@ -130,21 +130,20 @@ async function collectBuffer(request, maxBytes = 256 * 1024) {
 const server = http.createServer(async (request, response) => {
   const requestUrl = new URL(request.url, 'http://localhost');
   if (request.method === 'GET' && requestUrl.pathname === '/health') {
-    const safeConfig = Object.keys(process.env).reduce((acc, key) => {
-      if (key.match(/KEY|SECRET|PASSWORD|TOKEN|URL/i)) {
-        acc[key] = '*** MASKED ***';
-      } else {
-        acc[key] = process.env[key];
-      }
-      return acc;
-    }, {});
-
-    return json(response, 200, { 
-      ok: true, 
+    return json(response, 200, {
+      ok: true,
       status: 'healthy',
-      model, 
-      authentication: authentication.configured(),
-      configuration: safeConfig 
+      uptime_seconds: process.uptime(),
+      memory_usage: process.memoryUsage(),
+      configuration: {
+        environment: process.env.NODE_ENV || 'development',
+        port: port,
+        llm_model: model,
+        llm_base_url: baseURL,
+        authentication_enabled: authentication.configured(),
+        supabase_connected: !!process.env.SUPABASE_URL,
+        rate_limit_per_minute: Number(process.env.TRIMM_RATE_LIMIT_PER_MINUTE) || 120
+      }
     });
   }
   if (request.method === 'GET' && (requestUrl.pathname === '/privacy' || requestUrl.pathname === '/privacy/')) {
