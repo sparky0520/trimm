@@ -25,6 +25,21 @@
     ul { font-size: 14px; }
     ul li { margin-bottom: 12px; color: #D4D4D8; }
     strong { color: #FAFAFA; }
+    
+    .charts-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+    @media (min-width: 768px) {
+      .charts-wrapper {
+        flex-direction: row;
+      }
+      .charts-wrapper .chart-container {
+        flex: 1;
+        margin-top: 0 !important;
+      }
+    }
   </style>
   <script src="./chart.js"></script>
 </head>
@@ -47,11 +62,11 @@
     </div>
 
     <h2>Breakdown (Graph)</h2>
-    <div class="card" style="padding: 16px 32px;">
+    <div class="card charts-wrapper" style="padding: 16px 32px;">
       <div class="chart-container">
         <canvas id="costChart"></canvas>
       </div>
-      <div class="chart-container" style="margin-top: 32px;">
+      <div class="chart-container">
         <canvas id="pieChart"></canvas>
       </div>
     </div>

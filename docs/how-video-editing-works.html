@@ -1,9 +1,11 @@
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="A visual explanation of how trimm turns a chat request into a private, previewable video edit.">
+  <meta name="description"
+    content="A visual explanation of how trimm turns a chat request into a private, previewable video edit.">
   <meta name="theme-color" content="#09090b">
   <title>How Trimm edits a video</title>
   <link rel="icon" href="../releases/trimm-icon.png" type="image/png">
@@ -15,18 +17,23 @@
       border-radius: 16px;
       padding: 32px;
       margin: 32px 0;
-      box-shadow: 0 20px 50px rgba(0,0,0,.24);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, .24);
       overflow-x: auto;
       width: 100%;
     }
+
     .mermaid {
       display: flex;
       justify-content: center;
       min-width: 600px;
     }
-    .section-intro { margin-bottom: 24px; }
+
+    .section-intro {
+      margin-bottom: 24px;
+    }
   </style>
 </head>
+
 <body>
   <header class="nav shell">
     <a class="brand" href="../releases/index.html" aria-label="Trimm home">
@@ -42,12 +49,14 @@
       <div class="hero-copy">
         <p class="eyebrow">One request. A grounded edit.</p>
         <h1>How a video becomes<br><span>“ready to publish.”</span></h1>
-        <p class="lede">Trimm does not upload everything and hope for a good answer. It first maps the footage locally, sends only the useful pieces for the request, then turns the agent’s understanding into edits you can preview.</p>
+        <p class="lede">Trimm does not upload everything and hope for a good answer. It first maps the footage locally,
+          sends only the useful pieces for the request, then turns the agent’s understanding into edits you can preview.
+        </p>
       </div>
-      
+
       <div class="product-frame" aria-label="Example Trimm editing workspace">
-        <div class="frame-bar"><img src="../releases/trimm-icon.png" class="brand-mark" alt="Trimm logo"><span>New edit</span><span
-            class="frame-status">Ready</span></div>
+        <div class="frame-bar"><img src="../releases/trimm-icon.png" class="brand-mark" alt="Trimm logo"><span>New
+            edit</span><span class="frame-status">Ready</span></div>
         <div class="preview"><span>VIDEO PREVIEW</span><button aria-label="Play preview">Play</button></div>
         <div class="timeline"><span></span><i></i><b></b><i></i><span></span></div>
         <div class="conversation">
@@ -55,8 +64,9 @@
           <div class="message message-agent"><strong>Trimm</strong>
             <p>I found a cleaner opening and a stronger demonstration take.</p>
             <div class="proposal-wrapper">
-              <div class="proposal"><span>Proposed edit</span><b>Remove 3 false starts · tighten 4 pauses</b><small>Review
-                before applying</small></div>
+              <div class="proposal"><span>Proposed edit</span><b>Remove 3 false starts · tighten 4
+                  pauses</b><small>Review
+                  before applying</small></div>
               <button class="undo-icon" aria-label="Undo checkpoint" title="Undo">&#x21A9;</button>
             </div>
           </div>
@@ -72,10 +82,11 @@
       <div class="mermaid-container">
         <div class="mermaid">
           flowchart TD
-              A[1. Map Locally\nRead duration, rotation, speech, scenes] --> B[2. Select Evidence\nChoose story coverage & candidate clips]
-              B --> C[3. Watch & Understand\nAgent connects speech, visuals & context]
-              C --> D[4. Propose Edits\nAgent returns typed operations, no mutation]
-              D --> E[5. Preview Result\nImmediate preview in timeline]
+          A[1. Map Locally\nRead duration, rotation, speech, scenes] --> B[2. Select Evidence\nChoose story coverage &
+          candidate clips]
+          B --> C[3. Watch & Understand\nAgent connects speech, visuals & context]
+          C --> D[4. Propose Edits\nAgent returns typed operations, no mutation]
+          D --> E[5. Preview Result\nImmediate preview in timeline]
         </div>
       </div>
     </section>
@@ -88,13 +99,13 @@
       <div class="mermaid-container">
         <div class="mermaid">
           flowchart LR
-              A[00:00 - 00:10<br/>Representative Context]
-              B[00:15 - 00:25<br/>Candidate Edit]
-              C[00:30 - 00:40<br/>Representative Context]
-              D[00:45 - 00:55<br/>Uncertain Moment]
-              E[01:00 - 01:20<br/>User Constraint]
-              
-              A --> B --> C --> D --> E
+          A[00:00 - 00:10<br />Representative Context]
+          B[00:15 - 00:25<br />Candidate Edit]
+          C[00:30 - 00:40<br />Representative Context]
+          D[00:45 - 00:55<br />Uncertain Moment]
+          E[01:00 - 01:20<br />User Constraint]
+
+          A --> B --> C --> D --> E
         </div>
       </div>
     </section>
@@ -107,14 +118,14 @@
       <div class="mermaid-container">
         <div class="mermaid">
           stateDiagram-v2
-              [*] --> Agent : User Request Starts
-              Agent: Gemini 3.6 Flash
-              Agent --> Tools : needs precision
-              Tools: Inspect one gap (transcript, OCR, frame)
-              Tools --> Agent : new evidence
-              Agent --> Propose : Enough timestamped evidence
-              Agent --> Ask : Ambiguous intent
-              Agent --> Stop : Boundary reached
+          [*] --> Agent : User Request Starts
+          Agent: Gemini 3.6 Flash
+          Agent --> Tools : needs precision
+          Tools: Inspect one gap (transcript, OCR, frame)
+          Tools --> Agent : new evidence
+          Agent --> Propose : Enough timestamped evidence
+          Agent --> Ask : Ambiguous intent
+          Agent --> Stop : Boundary reached
         </div>
       </div>
     </section>
@@ -127,13 +138,13 @@
       <div class="mermaid-container">
         <div class="mermaid">
           sequenceDiagram
-              participant Agent as Agent Proposal
-              participant User as You
-              participant Device as Local Device Render
-              Agent->>User: Remove false start (00:12–00:18)
-              Agent->>User: Keep pricing (08:42–09:36)
-              User->>Device: Approve changes
-              Device-->>User: Preview updated instantly
+          participant Agent as Agent Proposal
+          participant User as You
+          participant Device as Local Device Render
+          Agent->>User: Remove false start (00:12–00:18)
+          Agent->>User: Keep pricing (08:42–09:36)
+          User->>Device: Approve changes
+          Device-->>User: Preview updated instantly
         </div>
       </div>
     </section>
@@ -146,19 +157,19 @@
       <div class="mermaid-container">
         <div class="mermaid">
           flowchart LR
-              subgraph LocalDevice [Stays Local]
-                  A[Original Clips]
-                  B[Local Index]
-                  C[Preview & Export]
-              end
-              
-              subgraph CloudDevice [Leaves Device]
-                  D[Bounded Video Ranges]
-                  E[Compressed Audio]
-                  F[Frames or Measurements]
-              end
-              
-              LocalDevice -->|Only what the request needs| CloudDevice
+          subgraph LocalDevice [Stays Local]
+          A[Original Clips]
+          B[Local Index]
+          C[Preview & Export]
+          end
+
+          subgraph CloudDevice [Leaves Device]
+          D[Bounded Video Ranges]
+          E[Compressed Audio]
+          F[Frames or Measurements]
+          end
+
+          LocalDevice -->|Only what the request needs| CloudDevice
         </div>
       </div>
     </section>
@@ -173,7 +184,7 @@
 
   <script src="./scripts/mermaid.min.js"></script>
   <script>
-    mermaid.initialize({ 
+    mermaid.initialize({
       startOnLoad: true,
       useMaxWidth: false,
       theme: 'dark',
@@ -192,4 +203,5 @@
     });
   </script>
 </body>
+
 </html>
