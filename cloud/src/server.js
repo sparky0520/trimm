@@ -22,6 +22,7 @@ const baseURL = process.env.LLM_OPENAI_BASE_URL || 'https://api.moonshot.ai/v1';
 const model = process.env.MODEL || 'kimi-k3';
 const MAX_BODY_BYTES = 512 * 1024;
 const privacyPolicy = fs.readFileSync(path.join(__dirname, 'privacy.html'));
+const faviconImage = fs.readFileSync(path.join(__dirname, 'trimm-icon.png'));
 const transcriptionUploads = new TranscriptionUploads();
 const uploadCleanupTimer = setInterval(() => transcriptionUploads.cleanup(), 15 * 60 * 1000);
 uploadCleanupTimer.unref();
@@ -105,6 +106,10 @@ const server = http.createServer(async (request, response) => {
   }
   if (request.method === 'GET' && (requestUrl.pathname === '/privacy' || requestUrl.pathname === '/privacy/')) {
     return html(response, 200, privacyPolicy);
+  }
+  if (request.method === 'GET' && requestUrl.pathname === '/trimm-icon.png') {
+    response.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' });
+    return response.end(faviconImage);
   }
   let principal;
   const requestId = correlationId(request);
