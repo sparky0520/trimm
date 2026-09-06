@@ -83,11 +83,20 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 
-@Composable fun AssistantChatBubble(accent: Color = Lavender, content: @Composable ColumnScope.() -> Unit) {
+@Composable fun AssistantChatBubble(accent: Color = Lavender, isBubble: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
         Column(
-            Modifier.fillMaxWidth(.92f).background(Raised, RoundedCornerShape(4.dp, 12.dp, 12.dp, 12.dp))
-                .border(1.dp, Border, RoundedCornerShape(4.dp, 12.dp, 12.dp, 12.dp)).padding(14.dp)
+            Modifier.fillMaxWidth(.92f)
+                .then(
+                    if (isBubble) {
+                        Modifier
+                            .background(Raised, RoundedCornerShape(4.dp, 12.dp, 12.dp, 12.dp))
+                            .border(1.dp, Border, RoundedCornerShape(4.dp, 12.dp, 12.dp, 12.dp))
+                            .padding(14.dp)
+                    } else {
+                        Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
+                    }
+                )
         ) {
             Text("Trimm", color = accent, fontWeight = FontWeight.Bold, fontSize = 11.sp)
             Spacer(Modifier.height(5.dp))

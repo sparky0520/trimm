@@ -212,7 +212,7 @@ import kotlinx.serialization.json.jsonPrimitive
                                     }
                                 }
                             }
-                            AssistantChatBubble(accent = if (turn.isError) Color(0xFFE4E4E7) else Lavender) {
+                            AssistantChatBubble(accent = if (turn.isError) Color(0xFFE4E4E7) else Lavender, isBubble = false) {
                                 when {
                                     turn.isPending -> {
                                         Row(
@@ -220,12 +220,12 @@ import kotlinx.serialization.json.jsonPrimitive
                                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
                                             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Lavender)
-                                            Text(turn.response, color = CreamRaised, lineHeight = 20.sp)
+                                            TypewriterText(turn.response, color = CreamRaised, lineHeight = 20.sp)
                                         }
                                     }
                                     turn.isError -> {
                                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Text(formatUserFacingError(turn.response), color = CreamRaised, lineHeight = 20.sp, fontSize = 13.sp)
+                                            TypewriterText(formatUserFacingError(turn.response), color = CreamRaised, lineHeight = 20.sp, fontSize = 13.sp)
                                             Button(
                                                 onClick = { retryTurn(turn.id) },
                                                 shape = RoundedCornerShape(8.dp),
@@ -241,7 +241,7 @@ import kotlinx.serialization.json.jsonPrimitive
                                         }
                                     }
                                     else -> {
-                                        Text(turn.response, color = CreamRaised, lineHeight = 20.sp)
+                                        TypewriterText(turn.response, color = CreamRaised, lineHeight = 20.sp)
                                     }
                                 }
                             }
@@ -294,11 +294,7 @@ import kotlinx.serialization.json.jsonPrimitive
                         }
                     }
                 }
-                if (run.usage.calls.isNotEmpty()) {
-                    item(key = "agent-usage-${run.runId}-${run.usage.totalTokens}") {
-                        AgentUsageChatBubble(run.usage)
-                    }
-                }
+                // Removed AgentUsageChatBubble rendering per user request, but retained calculation logic for future admin dashboard
             }
             if (review != null) {
                 item { ProposalChatBubble(review, applyProposal, rejectProposal) }

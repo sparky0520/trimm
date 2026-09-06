@@ -84,7 +84,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 
 @Composable fun FindingsChatBubble(read: ai.trimm.mobile.domain.EditorialRead) {
-    AssistantChatBubble {
+    AssistantChatBubble(isBubble = false) {
         ChatFinding("Things to fix", read.technicalProblems)
     }
 }

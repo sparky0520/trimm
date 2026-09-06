@@ -84,7 +84,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 
 @Composable fun AgentPlanBubble(plan: ai.trimm.mobile.planner.AgentPlanResponse, run: ai.trimm.mobile.planner.PersistedAgentRun?) {
-    AssistantChatBubble(accent = Coral) {
+    AssistantChatBubble(accent = Coral, isBubble = false) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Execution Plan", color = CreamRaised, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             plan.tasks?.forEach { task ->
