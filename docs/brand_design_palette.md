@@ -40,3 +40,47 @@ When displaying the "Trimm" brand name in the UI (such as in the AppDrawer heade
 
 > [!NOTE]
 > The primary color theme is strictly a **dark mode** design. Any UI extensions should default to `Ink` for background and `Cream` for primary foreground elements.
+
+## 📄 Internal Document Structure
+
+For internal facing documents (like privacy policies, infrastructure costs, and system explainers), use a simplified, readable layout without navigation or hero sections. 
+
+### Structure
+- Wrap content in a `<main>` tag.
+- The title should be an `<h1>` element.
+- Follow the title with a `<p class="muted">` for subtitles, dates, or meta information.
+- Do not use navbars or complex hero sections.
+
+### Standard CSS
+```css
+:root {
+  color-scheme: light dark;
+  font: 16px/1.6 system-ui, sans-serif;
+}
+body {
+  margin: 0;
+  background: #0d0d0f;
+  color: #f3f3f4;
+}
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 64px 24px 96px;
+}
+h1, h2 {
+  line-height: 1.2;
+}
+h1 {
+  font-size: clamp(2rem, 7vw, 3.5rem);
+  margin-bottom: .25rem;
+}
+h2 {
+  margin-top: 2.25rem;
+}
+.muted {
+  color: #a9a9b2;
+}
+a {
+  color: #9ec5ff;
+}
+```

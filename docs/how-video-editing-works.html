@@ -9,11 +9,19 @@
   <meta name="theme-color" content="#09090b">
   <title>How Trimm edits a video</title>
   <link rel="icon" href="../releases/trimm-icon.png" type="image/png">
-  <link rel="stylesheet" href="../releases/styles.css">
-  <style>
+    <style>
+    :root { color-scheme: light dark; font: 16px/1.6 system-ui, sans-serif; }
+    body { margin: 0; background: #0d0d0f; color: #f3f3f4; }
+    main { max-width: 760px; margin: 0 auto; padding: 64px 24px 96px; }
+    h1, h2 { line-height: 1.2; }
+    h1 { font-size: clamp(2rem, 7vw, 3.5rem); margin-bottom: .25rem; }
+    h2 { margin-top: 2.25rem; }
+    .muted { color: #a9a9b2; }
+    a { color: #9ec5ff; }
+    
     .mermaid-container {
-      background: var(--surface);
-      border: 1px solid var(--line);
+      background: #18181B;
+      border: 1px solid #3F3F46;
       border-radius: 16px;
       padding: 32px;
       margin: 32px 0;
@@ -27,58 +35,19 @@
       justify-content: center;
       min-width: 600px;
     }
-
-    .section-intro {
-      margin-bottom: 24px;
-    }
   </style>
 </head>
 
 <body>
-  <header class="nav shell">
-    <a class="brand" href="../releases/index.html" aria-label="Trimm home">
-      <img src="../releases/trimm-icon.png" class="brand-mark" alt="Trimm logo"><span>Trimm</span>
-    </a>
-    <nav aria-label="Primary navigation">
-      <a href="#end-to-end-flow" class="button button-small button-quiet">System explainer</a>
-    </nav>
-  </header>
+  
 
   <main>
-    <section class="hero shell">
-      <div class="hero-copy">
-        <p class="eyebrow">One request. A grounded edit.</p>
-        <h1>How a video becomes<br><span>“ready to publish.”</span></h1>
-        <p class="lede">Trimm does not upload everything and hope for a good answer. It first maps the footage locally,
-          sends only the useful pieces for the request, then turns the agent’s understanding into edits you can preview.
-        </p>
-      </div>
+        <h1>How Trimm edits a video</h1>
+    <p class="muted">A visual explanation of how Trimm turns a chat request into a private, previewable video edit.</p>
 
-      <div class="product-frame" aria-label="Example Trimm editing workspace">
-        <div class="frame-bar"><img src="../releases/trimm-icon.png" class="brand-mark" alt="Trimm logo"><span>New
-            edit</span><span class="frame-status">Ready</span></div>
-        <div class="preview"><span>VIDEO PREVIEW</span><button aria-label="Play preview">Play</button></div>
-        <div class="timeline"><span></span><i></i><b></b><i></i><span></span></div>
-        <div class="conversation">
-          <p class="message message-user">Make this video publishable. Keep the pricing explanation.</p>
-          <div class="message message-agent"><strong>Trimm</strong>
-            <p>I found a cleaner opening and a stronger demonstration take.</p>
-            <div class="proposal-wrapper">
-              <div class="proposal"><span>Proposed edit</span><b>Remove 3 false starts · tighten 4
-                  pauses</b><small>Review
-                  before applying</small></div>
-              <button class="undo-icon" aria-label="Undo checkpoint" title="Undo">&#x21A9;</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="workflow shell" id="end-to-end-flow" style="padding-top: 40px; padding-bottom: 40px;">
-      <div class="section-intro">
-        <p class="eyebrow">End-to-end flow</p>
+    <section id="end-to-end-flow">
+      
         <h2>From chat to finished video</h2>
-      </div>
       <div class="mermaid-container">
         <div class="mermaid">
           flowchart TD
@@ -91,11 +60,9 @@
       </div>
     </section>
 
-    <section class="workflow shell" style="padding-top: 40px; padding-bottom: 40px;">
-      <div class="section-intro">
-        <p class="eyebrow">Layer 1: the private map</p>
+    <section>
+      
         <h2>A small index replaces a blind upload</h2>
-      </div>
       <div class="mermaid-container">
         <div class="mermaid">
           flowchart LR
@@ -110,11 +77,9 @@
       </div>
     </section>
 
-    <section class="workflow shell" style="padding-top: 40px; padding-bottom: 40px;">
-      <div class="section-intro">
-        <p class="eyebrow">Layer 2: the agentic loop</p>
+    <section>
+      
         <h2>Analysis continues until the edit is grounded</h2>
-      </div>
       <div class="mermaid-container">
         <div class="mermaid">
           stateDiagram-v2
@@ -130,11 +95,9 @@
       </div>
     </section>
 
-    <section class="workflow shell" style="padding-top: 40px; padding-bottom: 40px;">
-      <div class="section-intro">
-        <p class="eyebrow">The approval boundary</p>
+    <section>
+      
         <h2>The agent describes edits. Your device renders them.</h2>
-      </div>
       <div class="mermaid-container">
         <div class="mermaid">
           sequenceDiagram
@@ -150,10 +113,8 @@
     </section>
 
     <section class="workflow shell" style="padding-top: 40px; padding-bottom: 80px;">
-      <div class="section-intro">
-        <p class="eyebrow">Default privacy boundary</p>
+      
         <h2>What leaves your device?</h2>
-      </div>
       <div class="mermaid-container">
         <div class="mermaid">
           flowchart LR
