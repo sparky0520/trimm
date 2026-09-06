@@ -46,102 +46,29 @@
     <p class="muted">A visual explanation of how Trimm turns a chat request into a private, previewable video edit.</p>
 
     <section id="end-to-end-flow">
-      
-        <h2>From chat to finished video</h2>
+      <h2>From chat to finished video</h2>
       <div class="mermaid-container">
         <div class="mermaid">
           flowchart TD
-          A[1. Map Locally\nRead duration, rotation, speech, scenes] --> B[2. Select Evidence\nChoose story coverage &
-          candidate clips]
-          B --> C[3. Watch & Understand\nAgent connects speech, visuals & context]
-          C --> D[4. Propose Edits\nAgent returns typed operations, no mutation]
-          D --> E[5. Preview Result\nImmediate preview in timeline]
-        </div>
-      </div>
-    </section>
+            subgraph Local [Stays on Local Device]
+              A[Original Clips] --> B(1. Map Locally: Read duration, speech, scenes)
+              B --> C(2. Select Evidence: Choose story coverage)
+              F(5. Preview Result: Immediate preview in timeline)
+            end
 
-    <section>
-      
-        <h2>A small index replaces a blind upload</h2>
-      <div class="mermaid-container">
-        <div class="mermaid">
-          flowchart LR
-          A[00:00 - 00:10<br />Representative Context]
-          B[00:15 - 00:25<br />Candidate Edit]
-          C[00:30 - 00:40<br />Representative Context]
-          D[00:45 - 00:55<br />Uncertain Moment]
-          E[01:00 - 01:20<br />User Constraint]
+            subgraph Cloud [Leaves Device for AI]
+              C -->|Bounded Video Ranges & Compressed Audio| D(3. Watch & Understand: Agent connects speech & context)
+              D -->|Needs precision| E{Tools: Inspect gap, OCR, frame}
+              E -->|New evidence| D
+              D -->|Enough timestamped evidence| G(4. Propose Edits: Agent returns typed operations)
+            end
 
-          A --> B --> C --> D --> E
-        </div>
-      </div>
-    </section>
-
-    <section>
-      
-        <h2>Analysis continues until the edit is grounded</h2>
-      <div class="mermaid-container">
-        <div class="mermaid">
-          stateDiagram-v2
-          [*] --> Agent : User Request Starts
-          Agent: Gemini 3.6 Flash
-          Agent --> Tools : needs precision
-          Tools: Inspect one gap (transcript, OCR, frame)
-          Tools --> Agent : new evidence
-          Agent --> Propose : Enough timestamped evidence
-          Agent --> Ask : Ambiguous intent
-          Agent --> Stop : Boundary reached
-        </div>
-      </div>
-    </section>
-
-    <section>
-      
-        <h2>The agent describes edits. Your device renders them.</h2>
-      <div class="mermaid-container">
-        <div class="mermaid">
-          sequenceDiagram
-          participant Agent as Agent Proposal
-          participant User as You
-          participant Device as Local Device Render
-          Agent->>User: Remove false start (00:12–00:18)
-          Agent->>User: Keep pricing (08:42–09:36)
-          User->>Device: Approve changes
-          Device-->>User: Preview updated instantly
-        </div>
-      </div>
-    </section>
-
-    <section class="workflow shell" style="padding-top: 40px; padding-bottom: 80px;">
-      
-        <h2>What leaves your device?</h2>
-      <div class="mermaid-container">
-        <div class="mermaid">
-          flowchart LR
-          subgraph LocalDevice [Stays Local]
-          A[Original Clips]
-          B[Local Index]
-          C[Preview & Export]
-          end
-
-          subgraph CloudDevice [Leaves Device]
-          D[Bounded Video Ranges]
-          E[Compressed Audio]
-          F[Frames or Measurements]
-          end
-
-          LocalDevice -->|Only what the request needs| CloudDevice
+            G -->|Remove false start, etc.| User((User Approves))
+            User -->|Approve changes| F
         </div>
       </div>
     </section>
   </main>
-
-  <footer class="shell">
-    <a class="brand" href="../releases/index.html">
-      <img src="../releases/trimm-icon.png" class="brand-mark" alt="Trimm logo"><span>Trimm</span>
-    </a>
-    <p>Chat → local index → selected evidence → grounded proposal → instant preview.</p>
-  </footer>
 
   <script src="./scripts/mermaid.min.js"></script>
   <script>

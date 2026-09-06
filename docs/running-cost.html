@@ -53,13 +53,18 @@
       flex-direction: column;
       gap: 32px;
     }
+    .layout-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
     @media (min-width: 768px) {
-      .charts-wrapper {
+      .layout-wrapper {
         flex-direction: row;
       }
-      .charts-wrapper .chart-container {
+      .layout-wrapper > div {
         flex: 1;
-        margin-top: 0 !important;
+        min-width: 0;
       }
     }
   </style>
@@ -70,26 +75,32 @@
     <h1>Infrastructure Costs</h1>
     <p class="muted">Interactive cost visualizer for the trimm backend.</p>
 
-    <div class="card">
-      <h2 style="margin-top: 0;">Monthly Active Users (MAU)</h2>
-      <div class="slider-container">
-        <input type="range" id="mau-slider" min="0" max="100000" step="1000" value="1000">
-        <p style="font-size: 1.25rem;">Estimated Users: <span id="mau-display" style="font-weight: bold; color: #fff;">1,000</span></p>
+    <div class="layout-wrapper">
+      <div>
+        <div class="card">
+          <h2 style="margin-top: 0;">Monthly Active Users (MAU)</h2>
+          <div class="slider-container">
+            <input type="range" id="mau-slider" min="0" max="100000" step="1000" value="1000">
+            <p style="font-size: 1.25rem;">Estimated Users: <span id="mau-display" style="font-weight: bold; color: #fff;">1,000</span></p>
+          </div>
+          
+          <div style="margin-top: 48px;">
+            <h2 style="margin: 0; color: #a9a9b2; font-size: 1.1rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Estimated Monthly Cost</h2>
+            <div class="cost-value">$<span id="total-cost">0.00</span></div>
+          </div>
+        </div>
       </div>
-      
-      <div style="margin-top: 48px;">
-        <h2 style="margin: 0; color: #a9a9b2; font-size: 1.1rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Estimated Monthly Cost</h2>
-        <div class="cost-value">$<span id="total-cost">0.00</span></div>
-      </div>
-    </div>
 
-    <h2>Breakdown (Graph)</h2>
-    <div class="card charts-wrapper" style="padding: 16px 32px;">
-      <div class="chart-container">
-        <canvas id="costChart"></canvas>
-      </div>
-      <div class="chart-container">
-        <canvas id="pieChart"></canvas>
+      <div>
+        <h2 style="margin-top: 0;">Breakdown (Graph)</h2>
+        <div class="card charts-wrapper" style="padding: 16px 32px;">
+          <div class="chart-container">
+            <canvas id="costChart"></canvas>
+          </div>
+          <div class="chart-container">
+            <canvas id="pieChart"></canvas>
+          </div>
+        </div>
       </div>
     </div>
 
