@@ -6,28 +6,26 @@
   <title>trimm Cost Visualizer</title>
   <style>
     :root { color-scheme: dark; font: 16px/1.6 system-ui, sans-serif; }
-    body { margin: 0; background: #09090B; color: #FAFAFA; } /* Ink background, Cream text */
+    body { margin: 0; background: #09090B; color: #FAFAFA; }
     main { max-width: 760px; margin: 0 auto; padding: 64px 24px 96px; }
     h1, h2, h3 { line-height: 1.2; font-family: system-ui, sans-serif; }
     h1 { font-size: clamp(2rem, 7vw, 3.5rem); margin-bottom: .25rem; font-weight: 600; letter-spacing: -1px; }
     h2 { margin-top: 2.25rem; font-size: 20px; font-weight: bold; }
-    .muted { color: #A1A1AA; font-size: 14px; } /* Muted */
+    .muted { color: #A1A1AA; font-size: 14px; }
     a { color: #FAFAFA; text-decoration: underline; }
     
-    .card { background: #18181B; padding: 32px; border-radius: 12px; margin-bottom: 24px; border: 1px solid #3F3F46; } /* Workspace, Border */
+    .card { background: #18181B; padding: 32px; border-radius: 12px; margin-bottom: 24px; border: 1px solid #3F3F46; }
     .slider-container { margin: 32px 0; }
     input[type=range] { width: 100%; cursor: pointer; accent-color: #FAFAFA; height: 6px; }
     .cost-value { font-size: 3rem; font-weight: 800; color: #FAFAFA; letter-spacing: -1px; margin-top: 8px; }
     
-    table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px; }
-    th, td { padding: 16px; text-align: left; border-bottom: 1px solid #3F3F46; }
-    th { color: #A1A1AA; font-weight: bold; font-size: 12px; text-transform: uppercase; letter-spacing: 1.4px; }
-    td:last-child, th:last-child { text-align: right; }
+    .chart-container { position: relative; height: 300px; width: 100%; margin-top: 16px; }
     
     ul { font-size: 14px; }
-    ul li { margin-bottom: 12px; color: #D4D4D8; } /* Lavender */
+    ul li { margin-bottom: 12px; color: #D4D4D8; }
     strong { color: #FAFAFA; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <main>
@@ -47,29 +45,20 @@
       </div>
     </div>
 
-    <h2>Breakdown</h2>
+    <h2>Breakdown (Graph)</h2>
     <div class="card" style="padding: 16px 32px;">
-      <table id="cost-breakdown">
-        <thead>
-          <tr>
-            <th>Service</th>
-            <th>Type</th>
-            <th>Estimated Cost</th>
-          </tr>
-        </thead>
-        <tbody>
-          <!-- Rows injected by JS -->
-        </tbody>
-      </table>
+      <div class="chart-container">
+        <canvas id="costChart"></canvas>
+      </div>
     </div>
 
-    <h2>Assumptions & Pricing</h2>
+    <h2>Per-Unit Pricing & Assumptions</h2>
     <ul>
-      <li><strong>Fly.io (Compute):</strong> Fixed at ~$2.00/mo for intermittent wakes (Variable bursts on high load).</li>
-      <li><strong>Supabase (DB & Auth):</strong> $0.00/mo under 50,000 MAU. Pro plan ($25) required above that limit.</li>
-      <li><strong>Moonshot AI (LLM):</strong> Estimated at ~$0.05 per user per month, optimized via context caching.</li>
-      <li><strong>AssemblyAI (Transcription):</strong> Estimated at ~$0.10 per user per month.</li>
-      <li><strong>Generative Audio:</strong> Estimated at ~$0.05 per user per month, relying on aggressive SFX caching.</li>
+      <li><strong>Fly.io (Compute):</strong> ~$2.00/mo base for shared-1x-cpu VMs (billed per-second, with scale-to-zero capabilities).</li>
+      <li><strong>Supabase (DB & Auth):</strong> $25.00/mo (Pro plan) required for projects exceeding the 50,000 MAU free tier.</li>
+      <li><strong>Moonshot AI (LLM):</strong> $3.00 (K3) to $0.45 (K2.5) per million input tokens, dropping to $0.30 per million for Context Cache hits.</li>
+      <li><strong>AssemblyAI (Transcription):</strong> Usage-based billing starting at $0.15 per audio hour for standard speech-to-text.</li>
+      <li><strong>ElevenLabs (SFX) & Replicate (BGM):</strong> ~$0.12 per SFX generation (ElevenLabs) and ~$0.04 per 30s BGM generation (Replicate). Aggressively cached to maintain ~$0.05/user average.</li>
     </ul>
 
   </main>
@@ -77,7 +66,52 @@
     const slider = document.getElementById('mau-slider');
     const mauDisplay = document.getElementById('mau-display');
     const totalCostDisplay = document.getElementById('total-cost');
-    const tbody = document.querySelector('#cost-breakdown tbody');
+    const ctx = document.getElementById('costChart').getContext('2d');
+
+    let costChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: ['Fly.io', 'Supabase', 'Moonshot AI', 'AssemblyAI', 'Audio'],
+        datasets: [{
+          label: 'Estimated Cost ($)',
+          data: [0, 0, 0, 0, 0],
+          backgroundColor: [
+            'rgba(255, 99, 132, 0.8)',
+            'rgba(54, 162, 235, 0.8)',
+            'rgba(255, 206, 86, 0.8)',
+            'rgba(75, 192, 192, 0.8)',
+            'rgba(153, 102, 255, 0.8)'
+          ],
+          borderColor: [
+            'rgba(255, 99, 132, 1)',
+            'rgba(54, 162, 235, 1)',
+            'rgba(255, 206, 86, 1)',
+            'rgba(75, 192, 192, 1)',
+            'rgba(153, 102, 255, 1)'
+          ],
+          borderWidth: 1,
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            grid: { color: 'rgba(255, 255, 255, 0.1)' },
+            ticks: { color: '#FAFAFA' }
+          },
+          x: {
+            grid: { display: false },
+            ticks: { color: '#FAFAFA' }
+          }
+        }
+      }
+    });
 
     function updateCosts() {
       const mau = parseInt(slider.value, 10);
@@ -92,13 +126,9 @@
       const total = flyCost + supabaseCost + llmCost + transcribeCost + audioCost;
       totalCostDisplay.textContent = total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-      tbody.innerHTML = `
-        <tr><td>Fly.io (Compute)</td><td style="color:#a9a9b2;">Fixed / Base</td><td style="font-weight:500;">$${flyCost.toFixed(2)}</td></tr>
-        <tr><td>Supabase (DB & Auth)</td><td style="color:#a9a9b2;">Fixed</td><td style="font-weight:500;">$${supabaseCost.toFixed(2)}</td></tr>
-        <tr><td>Moonshot AI (LLM)</td><td style="color:#a9a9b2;">Variable</td><td style="font-weight:500;">$${llmCost.toFixed(2)}</td></tr>
-        <tr><td>AssemblyAI (Transcribe)</td><td style="color:#a9a9b2;">Variable</td><td style="font-weight:500;">$${transcribeCost.toFixed(2)}</td></tr>
-        <tr><td>Audio (11Labs/Replicate)</td><td style="color:#a9a9b2;">Variable</td><td style="font-weight:500;">$${audioCost.toFixed(2)}</td></tr>
-      `;
+      // Update Chart data
+      costChart.data.datasets[0].data = [flyCost, supabaseCost, llmCost, transcribeCost, audioCost];
+      costChart.update();
     }
 
     slider.addEventListener('input', updateCosts);
