@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test src/test/*.test.js",
-    "backend:serve": "node src/server.js"
+    "backend:serve": "node src/server.js",
+    "start": "npm run backend:serve"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.115.0",
