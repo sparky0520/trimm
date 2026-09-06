@@ -1,5 +1,5 @@
 app = "trimm-cloud"
-primary_region = "bom"
+primary_region = "sin"
 
 [build]
   builder = "heroku/builder:22"
