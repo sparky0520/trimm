@@ -57,10 +57,8 @@
             end
 
             subgraph Cloud [Leaves Device for AI]
-              C -->|Bounded Video Ranges & Compressed Audio| D(3. Watch & Understand: Agent connects speech & context)
-              D -->|Needs precision| E{Tools: Inspect gap, OCR, frame}
-              E -->|New evidence| D
-              D -->|Enough timestamped evidence| G(4. Propose Edits: Agent returns typed operations)
+              C -->|Compressed Audio & Transcript| D(3. Listen & Understand: Agent connects speech & context)
+              D -->|Timestamped evidence| G(4. Propose Edits: Agent returns typed operations)
             end
 
             G -->|Remove false start, etc.| User((User Approves))
