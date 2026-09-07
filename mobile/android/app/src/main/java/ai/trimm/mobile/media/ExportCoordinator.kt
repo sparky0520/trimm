@@ -201,11 +201,14 @@ object ExportCoordinator {
 
         // Add Native Text Overlays
         project.operations.filterIsInstance<AddTextOverlay>().filter { it.enabled }.forEach { textOverlay ->
-            val range = textOverlay.target?.let { TimeRange(it.startMs, it.endMs) }
-            if (range != null) {
-                val outputStart = timelineMapper.sourceToOutput(range.startMs)
-                val outputEnd = timelineMapper.sourceToOutput(range.endMs)
-                if (outputEnd > outputStart) {
+            val range = textOverlay.target?.let { target -> 
+                val offset = sourceOffsets[target.sourceId] ?: sourceOffsets[target.sourceId.substringBeforeLast("-")] ?: 0L
+                TimeRange(offset + target.startMs, offset + target.endMs)
+            } ?: TimeRange(0L, project.orderedSources.sumOf { it.durationMs })
+            
+            val outputStart = timelineMapper.sourceToOutput(range.startMs)
+            val outputEnd = timelineMapper.sourceToOutput(range.endMs)
+            if (outputEnd > outputStart) {
                     videoEffects += OverlayEffect(
                         listOf(
                             TextGraphicOverlay(
@@ -218,15 +221,16 @@ object ExportCoordinator {
                         )
                     )
                 }
-            }
         }
 
         // Add Callouts and Spotlights
         val callouts = project.operations.filterIsInstance<AddCallout>().filter { it.enabled }.map { 
-            GraphicOverlayEffect.CalloutData(it.text, it.target, it.range) 
+            val mappedRange = it.range?.let { r -> TimeRange(timelineMapper.sourceToOutput(r.startMs), timelineMapper.sourceToOutput(r.endMs)) }
+            GraphicOverlayEffect.CalloutData(it.text, it.target, mappedRange) 
         }
         val spotlights = project.operations.filterIsInstance<AddSpotlight>().filter { it.enabled }.map { 
-            GraphicOverlayEffect.SpotlightData(it.target, it.range) 
+            val mappedRange = it.range?.let { r -> TimeRange(timelineMapper.sourceToOutput(r.startMs), timelineMapper.sourceToOutput(r.endMs)) }
+            GraphicOverlayEffect.SpotlightData(it.target, mappedRange) 
         }
         if (callouts.isNotEmpty() || spotlights.isNotEmpty()) {
             videoEffects += GraphicOverlayEffect(callouts, spotlights)

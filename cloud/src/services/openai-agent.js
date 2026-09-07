@@ -181,13 +181,14 @@ If you decide no edits are needed, or if you cannot execute the task, you MUST c
 
     return {
       type: "edit_program",
-      operations: validOperations.map(tc => {
+      operations: await Promise.all(validOperations.map(async tc => {
         const operationName = tc.name.startsWith('propose_') ? tc.name.replace('propose_', '') : tc.name;
         let payload = tc.args.operation || tc.args;
 
         let target = undefined;
-        if (payload.sourceId !== undefined && payload.startMs !== undefined && payload.endMs !== undefined) {
-          target = { sourceId: payload.sourceId, startMs: payload.startMs, endMs: payload.endMs };
+        if (payload.startMs !== undefined && payload.endMs !== undefined) {
+          const defaultSourceId = payload.sourceId || (sources[0] && (sources[0].fingerprint || sources[0].id)) || 'default_source';
+          target = { sourceId: defaultSourceId, startMs: payload.startMs, endMs: payload.endMs };
           const { sourceId, startMs, endMs, ...rest } = payload;
           payload = rest;
         }
@@ -198,9 +199,27 @@ If you decide no edits are needed, or if you cannot execute the task, you MUST c
         if (operationName === 'set_music_ducking') {
           return { type: 'set_audio_levels', musicDuckDb: payload.duckDb, attackMs: payload.attackMs, releaseMs: payload.releaseMs, reason: payload.reason, target };
         }
+        if (operationName === 'add_text_overlay') {
+          try {
+            const blueprint = await generateTextOverlayConfig({ description: payload.description || payload.text, text: payload.text });
+            return { type: operationName, target, ...payload, designBlueprint: JSON.stringify(blueprint) };
+          } catch (e) {
+            console.error("Failed to generate text overlay blueprint", e);
+            return { type: operationName, target, ...payload, designBlueprint: "{}" };
+          }
+        }
+        if (operationName === 'add_section_transition') {
+          try {
+            const blueprint = await generateTransitionConfig({ description: payload.description });
+            return { type: operationName, target, ...payload, designBlueprint: JSON.stringify(blueprint) };
+          } catch (e) {
+            console.error("Failed to generate transition blueprint", e);
+            return { type: operationName, target, ...payload, designBlueprint: "{}" };
+          }
+        }
 
         return { type: operationName, target, ...payload };
-      }),
+      })),
       summary: response.rawText || "Proposed edit"
     };
   };
