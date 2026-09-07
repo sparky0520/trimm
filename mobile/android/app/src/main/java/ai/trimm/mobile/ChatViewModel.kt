@@ -150,7 +150,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun import(uris: List<Uri>) = viewModelScope.launch {
-        val sources = uris.distinct().map { uri -> readSource(uri) }
+        val sources = uris.distinct().map { uri -> 
+            runCatching { getApplication<Application>().contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            readSource(uri) 
+        }
         require(sources.isNotEmpty()) { "Choose at least one video." }
         mutable.update { it.copy(
             sources = sources,
@@ -160,6 +163,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun relinkVideo(uri: Uri) = viewModelScope.launch {
         try {
+            runCatching { getApplication<Application>().contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
             val project = mutable.value.project ?: return@launch
             val newSource = readSource(uri)
             val updatedSources = project.orderedSources.mapIndexed { index, source ->

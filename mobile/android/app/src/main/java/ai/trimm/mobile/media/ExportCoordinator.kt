@@ -118,12 +118,6 @@ object ExportCoordinator {
                         it.enabled && targets(it.itemId, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd)
                     }?.volume ?: 1f
                     val audioEffects = mutableListOf<androidx.media3.common.audio.AudioProcessor>()
-                    if (speed != 1f) {
-                        audioEffects.add(androidx.media3.common.audio.SonicAudioProcessor().apply {
-                            setSpeed(speed)
-                            setPitch(1f)
-                        })
-                    }
                     if (dialogueTarget != -20f) {
                         audioEffects.add(DialogueAudioProcessor(0f, dialogueTarget))
                         audioEffects.add(GainProcessor(SpeechDuckingGainProvider(volume, 0f, emptyList())))
@@ -132,9 +126,6 @@ object ExportCoordinator {
                     }
                     
                     val itemVideoEffects = mutableListOf<Effect>()
-                    if (speed != 1f) {
-                        itemVideoEffects.add(androidx.media3.effect.SpeedChangeEffect(speed))
-                    }
                     
                     val colorOperations = project.operations.filterIsInstance<SetColorGrade>().filter {
                         it.enabled && targets(it.target, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd)
@@ -159,8 +150,16 @@ object ExportCoordinator {
                         itemVideoEffects.add(ScaleAndRotateTransformation.Builder().setRotationDegrees(rotateOp.rotation).build())
                     }
 
-                    EditedMediaItem.Builder(item).setDurationUs(maxOf(1L, source.durationMs * 1000L))
-                        .setEffects(Effects(audioEffects, itemVideoEffects)).build()
+                    val builder = EditedMediaItem.Builder(item).setDurationUs(maxOf(1L, source.durationMs * 1000L))
+                        .setEffects(Effects(audioEffects, itemVideoEffects))
+                        
+                    if (speed != 1f) {
+                        builder.setSpeed(object : androidx.media3.common.audio.SpeedProvider {
+                            override fun getSpeed(timeUs: Long): Float = speed
+                            override fun getNextSpeedChangeTimeUs(timeUs: Long): Long = androidx.media3.common.C.TIME_UNSET
+                        })
+                    }
+                    builder.build()
                 }
             }
         }

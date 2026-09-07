@@ -108,8 +108,9 @@ class TimelineMapper(removals: List<TimeRange>, speedChanges: List<Pair<TimeRang
             val nextRemoval = removals.firstOrNull { it.startMs > currentSourceMs }?.startMs ?: sourceMs
             val speedChange = speeds.firstOrNull { it.first.startMs <= currentSourceMs && it.first.endMs > currentSourceMs }
             val nextSpeedChange = speeds.firstOrNull { it.first.startMs > currentSourceMs }?.first?.startMs ?: sourceMs
+            val currentSpeedEnd = speedChange?.first?.endMs ?: Long.MAX_VALUE
             
-            val boundary = minOf(nextRemoval, nextSpeedChange, sourceMs)
+            val boundary = minOf(nextRemoval, nextSpeedChange, currentSpeedEnd, sourceMs)
             val advance = boundary - currentSourceMs
             val speed = speedChange?.second ?: 1f
             
@@ -133,9 +134,10 @@ class TimelineMapper(removals: List<TimeRange>, speedChanges: List<Pair<TimeRang
             val speedChange = speeds.firstOrNull { it.first.startMs <= sourceMs && it.first.endMs > sourceMs }
             val nextSpeedChange = speeds.firstOrNull { it.first.startMs > sourceMs }?.first?.startMs ?: Long.MAX_VALUE
             val nextRemoval = removals.firstOrNull { it.startMs > sourceMs }?.startMs ?: Long.MAX_VALUE
+            val currentSpeedEnd = speedChange?.first?.endMs ?: Long.MAX_VALUE
             
             val speed = speedChange?.second ?: 1f
-            val maxAdvanceSource = minOf(nextRemoval, nextSpeedChange) - sourceMs
+            val maxAdvanceSource = minOf(nextRemoval, nextSpeedChange, currentSpeedEnd) - sourceMs
             val maxAdvanceOutput = (maxAdvanceSource / speed).toLong()
             
             val remainingOutput = outputMs - currentOutputMs
