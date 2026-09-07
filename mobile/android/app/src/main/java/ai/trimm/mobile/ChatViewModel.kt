@@ -727,26 +727,34 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         cancelAnalysis()
         mutable.update { it.copy(isProcessing = true, jobMessage = "Restoring previous state...") }
         
-        val targetTurnIndex = project.analysis.chatHistory.indexOfFirst { it.id == turnId }
-        if (targetTurnIndex == -1) {
+        val targetTurn = project.analysis.chatHistory.firstOrNull { it.id == turnId }
+        if (targetTurn == null) {
             mutable.update { it.copy(isProcessing = false) }
             return
         }
         
+        val descendantsAndSelf = mutableSetOf(turnId)
+        var added = true
+        while (added) {
+            val sizeBefore = descendantsAndSelf.size
+            project.analysis.chatHistory.forEach { if (descendantsAndSelf.contains(it.parentId)) descendantsAndSelf.add(it.id) }
+            added = descendantsAndSelf.size > sizeBefore
+        }
+        
         var currentProject = project
-        while (currentProject.analysis.chatHistory.indexOfFirst { it.id == currentProject.analysis.activeTurnId } >= targetTurnIndex) {
+        while (currentProject.analysis.activeTurnId in descendantsAndSelf) {
             val nextProject = currentProject.restoreCheckpoint()
             if (nextProject === currentProject) break 
             currentProject = nextProject
         }
 
-        val truncatedConversation = currentProject.analysis.chatHistory.take(targetTurnIndex)
+        val prunedConversation = currentProject.analysis.chatHistory.filterNot { it.id in descendantsAndSelf }
         currentProject = currentProject.copy(analysis = currentProject.analysis.copy(
-            chatHistory = truncatedConversation,
-            activeTurnId = truncatedConversation.lastOrNull()?.id
+            chatHistory = prunedConversation,
+            activeTurnId = targetTurn.parentId
         ))
         
-        val promptText = project.analysis.chatHistory[targetTurnIndex].request
+        val promptText = targetTurn.request
 
         updateProject(currentProject, preview = true)
         
