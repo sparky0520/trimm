@@ -166,6 +166,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             runCatching { getApplication<Application>().contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
             val project = mutable.value.project ?: return@launch
             val newSource = readSource(uri)
+            
+            val originalSource = project.orderedSources.firstOrNull()
+            if (originalSource != null && newSource.durationMs < originalSource.durationMs) {
+                mutable.update { it.copy(errorMessage = "Relinking failed: The new video is shorter than the original video.") }
+                return@launch
+            }
+
             val updatedSources = project.orderedSources.mapIndexed { index, source ->
                 if (index == 0) source.copy(
                     uri = uri.toString(),
@@ -739,7 +746,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             activeTurnId = truncatedConversation.lastOrNull()?.id
         ))
         
-        val promptText = truncatedConversation.lastOrNull()?.request ?: ""
+        val promptText = project.analysis.chatHistory[targetTurnIndex].request
 
         updateProject(currentProject, preview = true)
         

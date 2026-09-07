@@ -105,6 +105,13 @@ import kotlinx.serialization.json.jsonPrimitive
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     var showVideo by rememberSaveable { mutableStateOf(false) }
     var request by rememberSaveable { mutableStateOf("") }
+    
+    LaunchedEffect(state.pendingChatMessage) {
+        if (state.pendingChatMessage != null) {
+            request = state.pendingChatMessage
+        }
+    }
+
     val read = EditorialReviewBuilder.editorialRead(project)
     val review = EditorialReviewBuilder.proposal(project)
     val followUpSuggestions = listOf(
@@ -189,6 +196,7 @@ import kotlinx.serialization.json.jsonPrimitive
                     }
                     is ChatElement.Turn -> {
                         val turn = element.turn
+                        val isLatestTurn = turn.id == project.analysis.activeChatPath.lastOrNull()?.id
                         val siblings = project.analysis.chatHistory.filter { it.parentId == turn.parentId }
                         val index = siblings.indexOf(turn)
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -220,12 +228,12 @@ import kotlinx.serialization.json.jsonPrimitive
                                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
                                             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Lavender)
-                                            TypewriterText(turn.response, color = CreamRaised, lineHeight = 20.sp)
+                                            TypewriterText(turn.response, color = CreamRaised, lineHeight = 20.sp, animate = isLatestTurn)
                                         }
                                     }
                                     turn.isError -> {
                                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            TypewriterText(formatUserFacingError(turn.response), color = CreamRaised, lineHeight = 20.sp, fontSize = 13.sp)
+                                            TypewriterText(formatUserFacingError(turn.response), color = CreamRaised, lineHeight = 20.sp, fontSize = 13.sp, animate = isLatestTurn)
                                             Button(
                                                 onClick = { retryTurn(turn.id) },
                                                 shape = RoundedCornerShape(8.dp),
@@ -241,7 +249,7 @@ import kotlinx.serialization.json.jsonPrimitive
                                         }
                                     }
                                     else -> {
-                                        TypewriterText(turn.response, color = CreamRaised, lineHeight = 20.sp)
+                                        TypewriterText(turn.response, color = CreamRaised, lineHeight = 20.sp, animate = isLatestTurn)
                                     }
                                 }
                             }

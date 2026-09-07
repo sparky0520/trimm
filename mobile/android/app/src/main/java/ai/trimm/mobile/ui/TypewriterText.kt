@@ -15,8 +15,20 @@ fun TypewriterText(
     modifier: Modifier = Modifier,
     color: Color = Color.Unspecified,
     lineHeight: TextUnit = TextUnit.Unspecified,
-    fontSize: TextUnit = TextUnit.Unspecified
+    fontSize: TextUnit = TextUnit.Unspecified,
+    animate: Boolean = true
 ) {
+    if (!animate) {
+        Text(
+            text = text,
+            color = color,
+            lineHeight = lineHeight,
+            fontSize = fontSize,
+            modifier = modifier
+        )
+        return
+    }
+
     var displayedText by rememberSaveable { mutableStateOf("") }
     
     LaunchedEffect(text) {
