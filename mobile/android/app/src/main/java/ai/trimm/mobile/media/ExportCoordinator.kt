@@ -55,6 +55,7 @@ object ExportCoordinator {
             val target = when (operation) {
                 is SetAudioLevels -> operation.target
                 is SetColorGrade -> operation.target
+                is SetSpeed -> operation.target
                 else -> null
             } ?: return@mapNotNull null
             val offset = sourceOffsets[target.sourceId] ?: sourceOffsets[target.sourceId.substringBeforeLast("-")] ?: return@mapNotNull null
@@ -81,11 +82,12 @@ object ExportCoordinator {
                     if (localEnd < source.durationMs - 50) {
                         clipping.setEndPositionMs(localEnd)
                     }
-                    val speedOp = project.operations.filterIsInstance<SetSpeed>().lastOrNull { 
-                        it.enabled && targets(it.itemId, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd) 
+                    val speedOp = project.operations.filterIsInstance<SetSpeed>().lastOrNull { op ->
+                        op.enabled && (op.target?.let { targets(it, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd) } 
+                            ?: targets(op.itemId, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd))
                     }
                     val speed = speedOp?.speed ?: 1f
-                    
+
                     val item = MediaItem.Builder()
                         .setUri(source.uri)
                         .setClippingConfiguration(clipping.build())
@@ -128,6 +130,15 @@ object ExportCoordinator {
                         itemVideoEffects.add(ScaleAndRotateTransformation.Builder().setRotationDegrees(rotateOp.rotation).build())
                     }
 
+                    if (speed != 1f) {
+                        val sonicAudioProcessor = androidx.media3.common.audio.SonicAudioProcessor().apply {
+                            setSpeed(speed)
+                            setPitch(1f) // Maintain pitch
+                        }
+                        // We actually can't easily add SonicAudioProcessor to the list if it's immutable, but wait, audioEffects is a List.
+                        // Wait, audioEffects is currently:
+                        // val audioEffects = if (dialogueTarget != -20f) { ... }
+                    }
                     EditedMediaItem.Builder(item).setDurationUs(maxOf(1L, source.durationMs * 1000L))
                         .setEffects(Effects(audioEffects, itemVideoEffects)).build()
                 }

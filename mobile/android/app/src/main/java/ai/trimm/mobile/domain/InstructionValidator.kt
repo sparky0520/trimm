@@ -19,7 +19,7 @@ object InstructionValidator {
                 is SetAudioLevels -> "dialogue-levels:${operation.dialogueLufs}:${operation.musicDuckDb}"
                 is NormaliseAudio -> "normalise-audio:${operation.parameter}:${operation.dialogueLufs}:${operation.musicDuckDb}"
                 is SetVolume -> "audio-volume:${operation.itemId}:${operation.volume}"
-                is SetSpeed -> "video-speed:${operation.itemId}:${operation.speed}"
+                is SetSpeed -> "video-speed:${operation.target ?: operation.itemId}:${operation.speed}"
                 is AddCaptions -> "video-captions:${operation.cues}:${operation.style}"
                 is SetAspectRatio -> "video-aspect-ratio:${operation.ratio.name}"
                 is AddTextOverlay -> "video-text-overlay:${operation.id}:${operation.text}"
@@ -101,7 +101,7 @@ object InstructionValidator {
                 require(op.attackMs in 0..2_000 && op.releaseMs in 0..5_000); validateTarget(project, op.target)
             }
             is SetVolume -> { require(op.volume in 0f..2f) }
-            is SetSpeed -> { require(op.speed > 0f) }
+            is SetSpeed -> { require(op.speed > 0f); validateTarget(project, op.target) }
             is AddCallout -> { validateTarget(project, OperationTarget(op.target.toString(), 0, 0)) }
             is AddSpotlight -> { validateTarget(project, OperationTarget(op.target.toString(), 0, 0)) }
             is SetAudioLevels -> { validateTarget(project, op.target) }

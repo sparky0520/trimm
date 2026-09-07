@@ -112,7 +112,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
 ) : EditInstruction
 @Serializable @SerialName("add_motion_preset") data class AddMotionPreset(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val range: TimeRange? = null, val preset: String, val intensity: Float = .5f) : EditInstruction
 @Serializable @SerialName("add_captions") data class AddCaptions(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val cues: List<CaptionCue> = emptyList(), val target: OperationTarget? = null, val speakerId: String? = null, val style: String = "bold-bottom") : EditInstruction
-@Serializable @SerialName("set_speed") data class SetSpeed(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val itemId: String, val speed: Float) : EditInstruction
+@Serializable @SerialName("set_speed") data class SetSpeed(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val itemId: String = "", val speed: Float, val target: OperationTarget? = null) : EditInstruction
 @Serializable @SerialName("add_callout") data class AddCallout(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val text: String, val target: NormalizedRect, val range: TimeRange? = null) : EditInstruction
 @Serializable @SerialName("add_spotlight") data class AddSpotlight(override val id: String = UUID.randomUUID().toString(), override val enabled: Boolean = true, val target: NormalizedRect, val range: TimeRange? = null) : EditInstruction
 

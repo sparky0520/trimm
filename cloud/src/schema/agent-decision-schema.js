@@ -191,14 +191,12 @@ const PROPOSE_SET_ROTATION_TOOL = Object.freeze({
   }
 });
 
-const PROPOSE_SET_SPEED_TOOL = Object.freeze({
-  name: 'propose_set_speed',
-  description: 'Change the playback speed of a clip. (e.g., 2.0 for 2x fast, 0.5 for half speed).',
-  parameters: {
-    type: 'object', additionalProperties: false, required: ['itemId', 'speed', 'reason'], properties: {
-      itemId: { type: 'string' }, speed: { type: 'number' }, reason: { type: 'string' }
-    }
-  }
+const PROPOSE_SET_SPEED_TOOL = operationTool(
+  'propose_set_speed',
+  'Change the playback speed of a clip or a specific segment. (e.g., 2.0 for 2x fast, 0.5 for half speed).',
+  ['itemId', 'speed', 'reason'], {
+  ...targetRangeProperties,
+  itemId: { type: 'string' }, speed: { type: 'number' }, reason: { type: 'string' }
 });
 
 const PROPOSE_SET_VOLUME_TOOL = Object.freeze({
