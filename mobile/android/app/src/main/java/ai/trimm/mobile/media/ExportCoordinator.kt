@@ -65,7 +65,23 @@ object ExportCoordinator {
             retainedRanges(project.durationMs, TimelineMapper(cuts).removals),
             fineTargets.flatMap { listOf(it.startMs, it.endMs) }
         )
-        val timelineMapper = TimelineMapper(cuts)
+        val speedChanges = mutableListOf<Pair<TimeRange, Float>>()
+        project.orderedSources.forEachIndexed { index, source ->
+            val offset = sourceOffsets[source.fingerprint] ?: sourceOffsets["${source.fingerprint}-$index"] ?: return@forEachIndexed
+            val sourceId = "${source.fingerprint}-$index"
+            val op = project.operations.filterIsInstance<SetSpeed>().filter {
+                it.enabled && (it.target != null && (it.target.sourceId == sourceId || it.target.sourceId == source.fingerprint) || 
+                it.itemId == sourceId || it.itemId == source.fingerprint)
+            }.lastOrNull()
+            if (op != null && op.enabled) {
+                if (op.target != null) {
+                    speedChanges.add(TimeRange(offset + op.target.startMs, offset + op.target.endMs) to op.speed)
+                } else {
+                    speedChanges.add(TimeRange(offset, offset + source.durationMs) to op.speed)
+                }
+            }
+        }
+        val timelineMapper = TimelineMapper(cuts, speedChanges)
         require(retained.isNotEmpty()) { "The edit removes the entire source." }
         var timelineStart = 0L
         val clips = project.orderedSources.flatMapIndexed { index, source ->
@@ -82,11 +98,13 @@ object ExportCoordinator {
                     if (localEnd < source.durationMs - 50) {
                         clipping.setEndPositionMs(localEnd)
                     }
-                    val speedOp = project.operations.filterIsInstance<SetSpeed>().lastOrNull { op ->
-                        op.enabled && (op.target?.let { targets(it, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd) } 
-                            ?: targets(op.itemId, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd))
+                    val speedOpsForSource = project.operations.filterIsInstance<SetSpeed>().filter { op ->
+                        val targetMatch = op.target != null && (op.target.sourceId == "${source.fingerprint}-$index" || op.target.sourceId == source.fingerprint)
+                        val legacyMatch = op.itemId == "${source.fingerprint}-$index" || op.itemId == source.fingerprint
+                        targetMatch || legacyMatch
                     }
-                    val speed = speedOp?.speed ?: 1f
+                    val speedOp = speedOpsForSource.lastOrNull()
+                    val speed = if (speedOp != null && speedOp.enabled && (speedOp.target == null || (speedOp.target.startMs <= localStart && speedOp.target.endMs >= localEnd))) speedOp.speed else 1f
 
                     val item = MediaItem.Builder()
                         .setUri(source.uri)

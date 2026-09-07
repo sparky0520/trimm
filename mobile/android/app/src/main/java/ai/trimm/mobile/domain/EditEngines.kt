@@ -83,17 +83,71 @@ object FumbleDetector {
     }
 }
 
-class TimelineMapper(removals: List<TimeRange>) {
+class TimelineMapper(removals: List<TimeRange>, speedChanges: List<Pair<TimeRange, Float>> = emptyList()) {
     val removals = removals.sortedBy { it.startMs }.fold(mutableListOf<TimeRange>()) { acc, range ->
         val last = acc.lastOrNull()
         if (last != null && range.startMs <= last.endMs) acc[acc.lastIndex] = TimeRange(last.startMs, max(last.endMs, range.endMs)) else acc += range
         acc
     }
-    fun sourceToOutput(sourceMs: Long): Long = sourceMs - removals.sumOf { min(max(sourceMs - it.startMs, 0), it.durationMs) }
+    
+    // Sort speed changes by start time
+    val speeds = speedChanges.sortedBy { it.first.startMs }
+
+    fun sourceToOutput(sourceMs: Long): Long {
+        var outputMs = 0L
+        var currentSourceMs = 0L
+        
+        while (currentSourceMs < sourceMs) {
+            val removal = removals.firstOrNull { it.startMs <= currentSourceMs && it.endMs > currentSourceMs }
+            if (removal != null) {
+                val advance = min(removal.endMs, sourceMs) - currentSourceMs
+                currentSourceMs += advance
+                continue
+            }
+            
+            val nextRemoval = removals.firstOrNull { it.startMs > currentSourceMs }?.startMs ?: sourceMs
+            val speedChange = speeds.firstOrNull { it.first.startMs <= currentSourceMs && it.first.endMs > currentSourceMs }
+            val nextSpeedChange = speeds.firstOrNull { it.first.startMs > currentSourceMs }?.first?.startMs ?: sourceMs
+            
+            val boundary = minOf(nextRemoval, nextSpeedChange, sourceMs)
+            val advance = boundary - currentSourceMs
+            val speed = speedChange?.second ?: 1f
+            
+            outputMs += (advance / speed).toLong()
+            currentSourceMs += advance
+        }
+        return outputMs
+    }
+
     fun outputToSource(outputMs: Long): Long {
-        var source = outputMs
-        removals.forEach { if (it.startMs <= source) source += it.durationMs }
-        return source
+        var sourceMs = 0L
+        var currentOutputMs = 0L
+        
+        while (currentOutputMs < outputMs) {
+            val removal = removals.firstOrNull { it.startMs <= sourceMs && it.endMs > sourceMs }
+            if (removal != null) {
+                sourceMs = removal.endMs
+                continue
+            }
+            
+            val speedChange = speeds.firstOrNull { it.first.startMs <= sourceMs && it.first.endMs > sourceMs }
+            val nextSpeedChange = speeds.firstOrNull { it.first.startMs > sourceMs }?.first?.startMs ?: Long.MAX_VALUE
+            val nextRemoval = removals.firstOrNull { it.startMs > sourceMs }?.startMs ?: Long.MAX_VALUE
+            
+            val speed = speedChange?.second ?: 1f
+            val maxAdvanceSource = minOf(nextRemoval, nextSpeedChange) - sourceMs
+            val maxAdvanceOutput = (maxAdvanceSource / speed).toLong()
+            
+            val remainingOutput = outputMs - currentOutputMs
+            if (remainingOutput <= maxAdvanceOutput) {
+                sourceMs += (remainingOutput * speed).toLong()
+                currentOutputMs += remainingOutput
+            } else {
+                sourceMs += maxAdvanceSource
+                currentOutputMs += maxAdvanceOutput
+            }
+        }
+        return sourceMs
     }
 }
 

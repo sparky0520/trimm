@@ -56,14 +56,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val project = mutable.value.project ?: return
         WorkManager.getInstance(getApplication()).cancelAllWorkByTag("analysis:${project.id}")
         val run = project.analysis.agentRun
-        mutable.value = mutable.value.copy(isProcessing = false, jobMessage = "Cancelling video analysis…")
+        mutable.update { it.copy(isProcessing = false, jobMessage = "Cancelling video analysis…") }
         if (run == null || BuildConfig.PLANNER_URL.isBlank()) return
         val cancelled = run.copy(status = AgentRunStatus.CANCELLED)
         viewModelScope.launch {
             val latest = store.load(project.id)
             val updated = latest.copy(analysis = latest.analysis.copy(agentRun = cancelled))
             store.save(updated)
-            mutable.value = mutable.value.copy(project = updated, jobMessage = "Video analysis cancelled")
+            mutable.update { it.copy(project = updated, jobMessage = "Video analysis cancelled") }
         }
     }
 
@@ -72,9 +72,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshChats() {
         if (fetchChatsJob?.isActive == true) return
         fetchChatsJob = viewModelScope.launch {
-            mutable.value = mutable.value.copy(isLoadingPastChats = true)
+            mutable.update { it.copy(isLoadingPastChats = true) }
             val chats = store.listAll()
-            mutable.value = mutable.value.copy(pastChats = chats, isLoadingPastChats = false)
+            mutable.update { it.copy(pastChats = chats, isLoadingPastChats = false) }
         }
     }
 
@@ -90,25 +90,32 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            mutable.value = mutable.value.copy(creatorPreferences = store.loadCreatorPreferences())
+            val prefs = store.loadCreatorPreferences()
+            mutable.update { it.copy(creatorPreferences = prefs) }
         }
         viewModelScope.launch {
             supabase.auth.sessionStatus.collect { status ->
                 when (status) {
                     is SessionStatus.Authenticated -> refreshChats()
-                    is SessionStatus.NotAuthenticated -> mutable.value = mutable.value.copy(pastChats = emptyList())
+                    is SessionStatus.NotAuthenticated -> mutable.update { it.copy(pastChats = emptyList()) }
                     else -> {}
                 }
             }
         }
-        refreshChats()
     }
 
     fun newChat() {
-        mutable.value = ChatState(
-            creatorPreferences = mutable.value.creatorPreferences,
-            pastChats = mutable.value.pastChats
-        )
+        mutable.update { it.copy(
+            project = null,
+            sources = emptyList(),
+            capabilityMessage = null,
+            previewUri = null,
+            jobMessage = null,
+            errorMessage = null,
+            initialRequest = null,
+            pendingChatMessage = null,
+            isProcessing = false
+        ) }
     }
 
     fun loadProject(id: String) = viewModelScope.launch {
@@ -128,28 +135,27 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             val reconnected = project.replaceSources(updatedSources)
-            mutable.value = mutable.value.copy(
+            mutable.update { it.copy(
                 project = reconnected,
                 sources = reconnected.sources,
                 errorMessage = null,
                 jobMessage = null,
                 isProcessing = false
-            )
+            ) }
 
 
         } catch (e: Exception) {
-            mutable.value = mutable.value.copy(errorMessage = "Failed to load chat: ${e.message}")
+            mutable.update { it.copy(errorMessage = "Failed to load chat: ${e.message}") }
         }
     }
 
     fun import(uris: List<Uri>) = viewModelScope.launch {
         val sources = uris.distinct().map { uri -> readSource(uri) }
         require(sources.isNotEmpty()) { "Choose at least one video." }
-        mutable.value = ChatState(
+        mutable.update { it.copy(
             sources = sources,
-            creatorPreferences = mutable.value.creatorPreferences,
-            pastChats = mutable.value.pastChats
-        )
+            project = null
+        ) }
     }
 
     fun relinkVideo(uri: Uri) = viewModelScope.launch {
@@ -167,12 +173,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
             val updatedProject = project.replaceSources(updatedSources)
             store.save(updatedProject)
-            mutable.value = mutable.value.copy(
+            mutable.update { it.copy(
                 project = updatedProject,
                 sources = updatedProject.sources
-            )
+            ) }
         } catch (e: Exception) {
-            mutable.value = mutable.value.copy(errorMessage = "Relinking failed: ${e.message}")
+            mutable.update { it.copy(errorMessage = "Relinking failed: ${e.message}") }
         }
     }
 
@@ -205,7 +211,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (index !in clips.indices || nextIndex !in clips.indices) return
         val reordered = clips.toMutableList().apply { add(nextIndex, removeAt(index)) }
         current.project?.let { updateProject(it.replaceSources(reordered), true) }
-            ?: run { mutable.value = current.copy(sources = reordered) }
+            ?: run { mutable.update { it.copy(sources = reordered) } }
     }
 
     fun generateDraft(prompt: String, words: List<TranscriptWord> = emptyList()) {
@@ -237,7 +243,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             operations = operations
         )
         
-        mutable.value = current.copy(
+        mutable.update { it.copy(
             project = project,
             preferences = preferences,
             capabilityMessage = capabilityReport.userFacingSummary(),
@@ -245,7 +251,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             errorMessage = null,
             initialRequest = brief,
             isProcessing = true,
-        )
+        ) }
         
         val request = OneTimeWorkRequestBuilder<AnalysisWorker>().setInputData(
             Data.Builder()
@@ -262,27 +268,27 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val info = awaitWork(workManager, request.id) { running ->
                 val stage = running.progress.getString("stage")
                 val percent = running.progress.getInt("percent", 0)
-                mutable.value = mutable.value.copy(
+                mutable.update { it.copy(
                     jobMessage = processingMessage(stage, percent),
                     isProcessing = true,
-                )
+                ) }
                 runCatching { store.load(project.id) }.getOrNull()?.let { latest ->
                     if (latest.analysis.agentRun?.events?.size != mutable.value.project?.analysis?.agentRun?.events?.size) {
-                        mutable.value = mutable.value.copy(project = latest)
+                        mutable.update { it.copy(project = latest) }
                     }
                 }
             }
             if (info.state == WorkInfo.State.SUCCEEDED) {
                 val analyzed = store.load(project.id)
-                mutable.value = mutable.value.copy(project = analyzed, jobMessage = "Analysis complete", isProcessing = false)
+                mutable.update { it.copy(project = analyzed, jobMessage = "Analysis complete", isProcessing = false) }
                 renderPreview(analyzed, simulatePendingProposal = analyzed.analysis.pendingProposal != null)
                 refreshChats()
             }
-            else mutable.value = mutable.value.copy(
+            else mutable.update { it.copy(
                 errorMessage = info.outputData.getString("error") ?: "Video analysis failed.",
                 jobMessage = null,
                 isProcessing = false,
-            )
+            ) }
         }
     }
 
@@ -320,7 +326,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val validated = runCatching {
                 InstructionValidator.validate(project, proposal.operations, proposal.expectedRevision)
             }.getOrElse { error ->
-                mutable.value = mutable.value.copy(jobMessage = error.message ?: "This proposal is no longer current.")
+                mutable.update { it.copy(jobMessage = error.message ?: "This proposal is no longer current.") }
                 return
             }
             val checkpoint = AppliedEditCheckpoint(
@@ -340,7 +346,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             )
             viewModelScope.launch { store.saveCreatorPreferences(applied.creatorPreferences) }
             updateProject(applied)
-            mutable.value = mutable.value.copy(jobMessage = "Proposal applied to the interactive preview")
+            mutable.update { it.copy(jobMessage = "Proposal applied to the interactive preview") }
         }
     }
     fun rejectProposal() {
@@ -369,11 +375,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 activeTurnId = turnId
             )
         )
-        mutable.value = mutable.value.copy(
+        mutable.update { it.copy(
             project = updatedProject,
             isProcessing = true,
             jobMessage = "Continuing the conversation…"
-        )
+        ) }
         viewModelScope.launch {
             store.save(updatedProject)
             if (BuildConfig.PLANNER_URL.isNotBlank()) {
@@ -387,7 +393,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             }
                         ))
                         store.save(finished)
-                        mutable.value = mutable.value.copy(project = finished, jobMessage = result.text, isProcessing = false)
+                        mutable.update { it.copy(project = finished, jobMessage = result.text, isProcessing = false) }
                     }
                     is ConversationalRevisionResult.Clarification -> {
                         val finished = updatedProject.copy(analysis = updatedProject.analysis.copy(
@@ -396,7 +402,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             }
                         ))
                         store.save(finished)
-                        mutable.value = mutable.value.copy(project = finished, jobMessage = result.question, isProcessing = false)
+                        mutable.update { it.copy(project = finished, jobMessage = result.question, isProcessing = false) }
                     }
                     is ConversationalRevisionResult.Revision -> {
                         val finished = result.project.copy(analysis = result.project.analysis.copy(
@@ -405,7 +411,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             }
                         ))
                         store.save(finished)
-                        mutable.value = mutable.value.copy(project = finished, jobMessage = "Revised proposal ready to review", isProcessing = false)
+                        mutable.update { it.copy(project = finished, jobMessage = "Revised proposal ready to review", isProcessing = false) }
                         renderPreview(finished, simulatePendingProposal = true)
                     }
                 }
@@ -421,7 +427,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             )
         )
         viewModelScope.launch { store.save(updatedProject) }
-        mutable.value = mutable.value.copy(project = updatedProject)
+        mutable.update { it.copy(project = updatedProject) }
     }
 
     fun retryTurn(turnId: String) {
@@ -434,12 +440,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             )
         )
-        mutable.value = mutable.value.copy(
+        mutable.update { it.copy(
             project = updatedProject,
             isProcessing = true,
             errorMessage = null,
             jobMessage = "Retrying conversation…"
-        )
+        ) }
         viewModelScope.launch {
             store.save(updatedProject)
             if (BuildConfig.PLANNER_URL.isNotBlank()) {
@@ -482,7 +488,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     request = request,
                     projectDurationMs = project.durationMs,
                     onProgress = { stage, percent ->
-                        mutable.value = mutable.value.copy(jobMessage = processingMessage(stage, percent))
+                        mutable.update { it.copy(jobMessage = processingMessage(stage, percent)) }
                     },
                     onPersist = { snapshot, plan ->
                         val latest = store.load(project.id)
@@ -491,7 +497,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             agentPlan = plan ?: latest.analysis.agentPlan
                         ))
                         store.save(updated)
-                        mutable.value = mutable.value.copy(project = updated)
+                        mutable.update { it.copy(project = updated) }
                     }
                 )
             }.onSuccess { snapshot ->
@@ -502,19 +508,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         pendingProposal = proposal
                     ))
                     store.save(updated)
-                    mutable.value = mutable.value.copy(project = updated)
+                    mutable.update { it.copy(project = updated) }
                 }
-                mutable.value = mutable.value.copy(
+                mutable.update { it.copy(
                     jobMessage = when {
                         action == AgentRecoveryAction.REVIEW_ISSUE -> "The issue is shown below. Nothing was applied."
                         snapshot.status == AgentRunStatus.PROPOSAL_READY -> "Repaired proposal ready to review"
                         else -> "Response-format recovery updated"
                     }
-                )
+                ) }
             }.onFailure { error ->
-                mutable.value = mutable.value.copy(
+                mutable.update { it.copy(
                     jobMessage = "Recovery could not continue: ${error.message ?: "check the connection and retry"}"
-                )
+                ) }
             }
         }
     }
@@ -525,7 +531,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun continueChatConversation(project: MobileProject, turnId: String, message: String) {
         val currentProject = mutable.value.project ?: return
         
-        mutable.value = mutable.value.copy(jobMessage = "Uploading video context (background)...", isProcessing = true)
+        mutable.update { it.copy(jobMessage = "Uploading video context (background)...", isProcessing = true) }
 
         viewModelScope.launch {
             val deviceSessionId = "android-${project.id}"
@@ -565,7 +571,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     request = request,
                     projectDurationMs = project.durationMs,
                     onProgress = { stage, percent ->
-                        mutable.value = mutable.value.copy(jobMessage = processingMessage(stage, percent))
+                        mutable.update { it.copy(jobMessage = processingMessage(stage, percent)) }
                     },
                     onPersist = { snapshot, plan ->
                         // Optional persist
@@ -583,7 +589,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     ))
                     store.save(updated)
-                    mutable.value = mutable.value.copy(project = updated, isProcessing = false, jobMessage = "Proposed edit ready to review")
+                    mutable.update { it.copy(project = updated, isProcessing = false, jobMessage = "Proposed edit ready to review") }
                 } ?: run {
                     val latest = store.load(project.id)
                     val updated = latest.copy(analysis = latest.analysis.copy(
@@ -593,7 +599,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     ))
                     store.save(updated)
-                    mutable.value = mutable.value.copy(project = updated, isProcessing = false, errorMessage = "Agent returned no proposal")
+                    mutable.update { it.copy(project = updated, isProcessing = false, errorMessage = "Agent returned no proposal") }
                 }
             }.onFailure { error ->
                 val latest = store.load(project.id)
@@ -603,12 +609,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 ))
                 store.save(failed)
-                mutable.value = mutable.value.copy(
+                mutable.update { it.copy(
                     project = failed,
                     errorMessage = error.message ?: "Chat processing failed",
                     jobMessage = null,
                     isProcessing = false
-                )
+                ) }
             }
         }
     }
@@ -625,7 +631,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             )
         )
         viewModelScope.launch { store.save(updatedProject) }
-        mutable.value = mutable.value.copy(project = updatedProject)
+        mutable.update { it.copy(project = updatedProject) }
         reviseStory("${turn.request}\n\nDirection chosen: $label")
     }
 
@@ -649,7 +655,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun persistCreatorPreferences(profile: CreatorPreferenceProfile) {
         val current = mutable.value
         val project = current.project?.copy(creatorPreferences = profile)
-        mutable.value = current.copy(creatorPreferences = profile, project = project)
+        mutable.update { it.copy(creatorPreferences = profile, project = project) }
         viewModelScope.launch {
             store.saveCreatorPreferences(profile)
             if (project != null) store.save(project)
@@ -661,7 +667,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         
         val targetCheckpointIndex = project.analysis.appliedEditCheckpoints.indexOfFirst { it.id == checkpointId }
         if (targetCheckpointIndex == -1) {
-            mutable.value = mutable.value.copy(jobMessage = "Checkpoint not found.")
+            mutable.update { it.copy(jobMessage = "Checkpoint not found.") }
             return
         }
 
@@ -697,22 +703,22 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        mutable.value = mutable.value.copy(
+        mutable.update { it.copy(
             jobMessage = "Restored to previous state",
             pendingChatMessage = promptText,
-            initialRequest = if (currentProject.analysis.appliedEditCheckpoints.isEmpty()) promptText else mutable.value.initialRequest
-        )
+            initialRequest = if (currentProject.analysis.appliedEditCheckpoints.isEmpty()) promptText else it.initialRequest
+        ) }
     }
     
     fun undoTurn(turnId: String) {
         val project = mutable.value.project ?: return
         
         cancelAnalysis()
-        mutable.value = mutable.value.copy(isProcessing = true, jobMessage = "Restoring previous state...")
+        mutable.update { it.copy(isProcessing = true, jobMessage = "Restoring previous state...") }
         
         val targetTurnIndex = project.analysis.chatHistory.indexOfFirst { it.id == turnId }
         if (targetTurnIndex == -1) {
-            mutable.value = mutable.value.copy(isProcessing = false)
+            mutable.update { it.copy(isProcessing = false) }
             return
         }
         
@@ -742,12 +748,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 apiService.syncProject("Bearer $token", requestBody)
             }
             
-            mutable.value = mutable.value.copy(
+            mutable.update { it.copy(
                 isProcessing = false,
                 jobMessage = "Restored to previous state",
                 pendingChatMessage = promptText,
-                initialRequest = if (currentProject.analysis.appliedEditCheckpoints.isEmpty()) promptText else mutable.value.initialRequest
-            )
+                initialRequest = if (currentProject.analysis.appliedEditCheckpoints.isEmpty()) promptText else it.initialRequest
+            ) }
         }
     }
     fun export() { mutable.value.project?.let { project ->
@@ -767,22 +773,22 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             android.widget.Toast.makeText(getApplication(), if (info.state == WorkInfo.State.SUCCEEDED) "Export saved to Movies/Trimm" else "Export failed: ${info.outputData.getString("error") ?: info.state}", android.widget.Toast.LENGTH_LONG).show()
         }
     } }
-    private fun updateProject(project: MobileProject, preview: Boolean = false) { mutable.value = mutable.value.copy(project = project, creatorPreferences = project.creatorPreferences); viewModelScope.launch { store.save(project); if (preview) renderPreview(project) } }
+    private fun updateProject(project: MobileProject, preview: Boolean = false) { mutable.update { it.copy(project = project, creatorPreferences = project.creatorPreferences) }; viewModelScope.launch { store.save(project); if (preview) renderPreview(project) } }
     private fun renderPreview(project: MobileProject, simulatePendingProposal: Boolean = false) {
         val manager = WorkManager.getInstance(getApplication())
         val request = OneTimeWorkRequestBuilder<PreviewWorker>().setInputData(Data.Builder()
             .putString("projectId", project.id)
             .putBoolean("simulatePendingProposal", simulatePendingProposal)
             .build()).addTag("preview:${project.id}").build()
-        mutable.value = mutable.value.copy(
+        mutable.update { it.copy(
             jobMessage = if (simulatePendingProposal) "Simulating revised preview…" else "Rendering edited preview…",
             errorMessage = null
-        )
+        ) }
         manager.enqueueUniqueWork("preview:${project.id}", ExistingWorkPolicy.REPLACE, request)
         viewModelScope.launch {
             val info = awaitWork(manager, request.id)
-            mutable.value = if (info.state == WorkInfo.State.SUCCEEDED) mutable.value.copy(previewUri = info.outputData.getString("previewUri"), jobMessage = info.outputData.getString("warning") ?: "Edited preview ready")
-            else mutable.value.copy(errorMessage = "Preview failed: ${info.outputData.getString("error") ?: info.state}", jobMessage = null)
+            mutable.update { if (info.state == WorkInfo.State.SUCCEEDED) it.copy(previewUri = info.outputData.getString("previewUri"), jobMessage = info.outputData.getString("warning") ?: "Edited preview ready")
+            else it.copy(errorMessage = "Preview failed: ${info.outputData.getString("error") ?: info.state}", jobMessage = null) }
         }
     }
     private fun toggle(op: EditInstruction): EditInstruction = when (op) {

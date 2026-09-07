@@ -87,6 +87,12 @@ import kotlinx.serialization.json.jsonPrimitive
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     
+    LaunchedEffect(drawerState.isOpen) {
+        if (drawerState.isOpen) {
+            vm.refreshChats()
+        }
+    }
+    
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
