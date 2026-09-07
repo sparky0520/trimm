@@ -56,14 +56,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val project = mutable.value.project ?: return
         WorkManager.getInstance(getApplication()).cancelAllWorkByTag("analysis:${project.id}")
         val run = project.analysis.agentRun
-        mutable.update { it.copy(isProcessing = false, jobMessage = "Cancelling video analysis…") }
-        if (run == null || BuildConfig.PLANNER_URL.isBlank()) return
+        if (run == null || BuildConfig.PLANNER_URL.isBlank()) {
+            mutable.update { it.copy(isProcessing = false, jobMessage = "Cancelling video analysis…") }
+            return
+        }
         val cancelled = run.copy(status = AgentRunStatus.CANCELLED)
+        mutable.update { state ->
+            val p = state.project
+            if (p != null) {
+                val updated = p.copy(analysis = p.analysis.copy(agentRun = cancelled))
+                state.copy(project = updated, isProcessing = false, jobMessage = "Video analysis cancelled")
+            } else {
+                state.copy(isProcessing = false, jobMessage = "Video analysis cancelled")
+            }
+        }
         viewModelScope.launch {
-            val latest = store.load(project.id)
-            val updated = latest.copy(analysis = latest.analysis.copy(agentRun = cancelled))
-            store.save(updated)
-            mutable.update { it.copy(project = updated, jobMessage = "Video analysis cancelled") }
+            val p = mutable.value.project
+            if (p != null) store.save(p)
         }
     }
 
@@ -742,10 +751,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         
         var currentProject = project
-        while (currentProject.analysis.activeTurnId in descendantsAndSelf) {
-            val nextProject = currentProject.restoreCheckpoint()
-            if (nextProject === currentProject) break 
-            currentProject = nextProject
+        while (true) {
+            val lastSnapshot = currentProject.undo.lastOrNull() ?: break
+            val snapshotTurnId = lastSnapshot.analysis?.activeTurnId
+            if (snapshotTurnId in descendantsAndSelf) {
+                val nextProject = currentProject.restoreCheckpoint()
+                if (nextProject === currentProject) break
+                currentProject = nextProject
+            } else {
+                break
+            }
         }
 
         val prunedConversation = currentProject.analysis.chatHistory.filterNot { it.id in descendantsAndSelf }

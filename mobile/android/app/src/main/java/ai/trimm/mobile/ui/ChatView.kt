@@ -228,12 +228,12 @@ import kotlinx.serialization.json.jsonPrimitive
                                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
                                             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Lavender)
-                                            AnimatedResponseText(turn.response, color = CreamRaised, lineHeight = 20.sp, typewriterEffect = isLatestTurn)
+                                            AnimatedResponseText(turn.response, color = CreamRaised, lineHeight = 22.sp, fontSize = 15.sp)
                                         }
                                     }
                                     turn.isError -> {
                                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            AnimatedResponseText(formatUserFacingError(turn.response), color = CreamRaised, lineHeight = 20.sp, fontSize = 13.sp, typewriterEffect = isLatestTurn)
+                                            AnimatedResponseText(formatUserFacingError(turn.response), color = CreamRaised, lineHeight = 22.sp, fontSize = 15.sp)
                                             Button(
                                                 onClick = { retryTurn(turn.id) },
                                                 shape = RoundedCornerShape(8.dp),
@@ -249,7 +249,7 @@ import kotlinx.serialization.json.jsonPrimitive
                                         }
                                     }
                                     else -> {
-                                        AnimatedResponseText(turn.response, color = CreamRaised, lineHeight = 20.sp, typewriterEffect = isLatestTurn)
+                                        AnimatedResponseText(turn.response, color = CreamRaised, lineHeight = 22.sp, fontSize = 15.sp)
                                     }
                                 }
                             }
