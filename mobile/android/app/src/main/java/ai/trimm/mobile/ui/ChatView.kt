@@ -181,7 +181,7 @@ import kotlinx.serialization.json.jsonPrimitive
                     add(ChatElement.Turn(turn.createdAtEpochMs, turn))
                 }
                 
-                project.analysis.activeCheckpointPath.forEach { checkpoint ->
+                project.analysis.activeCheckpointPath.lastOrNull()?.let { checkpoint ->
                     add(ChatElement.Checkpoint(checkpoint.createdAtEpochMs, checkpoint))
                 }
             }.sortedBy { it.timestamp }

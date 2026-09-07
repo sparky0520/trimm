@@ -86,6 +86,7 @@ import kotlinx.serialization.json.jsonPrimitive
 @Composable fun AppWithDrawer(vm: ChatViewModel = viewModel()) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    var chatToDelete by remember { mutableStateOf<String?>(null) }
     
     LaunchedEffect(drawerState.isOpen) {
         if (drawerState.isOpen) {
@@ -156,12 +157,37 @@ import kotlinx.serialization.json.jsonPrimitive
                                         ChatTitleText(pastChat)
                                     }
                                 }
-                                IconButton(onClick = { vm.deleteChat(pastChat.id) }) {
+                                IconButton(onClick = { chatToDelete = pastChat.id }) {
                                     Text("🗑️", fontSize = 16.sp)
                                 }
                             }
                         }
                     }
+                    
+                    if (chatToDelete != null) {
+                        AlertDialog(
+                            onDismissRequest = { chatToDelete = null },
+                            title = { Text("Delete Chat") },
+                            text = { Text("Are you sure you want to delete this chat? This action cannot be undone.") },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    chatToDelete?.let { vm.deleteChat(it) }
+                                    chatToDelete = null
+                                }) {
+                                    Text("Delete", color = Coral)
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { chatToDelete = null }) {
+                                    Text("Cancel", color = Cream)
+                                }
+                            },
+                            containerColor = Color(0xFF171717),
+                            titleContentColor = Cream,
+                            textContentColor = Cream
+                        )
+                    }
+
                     HorizontalDivider(color = Color.DarkGray)
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(16.dp).navigationBarsPadding(),
