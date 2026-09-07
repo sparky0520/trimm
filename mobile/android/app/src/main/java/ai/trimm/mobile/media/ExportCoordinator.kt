@@ -99,14 +99,25 @@ object ExportCoordinator {
                     val volume = project.operations.filterIsInstance<SetVolume>().lastOrNull {
                         it.enabled && targets(it.itemId, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd)
                     }?.volume ?: 1f
-                    val audioEffects = if (dialogueTarget != -20f) {
-                        listOf(DialogueAudioProcessor(0f, dialogueTarget), GainProcessor(SpeechDuckingGainProvider(volume, 0f, emptyList())))
-                    } else if (volume != 1f) {
-                        listOf(GainProcessor(SpeechDuckingGainProvider(volume, 0f, emptyList())))
-                    } else {
-                        emptyList()
+                    val audioEffects = mutableListOf<androidx.media3.common.audio.AudioProcessor>()
+                    if (speed != 1f) {
+                        audioEffects.add(androidx.media3.common.audio.SonicAudioProcessor().apply {
+                            setSpeed(speed)
+                            setPitch(1f)
+                        })
                     }
+                    if (dialogueTarget != -20f) {
+                        audioEffects.add(DialogueAudioProcessor(0f, dialogueTarget))
+                        audioEffects.add(GainProcessor(SpeechDuckingGainProvider(volume, 0f, emptyList())))
+                    } else if (volume != 1f) {
+                        audioEffects.add(GainProcessor(SpeechDuckingGainProvider(volume, 0f, emptyList())))
+                    }
+                    
                     val itemVideoEffects = mutableListOf<Effect>()
+                    if (speed != 1f) {
+                        itemVideoEffects.add(androidx.media3.effect.SpeedChangeEffect(speed))
+                    }
+                    
                     val colorOperations = project.operations.filterIsInstance<SetColorGrade>().filter {
                         it.enabled && targets(it.target, "${source.fingerprint}-$index", source.fingerprint, localStart, localEnd)
                     }
@@ -130,15 +141,6 @@ object ExportCoordinator {
                         itemVideoEffects.add(ScaleAndRotateTransformation.Builder().setRotationDegrees(rotateOp.rotation).build())
                     }
 
-                    if (speed != 1f) {
-                        val sonicAudioProcessor = androidx.media3.common.audio.SonicAudioProcessor().apply {
-                            setSpeed(speed)
-                            setPitch(1f) // Maintain pitch
-                        }
-                        // We actually can't easily add SonicAudioProcessor to the list if it's immutable, but wait, audioEffects is a List.
-                        // Wait, audioEffects is currently:
-                        // val audioEffects = if (dialogueTarget != -20f) { ... }
-                    }
                     EditedMediaItem.Builder(item).setDurationUs(maxOf(1L, source.durationMs * 1000L))
                         .setEffects(Effects(audioEffects, itemVideoEffects)).build()
                 }
