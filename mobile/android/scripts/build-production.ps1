@@ -37,7 +37,6 @@ Get-Content -LiteralPath $localEnvironmentFile | ForEach-Object {
 
 $requiredSettings = @(
     "TRIMM_BACKEND_URL",
-    "TRIMM_CLERK_PUBLISHABLE_KEY",
     "TRIMM_ANDROID_UPLOAD_STORE_FILE",
     "TRIMM_ANDROID_UPLOAD_STORE_PASSWORD",
     "TRIMM_ANDROID_UPLOAD_KEY_ALIAS",
