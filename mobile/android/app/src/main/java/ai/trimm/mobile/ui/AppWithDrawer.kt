@@ -129,40 +129,52 @@ import kotlinx.serialization.json.jsonPrimitive
                         ) { Text("+", fontSize = 24.sp, color = if (state.isLoadingPastChats) Color.Gray else Cream) }
                     }
                     LazyColumn(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                        item { 
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Past Chats", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(8.dp))
-                                if (state.isLoadingPastChats) {
-                                    Spacer(Modifier.width(8.dp))
-                                    CircularProgressIndicator(modifier = Modifier.size(12.dp), color = Color.Gray, strokeWidth = 2.dp)
-                                }
-                            }
-                        }
-                        items(state.pastChats.size) { index ->
-                            val pastChat = state.pastChats[index]
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                TextButton(
-                                    onClick = { 
-                                        vm.loadProject(pastChat.id)
-                                        scope.launch { drawerState.close() }
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
-                                ) {
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-                                        ChatTitleText(pastChat)
-                                    }
-                                }
-                                IconButton(onClick = { chatToDelete = pastChat.id }) {
-                                    Text("🗑️", fontSize = 16.sp)
-                                }
-                            }
-                        }
+    item { 
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Past Chats", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(8.dp))
+            if (state.isLoadingPastChats) {
+                Spacer(Modifier.width(8.dp))
+                CircularProgressIndicator(modifier = Modifier.size(12.dp), color = Color.Gray, strokeWidth = 2.dp)
+            }
+        }
+    }
+
+    if (state.pastChats.isEmpty() && !state.isLoadingPastChats) {
+        item {
+            Text(
+                text = "No chats yet",
+                fontSize = 14.sp,
+                color = Color.Gray,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 24.dp)
+            )
+        }
+    } else {
+        items(state.pastChats.size) { index ->
+            val pastChat = state.pastChats[index]
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                TextButton(
+                    onClick = { 
+                        vm.loadProject(pastChat.id)
+                        scope.launch { drawerState.close() }
+                    },
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                ) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                        ChatTitleText(pastChat)
                     }
+                }
+                IconButton(onClick = { chatToDelete = pastChat.id }) {
+                    Text("🗑️", fontSize = 16.sp)
+                }
+            }
+        }
+    }
+}
                     
                     if (chatToDelete != null) {
                         AlertDialog(
