@@ -24,7 +24,7 @@ android {
         applicationId = "ai.ctrlb.mobile"
         minSdk = 31
         targetSdk = 37
-        versionCode = 22
+        versionCode = 23
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         val backendUrl = providers.gradleProperty("TRIMM_BACKEND_URL")
