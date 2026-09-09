@@ -217,6 +217,14 @@ class AgentRunClient(endpoint: String, private val accessToken: suspend () -> St
                         continue
                     }
                     
+                    // 401 means the token was stale or missing. Retry once — accessToken()
+                    // will call AuthTokenProvider which now forces a session refresh.
+                    if (responseCode == 401 && attempt < 1) {
+                        attempt++
+                        kotlinx.coroutines.delay(500L)
+                        continue
+                    }
+                    
                     throw IllegalArgumentException(
                         buildString {
                             append("Agent request failed ($responseCode)")
