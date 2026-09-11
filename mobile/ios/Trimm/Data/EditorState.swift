@@ -23,7 +23,8 @@ public struct EditorState {
     public var initialRequest: String? = nil
     public var pendingChatMessage: String? = nil
     public var isProcessing: Bool = false
-    public var pastChats: [MobileProject] = []
+    public var isLoadingPastChats: Bool = false
+    public var pastChats: [ChatSummary] = []
     public var messages: [ChatMessage] = []
     
     public var source: SourceMedia? {

@@ -177,8 +177,6 @@ public class VideoProcessor {
                 
                 let targetMs = sourceToOutput(sourceMs: target?.startMs ?? 0)
                 let playMs = effectDurationMs
-                let playDuration = CMTime(value: CMTimeValue(playMs), timescale: 1000)
-                let playTimeRange = CMTimeRange(start: .zero, duration: playDuration)
                 let atTime = CMTime(value: CMTimeValue(targetMs), timescale: 1000)
                 
                 if targetMs < totalVideoDurationMs {
@@ -198,8 +196,6 @@ public class VideoProcessor {
                 if sfxDurationMs <= 0 { continue }
                 
                 let targetMs = sourceToOutput(sourceMs: target?.startMs ?? 0)
-                let playDuration = CMTime(value: CMTimeValue(sfxDurationMs), timescale: 1000)
-                let playTimeRange = CMTimeRange(start: .zero, duration: playDuration)
                 let atTime = CMTime(value: CMTimeValue(targetMs), timescale: 1000)
                 
                 if targetMs < totalVideoDurationMs {
@@ -213,9 +209,12 @@ public class VideoProcessor {
         
         audioMix.inputParameters = inputParameters
         
+        nonisolated(unsafe) let safeComposition = composition
+        nonisolated(unsafe) let safeAudioMix = audioMix
+        
         return await MainActor.run {
-            let item = AVPlayerItem(asset: composition)
-            item.audioMix = audioMix
+            let item = AVPlayerItem(asset: safeComposition)
+            item.audioMix = safeAudioMix
             return item
         }
     }

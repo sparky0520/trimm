@@ -83,13 +83,17 @@ struct ChatBubble: View {
         HStack {
             if isUser { Spacer() }
             
-            Text(message)
-                .font(.system(size: 15))
-                .padding(12)
-                .background(isUser ? Color.raised : Color.workspace)
-                .foregroundColor(.cream)
-                .cornerRadius(16)
-                .frame(maxWidth: 280, alignment: isUser ? .trailing : .leading)
+            if isUser {
+                Text(message)
+                    .font(.system(size: 15))
+                    .padding(12)
+                    .background(Color.raised)
+                    .foregroundColor(.cream)
+                    .cornerRadius(16)
+                    .frame(maxWidth: 280, alignment: .trailing)
+            } else {
+                AnimatedResponseText(text: message)
+            }
             
             if !isUser { Spacer() }
         }

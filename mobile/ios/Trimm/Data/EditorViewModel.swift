@@ -8,7 +8,70 @@ public class EditorViewModel {
     public var player: AVPlayer?
     
     public init() {
-        // Load past chats on init if SwiftData is integrated
+        // Load past chats on init
+        Task {
+            await loadPastChats()
+        }
+    }
+    
+    @MainActor
+    public func loadPastChats() async {
+        state.isLoadingPastChats = true
+        do {
+            let chats = try await ChatRepository.shared.getProjects()
+            state.pastChats = chats
+        } catch {
+            print("Failed to load past chats: \(error)")
+        }
+        state.isLoadingPastChats = false
+    }
+    
+    @MainActor
+    public func deleteChat(id: String) async {
+        do {
+            try await ChatRepository.shared.deleteProject(id: id)
+            if state.project?.id == id {
+                state.project = nil
+                state.sources = []
+                state.messages = []
+                player?.pause()
+                player = nil
+            }
+            await loadPastChats()
+        } catch {
+            print("Failed to delete chat: \(error)")
+        }
+    }
+    
+    @MainActor
+    public func loadProject(id: String) async {
+        state.isProcessing = true
+        do {
+            let project = try await ChatRepository.shared.getProject(id: id)
+            self.state.project = project
+            self.state.sources = project.sources
+            self.state.messages = [] // Alternatively load from project.analysis.chatHistory if available
+            await refreshPlayer(project: project)
+        } catch {
+            print("Failed to load project: \(error)")
+        }
+        state.isProcessing = false
+    }
+    
+    @MainActor
+    public func undo() {
+        guard let project = state.project else { return }
+        let restored = project.restoreCheckpoint()
+        state.project = restored
+        Task { await refreshPlayer(project: restored) }
+    }
+    
+    @MainActor
+    public func redo() {
+        guard let project = state.project else { return }
+        let redone = project.redoCheckpoint()
+        state.project = redone
+        Task { await refreshPlayer(project: redone) }
     }
     
     @MainActor
@@ -71,6 +134,11 @@ public class EditorViewModel {
         
         self.state.project = project
         self.state.messages = []
+        
+        Task {
+            try? await ChatRepository.shared.syncProject(project: project)
+            await loadPastChats()
+        }
         
         Task {
             await refreshPlayer(project: project)
@@ -171,28 +239,15 @@ public class EditorViewModel {
                 let response = try await ChatRepository.shared.executeAgentTask(request: agentRequest)
                 await MainActor.run {
                     if response.type == "edit_program", let operations = response.operations {
-                        let snapshot = ProjectSnapshot(operations: project.operations, sources: project.sources, analysis: project.analysis)
-                        var undoHistory = project.undo
-                        undoHistory.append(snapshot)
-                        
-                        let updatedProject = MobileProject(
-                            schemaVersion: 1,
-                            id: project.id,
-                            title: project.title,
-                            source: project.source,
-                            sources: project.sources,
-                            proxyUri: project.proxyUri,
-                            preferences: project.preferences,
-                            analysis: project.analysis,
-                            evidenceGraphs: project.evidenceGraphs,
-                            operations: operations,
-                            undo: undoHistory,
-                            export: project.export,
-                            revision: project.revision + 1
-                        )
+                        let updatedProject = project.applyEditInstructions(next: operations)
                         self.state.project = updatedProject
                         self.state.jobMessage = "Revised proposal ready to review"
                         self.state.messages.append(ChatMessage(text: "Revised proposal ready to review", isUser: false))
+                        
+                        Task {
+                            try? await ChatRepository.shared.syncProject(project: updatedProject)
+                            await self.loadPastChats()
+                        }
                     }
                     self.state.isProcessing = false
                 }

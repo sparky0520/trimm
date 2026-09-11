@@ -1,10 +1,15 @@
 import Foundation
 import Supabase
 
-public let supabaseURL = URL(string: Bundle.main.object(forInfoDictionaryKey: "SupabaseURL") as? String ?? "https://YOUR_SUPABASE_PROJECT_REF.supabase.co")!
-public let supabaseKey = Bundle.main.object(forInfoDictionaryKey: "SupabaseKey") as? String ?? "YOUR_SUPABASE_ANON_KEY"
+public let supabaseURL = URL(string: Secrets.supabaseURL)!
+public let supabaseKey = Secrets.supabasePublishableKey
 
 public let supabase = SupabaseClient(
     supabaseURL: supabaseURL,
-    supabaseKey: supabaseKey
+    supabaseKey: supabaseKey,
+    options: SupabaseClientOptions(
+        auth: SupabaseClientOptions.AuthOptions(
+            emitLocalSessionAsInitialSession: true
+        )
+    )
 )

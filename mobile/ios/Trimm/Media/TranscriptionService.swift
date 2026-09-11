@@ -1,6 +1,6 @@
 import Foundation
 import AVFoundation
-import ClerkKit
+import AVFoundation
 
 struct RemoteTranscriptWord: Codable {
     let text: String
@@ -86,10 +86,8 @@ public class TranscriptionService {
     }
     
     private func getToken() async throws -> String {
-        guard let token = try await Clerk.shared.session?.getToken() else {
-            throw URLError(.userAuthenticationRequired)
-        }
-        return token
+        let session = try await supabase.auth.session
+        return session.accessToken
     }
     
     private func createSession(contentType: String, size: Int64) async throws -> UploadSession {

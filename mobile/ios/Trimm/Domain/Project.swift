@@ -85,8 +85,10 @@ public struct Analysis: Codable, Equatable {
     public let takeGroups: [TakeGroup]
     public let warnings: [String]
     public let completedAtEpochMs: Int64?
+    public let activeTurnId: String?
+    public let activeCheckpointId: String?
     
-    public init(words: [TranscriptWord] = [], captions: [CaptionCue] = [], speechHints: [FumbleCandidate] = [], lowConfidenceFumbles: [FumbleCandidate] = [], takeGroups: [TakeGroup] = [], warnings: [String] = [], completedAtEpochMs: Int64? = nil) {
+    public init(words: [TranscriptWord] = [], captions: [CaptionCue] = [], speechHints: [FumbleCandidate] = [], lowConfidenceFumbles: [FumbleCandidate] = [], takeGroups: [TakeGroup] = [], warnings: [String] = [], completedAtEpochMs: Int64? = nil, activeTurnId: String? = nil, activeCheckpointId: String? = nil) {
         self.words = words
         self.captions = captions
         self.speechHints = speechHints
@@ -94,6 +96,8 @@ public struct Analysis: Codable, Equatable {
         self.takeGroups = takeGroups
         self.warnings = warnings
         self.completedAtEpochMs = completedAtEpochMs
+        self.activeTurnId = activeTurnId
+        self.activeCheckpointId = activeCheckpointId
     }
 }
 
@@ -115,10 +119,111 @@ public struct MobileProject: Codable, Equatable {
     public let evidenceGraphs: [EvidenceGraphReference]
     public let operations: [EditOperation]
     public let undo: [ProjectSnapshot]
+    public let redo: [ProjectSnapshot]
     public let export: ExportSettings
     public let revision: Int64
     
+    public init(schemaVersion: Int = 1, id: String = UUID().uuidString, title: String, source: SourceMedia, sources: [SourceMedia] = [], proxyUri: String? = nil, preferences: WizardPreferences = WizardPreferences(), analysis: Analysis = Analysis(), evidenceGraphs: [EvidenceGraphReference] = [], operations: [EditOperation] = [], undo: [ProjectSnapshot] = [], redo: [ProjectSnapshot] = [], export: ExportSettings = ExportSettings(), revision: Int64 = 0) {
+        self.schemaVersion = schemaVersion
+        self.id = id
+        self.title = title
+        self.source = source
+        self.sources = sources
+        self.proxyUri = proxyUri
+        self.preferences = preferences
+        self.analysis = analysis
+        self.evidenceGraphs = evidenceGraphs
+        self.operations = operations
+        self.undo = undo
+        self.redo = redo
+        self.export = export
+        self.revision = revision
+    }
+    
     public var orderedSources: [SourceMedia] {
         sources.isEmpty ? [source] : sources
+    }
+    
+    public func snapshot() -> ProjectSnapshot {
+        return ProjectSnapshot(operations: operations, sources: orderedSources, analysis: analysis)
+    }
+    
+    public func applyEditInstructions(next: [EditOperation], activeTurnId: String? = nil) -> MobileProject {
+        let newAnalysis = Analysis(
+            words: analysis.words,
+            captions: analysis.captions,
+            speechHints: analysis.speechHints,
+            lowConfidenceFumbles: analysis.lowConfidenceFumbles,
+            takeGroups: analysis.takeGroups,
+            warnings: analysis.warnings,
+            completedAtEpochMs: analysis.completedAtEpochMs,
+            activeTurnId: activeTurnId,
+            activeCheckpointId: analysis.activeCheckpointId
+        )
+        let newUndo = Array((undo + [snapshot()]).suffix(30))
+        return MobileProject(
+            schemaVersion: schemaVersion,
+            id: id,
+            title: title,
+            source: source,
+            sources: sources,
+            proxyUri: proxyUri,
+            preferences: preferences,
+            analysis: newAnalysis,
+            evidenceGraphs: evidenceGraphs,
+            operations: next,
+            undo: newUndo,
+            redo: [],
+            export: export,
+            revision: revision + 1
+        )
+    }
+    
+    public func restoreCheckpoint() -> MobileProject {
+        guard let lastSnapshot = undo.last else { return self }
+        let restoredSources = lastSnapshot.sources.isEmpty ? orderedSources : lastSnapshot.sources
+        let newUndo = undo.dropLast()
+        let newRedo = Array((redo + [snapshot()]).suffix(30))
+        
+        return MobileProject(
+            schemaVersion: schemaVersion,
+            id: id,
+            title: title,
+            source: restoredSources.first ?? source,
+            sources: restoredSources,
+            proxyUri: proxyUri,
+            preferences: preferences,
+            analysis: lastSnapshot.analysis ?? analysis,
+            evidenceGraphs: evidenceGraphs,
+            operations: lastSnapshot.operations,
+            undo: Array(newUndo),
+            redo: newRedo,
+            export: export,
+            revision: revision + 1
+        )
+    }
+    
+    public func redoCheckpoint() -> MobileProject {
+        guard let nextSnapshot = redo.last else { return self }
+        let restoredSources = nextSnapshot.sources.isEmpty ? orderedSources : nextSnapshot.sources
+        let newRedo = redo.dropLast()
+        let newUndo = Array((undo + [snapshot()]).suffix(30))
+        
+        return MobileProject(
+            schemaVersion: schemaVersion,
+            id: id,
+            title: title,
+            source: restoredSources.first ?? source,
+            sources: restoredSources,
+            proxyUri: proxyUri,
+            preferences: preferences,
+            analysis: nextSnapshot.analysis ?? analysis,
+            evidenceGraphs: evidenceGraphs,
+            operations: nextSnapshot.operations,
+            undo: newUndo,
+            redo: Array(newRedo),
+            export: export,
+            revision: revision + 1
+        )
     }
 }

@@ -11,3 +11,6 @@ DerivedData/
 # Custom Build Directory
 build/
 build_device/
+
+# Environments
+.env.local

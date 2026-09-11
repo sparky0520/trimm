@@ -3,8 +3,9 @@ import SwiftData
 import Supabase
 import PhotosUI
 import CoreTransferable
-import ClerkKit
-import ClerkKitUI
+import AuthenticationServices
+import GoogleSignIn
+import CryptoKit
 
 struct MovieFile: Transferable {
     let url: URL
@@ -19,22 +20,159 @@ struct MovieFile: Transferable {
     }
 }
 
+struct SidebarView: View {
+    @Bindable var viewModel: EditorViewModel
+    @Binding var preferredColumn: NavigationSplitViewColumn
+    @State private var chatToDelete: String? = nil
+    @State private var currentUser: User? = nil
+    @State private var showSignOutConfirmation = false
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Custom Header matching Android AppWithDrawer
+            HStack {
+                Text("Trimm")
+                    .font(.system(size: 24, weight: .semibold))
+                    .tracking(-1)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Button(action: {
+                    viewModel.state.project = nil
+                    viewModel.state.sources = []
+                    viewModel.player?.pause()
+                    viewModel.player = nil
+                    preferredColumn = .detail
+                }) {
+                    Text("+")
+                        .font(.system(size: 24))
+                        .foregroundColor(viewModel.state.isLoadingPastChats ? .gray : .primary)
+                }
+                .disabled(viewModel.state.isLoadingPastChats)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 8)
+            
+            List {
+                Section(header: HStack {
+                    Text("Past Chats")
+                    if viewModel.state.isLoadingPastChats {
+                        Spacer()
+                        ProgressView().scaleEffect(0.5)
+                    }
+                }) {
+                    if viewModel.state.pastChats.isEmpty && !viewModel.state.isLoadingPastChats {
+                        Text("No past chats.")
+                            .foregroundColor(.gray)
+                            .italic()
+                    } else {
+                        ForEach(viewModel.state.pastChats) { chat in
+                            Button(action: {
+                                Task { await viewModel.loadProject(id: chat.id) }
+                                preferredColumn = .detail
+                            }) {
+                                Text(chat.title)
+                            }
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    chatToDelete = chat.id
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .listStyle(.sidebar)
+            
+            Divider()
+            
+            if let user = currentUser {
+                Button(action: { showSignOutConfirmation = true }) {
+                    HStack(spacing: 12) {
+                        let metadata = user.userMetadata
+                        let avatarUrlString = metadata["avatar_url"]?.value as? String ?? ""
+                        let fullName = metadata["full_name"]?.value as? String ?? user.email ?? "User"
+                        
+                        if let url = URL(string: avatarUrlString), !avatarUrlString.isEmpty {
+                            AsyncImage(url: url) { image in
+                                image.resizable().scaledToFill()
+                            } placeholder: {
+                                Image(systemName: "person.crop.circle.fill").resizable().foregroundColor(.gray)
+                            }
+                            .frame(width: 32, height: 32)
+                            .clipShape(Circle())
+                        } else {
+                            Image(systemName: "person.crop.circle.fill")
+                                .resizable()
+                                .frame(width: 32, height: 32)
+                                .foregroundColor(.gray)
+                        }
+                        
+                        Text(fullName)
+                            .font(.callout)
+                            .lineLimit(1)
+                            .foregroundColor(.primary)
+                        
+                        Spacer()
+                    }
+                    .padding()
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PlainButtonStyle())
+                .confirmationDialog("Account", isPresented: $showSignOutConfirmation, titleVisibility: .visible) {
+                    Button("Sign out", role: .destructive) {
+                        Task { try? await supabase.auth.signOut() }
+                    }
+                } message: {
+                    Text(user.email ?? "")
+                }
+            }
+        }
+        .navigationBarHidden(true)
+        .alert("Delete Chat", isPresented: .init(
+            get: { chatToDelete != nil },
+            set: { if !$0 { chatToDelete = nil } }
+        )) {
+            Button("Delete", role: .destructive) {
+                if let id = chatToDelete {
+                    Task { await viewModel.deleteChat(id: id) }
+                }
+                chatToDelete = nil
+            }
+            Button("Cancel", role: .cancel) {
+                chatToDelete = nil
+            }
+        } message: {
+            Text("Are you sure you want to delete this chat? This action cannot be undone.")
+        }
+        .task {
+            for await state in supabase.auth.authStateChanges {
+                currentUser = state.session?.user
+            }
+        }
+    }
+}
+
 struct ContentView: View {
     @State private var viewModel = EditorViewModel()
     @State private var selectedItem: PhotosPickerItem?
-    
-    private var clerk = Clerk.shared
+    @State private var isAuthenticated = false
+    @State private var isLoggingIn = false
+    @State private var errorMessage: String?
+    @State private var preferredColumn = NavigationSplitViewColumn.detail
     
     var body: some View {
-        Group {
-            if clerk.user == nil {
-                AuthView()
-            } else {
-                NavigationStack {
+        NavigationSplitView(preferredCompactColumn: $preferredColumn) {
+            SidebarView(viewModel: viewModel, preferredColumn: $preferredColumn)
+        } detail: {
             ZStack {
                 Color.ink.ignoresSafeArea()
                 
-                if viewModel.state.sources.isEmpty {
+                if viewModel.state.sources.isEmpty && viewModel.state.project == nil {
                     VStack(spacing: 24) {
                         Spacer()
                         
@@ -57,29 +195,73 @@ struct ContentView: View {
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 40)
                         
-                        PhotosPicker(selection: $selectedItem, matching: .videos) {
-                            Text("Select clips to edit")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.darkText)
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(Color.coral)
-                                .cornerRadius(10)
-                                .padding(.horizontal, 40)
-                        }
-                        .onChange(of: selectedItem) { _, newValue in
-                            if let newValue = newValue {
-                                Task {
-                                    if let movie = try? await newValue.loadTransferable(type: MovieFile.self) {
-                                        await viewModel.importSources(urls: [movie.url])
-                                        await MainActor.run {
-                                            viewModel.initializeProject()
+                        if !isAuthenticated {
+                            VStack(spacing: 16) {
+                                SignInWithAppleButton(.signIn) { request in
+                                    request.requestedScopes = [.fullName, .email]
+                                    let rawNonce = randomNonceString()
+                                    request.nonce = sha256(rawNonce)
+                                    UserDefaults.standard.set(rawNonce, forKey: "apple_sign_in_nonce")
+                                } onCompletion: { result in
+                                    handleAppleSignIn(result: result)
+                                }
+                                .signInWithAppleButtonStyle(.white)
+                                .frame(height: 50)
+                                .cornerRadius(8)
+                                
+                                Button(action: handleGoogleSignIn) {
+                                    HStack(spacing: 8) {
+                                        Image("google_logo")
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: 18, height: 18)
+                                        
+                                        Text("Sign in with Google")
+                                            .font(.system(size: 19, weight: .medium))
+                                            .foregroundColor(.black)
+                                    }
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                    .background(Color.white)
+                                    .cornerRadius(8)
+                                }
+                                .frame(height: 50)
+                            }
+                            .padding(.horizontal, 40)
+                            
+                            if let error = errorMessage {
+                                Text(error)
+                                    .foregroundColor(.red)
+                                    .font(.caption)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal)
+                            }
+                            if isLoggingIn {
+                                ProgressView().padding()
+                            }
+                        } else {
+                            PhotosPicker(selection: $selectedItem, matching: .videos) {
+                                Text("Select clips to edit")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.darkText)
+                                    .padding()
+                                    .frame(maxWidth: .infinity)
+                                    .background(Color.coral)
+                                    .cornerRadius(10)
+                                    .padding(.horizontal, 40)
+                            }
+                            .onChange(of: selectedItem) { _, newValue in
+                                if let newValue = newValue {
+                                    Task {
+                                        if let movie = try? await newValue.loadTransferable(type: MovieFile.self) {
+                                            await viewModel.importSources(urls: [movie.url])
+                                            await MainActor.run {
+                                                viewModel.initializeProject()
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-                        .padding(.top, 16)
                         
                         Spacer()
                         
@@ -93,11 +275,111 @@ struct ContentView: View {
                     EditorScreen(viewModel: viewModel)
                 }
             } // ZStack
-        } // NavigationStack
-            } // else
-        } // Group
+            .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: {
+                        preferredColumn = .sidebar
+                    }) {
+                        Image(systemName: "line.3.horizontal")
+                            .foregroundColor(.primary)
+                    }
+                }
+            }
+        } // NavigationSplitView
+        .preferredColorScheme(.dark)
+        .task {
+            for await authEvent in supabase.auth.authStateChanges {
+                isAuthenticated = authEvent.session != nil
+            }
+        }
     } // body
-} // ContentView
+    
+    private func handleAppleSignIn(result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success(let authorization):
+            if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
+               let identityTokenData = appleIDCredential.identityToken,
+               let identityToken = String(data: identityTokenData, encoding: .utf8) {
+                let nonce = UserDefaults.standard.string(forKey: "apple_sign_in_nonce")
+                
+                Task {
+                    isLoggingIn = true
+                    do {
+                        try await supabase.auth.signInWithIdToken(
+                            credentials: .init(provider: .apple, idToken: identityToken, nonce: nonce)
+                        )
+                    } catch {
+                        errorMessage = error.localizedDescription
+                    }
+                    isLoggingIn = false
+                }
+            }
+        case .failure(let error):
+            errorMessage = error.localizedDescription
+        }
+    }
+    
+    private func handleGoogleSignIn() {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let rootViewController = windowScene.windows.first?.rootViewController else {
+            return
+        }
+        
+        Task {
+            isLoggingIn = true
+            do {
+                let clientID = Secrets.googleIosClientId
+                let serverClientID = Secrets.googleWebClientId
+                if clientID.isEmpty || clientID == "YOUR_IOS_CLIENT_ID_HERE" {
+                    throw NSError(domain: "Auth", code: 1, userInfo: [NSLocalizedDescriptionKey: "Google iOS Client ID not configured"])
+                }
+                let config = GIDConfiguration(clientID: clientID, serverClientID: serverClientID)
+                GIDSignIn.sharedInstance.configuration = config
+                
+                let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: rootViewController)
+                if let idToken = result.user.idToken?.tokenString {
+                    try await supabase.auth.signInWithIdToken(
+                        credentials: .init(provider: .google, idToken: idToken)
+                    )
+                }
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isLoggingIn = false
+        }
+    }
+}
+
+// MARK: - Apple Sign In Nonce Helpers
+private func randomNonceString(length: Int = 32) -> String {
+    precondition(length > 0)
+    var randomBytes = [UInt8](repeating: 0, count: length)
+    let errorCode = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
+    if errorCode != errSecSuccess {
+        fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \(errorCode)")
+    }
+    
+    let charset: [Character] =
+        Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+    
+    let nonce = randomBytes.map { byte in
+        charset[Int(byte) % charset.count]
+    }
+    
+    return String(nonce)
+}
+
+@available(iOS 13, *)
+private func sha256(_ input: String) -> String {
+    let inputData = Data(input.utf8)
+    let hashedData = SHA256.hash(data: inputData)
+    let hashString = hashedData.compactMap {
+        String(format: "%02x", $0)
+    }.joined()
+    
+    return hashString
+}
 
 #Preview {
     ContentView()

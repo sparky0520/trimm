@@ -1,14 +1,9 @@
 import SwiftUI
 import SwiftData
-import ClerkKit
-import ClerkKitUI
+import GoogleSignIn
 
 @main
 struct TrimmApp: App {
-    init() {
-        Clerk.configure(publishableKey: "pk_test_b3JpZW50ZWQtcm9vc3Rlci01My5jbGVyay5hY2NvdW50cy5kZXYk")
-    }
-    
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             // Add models here
@@ -25,7 +20,9 @@ struct TrimmApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environment(Clerk.shared)
+                .onOpenURL { url in
+                    GIDSignIn.sharedInstance.handle(url)
+                }
         }
         .modelContainer(sharedModelContainer)
     }
