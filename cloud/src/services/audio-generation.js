@@ -80,7 +80,7 @@ class AudioGeneration {
       },
       body: JSON.stringify({
         version: "671ac645ce5e552cc63a54a2bbff63fcf798043055d2dac5fc9e36a837eedcfb",
-        input: { prompt: augmentedPrompt, duration: Math.min(30, Math.max(1, durationSecs)) }
+        input: { prompt: augmentedPrompt, duration: Math.round(Math.min(30, Math.max(1, durationSecs))) }
       })
     });
 
