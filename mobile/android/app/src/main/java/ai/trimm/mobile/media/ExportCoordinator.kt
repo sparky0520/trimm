@@ -281,10 +281,10 @@ object ExportCoordinator {
                         items.add(edited)
                     }
                 }
-                sequences += EditedMediaItemSequence.withAudioAndVideoFrom(items)
+                sequences += EditedMediaItemSequence.withAudioFrom(items)
             } else {
                 items.add(edited)
-                sequences += EditedMediaItemSequence.withAudioAndVideoFrom(items).buildUpon().setIsLooping(true).build()
+                sequences += EditedMediaItemSequence.withAudioFrom(items).buildUpon().setIsLooping(true).build()
             }
         }
 
