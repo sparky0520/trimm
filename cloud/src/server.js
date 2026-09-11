@@ -197,7 +197,6 @@ const server = http.createServer(async (request, response) => {
 
   if (request.method === 'POST' && requestUrl.pathname === '/v1/projects/sync') {
     try {
-      const principal = await authentication.authenticate(request);
       const projectData = await collect(request);
       if (!projectData.id) throw Object.assign(new Error('Missing project id'), { status: 400 });
 
@@ -259,8 +258,6 @@ const server = http.createServer(async (request, response) => {
 
   if (request.method === 'GET' && requestUrl.pathname === '/v1/projects') {
     try {
-      const principal = await authentication.authenticate(request);
-
       const { createClient } = await import('@supabase/supabase-js');
       const supabase = createClient(
         process.env.SUPABASE_URL || '',
@@ -294,7 +291,6 @@ const server = http.createServer(async (request, response) => {
 
   if (request.method === 'GET' && requestUrl.pathname.match(/^\/v1\/projects\/([^\/]+)$/)) {
     try {
-      const principal = await authentication.authenticate(request);
       const projectId = requestUrl.pathname.split('/')[3];
 
       const { createClient } = await import('@supabase/supabase-js');
@@ -320,7 +316,6 @@ const server = http.createServer(async (request, response) => {
 
   if (request.method === 'DELETE' && requestUrl.pathname.match(/^\/v1\/projects\/([^\/]+)$/)) {
     try {
-      const principal = await authentication.authenticate(request);
       const projectId = requestUrl.pathname.split('/')[3];
 
       const { createClient } = await import('@supabase/supabase-js');

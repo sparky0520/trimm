@@ -4,17 +4,18 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
-val rootLocalEnv: Map<String, String> = rootProject.file(".env.local").takeIf { it.isFile }
-    ?.readLines()?.mapNotNull { line ->
-        val trimmed = line.trim()
-        if (trimmed.isEmpty() || trimmed.startsWith("#") || !trimmed.contains("=")) null
-        else trimmed.substringBefore("=").trim() to trimmed.substringAfter("=").trim()
-    }?.toMap().orEmpty()
+import java.util.Properties
 
-val uploadStorePath = rootLocalEnv["TRIMM_ANDROID_UPLOAD_STORE_FILE"].orEmpty()
-val uploadStorePassword = rootLocalEnv["TRIMM_ANDROID_UPLOAD_STORE_PASSWORD"].orEmpty()
-val uploadKeyAlias = rootLocalEnv["TRIMM_ANDROID_UPLOAD_KEY_ALIAS"].orEmpty()
-val uploadKeyPassword = rootLocalEnv["TRIMM_ANDROID_UPLOAD_KEY_PASSWORD"].orEmpty()
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
+}
+
+val uploadStorePath = localProperties.getProperty("TRIMM_ANDROID_UPLOAD_STORE_FILE") ?: ""
+val uploadStorePassword = localProperties.getProperty("TRIMM_ANDROID_UPLOAD_STORE_PASSWORD") ?: ""
+val uploadKeyAlias = localProperties.getProperty("TRIMM_ANDROID_UPLOAD_KEY_ALIAS") ?: ""
+val uploadKeyPassword = localProperties.getProperty("TRIMM_ANDROID_UPLOAD_KEY_PASSWORD") ?: ""
 
 android {
     namespace = "ai.trimm.mobile"
@@ -29,7 +30,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         val backendUrl = providers.gradleProperty("TRIMM_BACKEND_URL")
             .orElse(providers.environmentVariable("TRIMM_BACKEND_URL"))
-            .orElse(rootLocalEnv["TRIMM_BACKEND_URL"] ?: "")
+            .orElse(localProperties.getProperty("TRIMM_BACKEND_URL") ?: "")
             .get().trimEnd('/')
         val plannerUrl = providers.gradleProperty("TRIMM_PLANNER_URL").orElse(
             backendUrl.takeIf { it.isNotEmpty() }?.let { "$it/v1" } ?: ""
@@ -44,13 +45,13 @@ android {
         
         val supabaseUrl = providers.gradleProperty("SUPABASE_URL")
             .orElse(providers.environmentVariable("SUPABASE_URL"))
-            .orElse(rootLocalEnv["SUPABASE_URL"] ?: "").get()
+            .orElse(localProperties.getProperty("SUPABASE_URL") ?: "").get()
         val supabasePublishableKey = providers.gradleProperty("SUPABASE_PUBLISHABLE_KEY")
             .orElse(providers.environmentVariable("SUPABASE_PUBLISHABLE_KEY"))
-            .orElse(rootLocalEnv["SUPABASE_PUBLISHABLE_KEY"] ?: "").get()
+            .orElse(localProperties.getProperty("SUPABASE_PUBLISHABLE_KEY") ?: "").get()
         val googleWebClientId = providers.gradleProperty("GOOGLE_WEB_CLIENT_ID")
             .orElse(providers.environmentVariable("GOOGLE_WEB_CLIENT_ID"))
-            .orElse(rootLocalEnv["GOOGLE_WEB_CLIENT_ID"] ?: "").get()
+            .orElse(localProperties.getProperty("GOOGLE_WEB_CLIENT_ID") ?: "").get()
             
         buildConfigField("String", "SUPABASE_URL", "\"${supabaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${supabasePublishableKey.replace("\\", "\\\\").replace("\"", "\\\"")}\"")

@@ -1,0 +1,16 @@
+TRIMM_BACKEND_URL=https://your-backend-url.fly.dev
+
+# Android release signing
+TRIMM_ANDROID_UPLOAD_STORE_FILE=keystore/trimm-upload.jks
+TRIMM_ANDROID_UPLOAD_STORE_PASSWORD=your_keystore_password
+TRIMM_ANDROID_UPLOAD_KEY_ALIAS=your_key_alias
+TRIMM_ANDROID_UPLOAD_KEY_PASSWORD=your_key_password
+
+# Supabase Auth
+GOOGLE_WEB_CLIENT_ID=your_google_web_client_id.apps.googleusercontent.com
+
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_PUBLISHABLE_KEY=your_publishable_key
+
+# iOS Auth
+GOOGLE_IOS_CLIENT_ID=your_google_ios_client_id.apps.googleusercontent.com

@@ -1,9 +1,0 @@
-# Copy these values into ~/.gradle/gradle.properties for local builds or inject them in CI.
-# Do not commit real credentials.
-TRIMM_BACKEND_URL=https://api.example.com
-# Optional per-route override:
-# TRIMM_PLANNER_URL=https://api.example.com/v1/mobile/plan
-# Development bootstrap token only. Replace this shared-token scheme with user-scoped JWTs before public release.
-TRIMM_PLANNER_TOKEN=1234567890
-# TRIMM_TRANSCRIPTION_URL=https://api.example.com/v1/transcribe
-TRIMM_AUDIO_CATALOG_URL=https://cdn.example.com/trimm/audio/catalog.v1.json

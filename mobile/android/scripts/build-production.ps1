@@ -10,7 +10,7 @@ if ($env:JAVA_HOME) {
     $javaExecutable = if ($IsWindows) { Join-Path $env:JAVA_HOME "bin\java.exe" } else { Join-Path $env:JAVA_HOME "bin/java" }
 }
 $gradleWrapper = if ($IsWindows) { Join-Path $repositoryRoot "gradlew.bat" } else { Join-Path $repositoryRoot "gradlew" }
-$localEnvironmentFile = Join-Path $repositoryRoot ".env.local"
+$localEnvironmentFile = Join-Path $repositoryRoot "local.properties"
 
 if (-not $env:JAVA_HOME -or -not $javaExecutable -or -not (Test-Path -LiteralPath $javaExecutable)) {
     throw "JAVA_HOME must point to a JDK 17 installation. Current value: '$env:JAVA_HOME'"
@@ -25,7 +25,7 @@ if ($javaVersionOutput -notmatch 'version "17(?:[."-])') {
 }
 
 if (-not (Test-Path -LiteralPath $localEnvironmentFile)) {
-    throw "Missing .env.local. Copy .env.local.example to .env.local and add the production configuration."
+    throw "Missing local.properties. Copy local.properties.example to local.properties and add the production configuration."
 }
 
 $localEnvironment = @{}
@@ -47,7 +47,7 @@ $missingSettings = $requiredSettings | Where-Object {
     -not $localEnvironment.ContainsKey($_) -or [string]::IsNullOrWhiteSpace($localEnvironment[$_])
 }
 if ($missingSettings) {
-    throw "Missing production settings in .env.local: $($missingSettings -join ', ')"
+    throw "Missing production settings in local.properties: $($missingSettings -join ', ')"
 }
 
 $backendUri = $null
