@@ -5,10 +5,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description"
-    content="Trimm is a conversational video editor. Describe the edit you want, review it, and export locally.">
+    content="Trimm is a conversational video editor. Describe the edit you want in plain English, review proposed edits, and export the final video locally.">
   <meta name="theme-color" content="#09090b">
-  <title>Trimm — edit video by chatting</title>
-  <link rel="icon" href="./trimm-icon.png" type="image/png">
+  <title>Trimm - Conversational Video Editor | Edit Video by Chatting</title>
+  <link rel="icon" href="/trimm-icon.png" type="image/png">
   <link rel="stylesheet" href="./styles.css">
   <script>
     window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
@@ -107,7 +107,9 @@
           <div class="frame-bar"><img src="./trimm-icon.png" class="brand-mark" alt="Trimm logo"><span>New edit</span><span
               class="frame-status">Ready</span></div>
           <div class="preview" style="padding: 0; background: #000; overflow: hidden;">
-            <video id="demo-video" src="./trimm-ad.webm" autoplay loop muted playsinline style="width: 100%; height: 100%; aspect-ratio: 16/9; min-height: 185px; display: block; object-fit: cover;"></video>
+            <video id="demo-video" src="./trimm-ad.webm" autoplay loop muted playsinline aria-label="Demo of Trimm conversational video editor interface" title="Trimm conversational video editor demo" style="width: 100%; height: 100%; aspect-ratio: 16/9; min-height: 185px; display: block; object-fit: cover;">
+              Your browser does not support the video tag.
+            </video>
           </div>
           <div class="timeline" style="position: relative;">
             <span></span><i></i><i></i><span></span>
