@@ -8,6 +8,9 @@ import android.graphics.Path
 import android.graphics.Typeface
 import android.util.Pair
 import android.content.Context
+import android.text.StaticLayout
+import android.text.TextPaint
+import android.text.Layout
 import androidx.core.content.res.ResourcesCompat
 import androidx.media3.common.OverlaySettings
 import androidx.media3.common.util.UnstableApi
@@ -23,7 +26,9 @@ class TextGraphicOverlay(
     private val text: String,
     private val blueprintJson: String,
     private val startMs: Long,
-    private val endMs: Long
+    private val endMs: Long,
+    private val videoWidth: Int = 1080,
+    private val videoHeight: Int = 1920
 ) : BitmapOverlay() {
 
     private val cachedBitmap: Bitmap by lazy { generateBitmap() }
@@ -50,7 +55,7 @@ class TextGraphicOverlay(
 
     private fun generateBitmap(): Bitmap {
         val width = 1000
-        val height = 1000
+        val height = (1000f * videoHeight / videoWidth).toInt()
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val cx = width / 2f
@@ -144,6 +149,7 @@ class TextGraphicOverlay(
             val tShadowRadius = textStyle?.optDouble("shadowRadius", 0.0)?.toFloat() ?: 0f
             val tShadowColor = parseColor(textStyle?.optString("shadowColor"), Color.TRANSPARENT)
             val fontFamily = textStyle?.optString("fontFamily") ?: "plain"
+            val fontSize = textStyle?.optDouble("fontSize", 120.0)?.toFloat() ?: 120f
 
             val tf = when (fontFamily) {
                 "comic" -> ResourcesCompat.getFont(context, R.font.bangers)
@@ -153,43 +159,84 @@ class TextGraphicOverlay(
                 else -> ResourcesCompat.getFont(context, R.font.roboto)
             } ?: Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
 
-            paint.style = Paint.Style.FILL
-            paint.color = tColor
-            paint.textSize = 120f
-            paint.typeface = tf
-            paint.textAlign = Paint.Align.CENTER
+            val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
+            textPaint.style = Paint.Style.FILL
+            textPaint.color = tColor
+            textPaint.textSize = fontSize
+            textPaint.typeface = tf
             
             if (tShadowRadius > 0 && tShadowColor != Color.TRANSPARENT) {
-                paint.setShadowLayer(tShadowRadius, 5f, 5f, tShadowColor)
+                textPaint.setShadowLayer(tShadowRadius, 5f, 5f, tShadowColor)
             } else {
-                paint.clearShadowLayer()
+                textPaint.clearShadowLayer()
             }
 
-            val textY = cy - ((paint.descent() + paint.ascent()) / 2)
+            val textWidth = (width * 0.9f).toInt()
+            val staticLayout = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                StaticLayout.Builder.obtain(text, 0, text.length, textPaint, textWidth)
+                    .setAlignment(Layout.Alignment.ALIGN_CENTER)
+                    .build()
+            } else {
+                @Suppress("DEPRECATION")
+                StaticLayout(text, textPaint, textWidth, Layout.Alignment.ALIGN_CENTER, 1.0f, 0.0f, false)
+            }
+
+            val textHeight = staticLayout.height
+            val textY = cy - (textHeight / 2f)
             
             // Text Outline
             if (tStrokeColor != Color.TRANSPARENT && tStrokeWidth > 0) {
-                val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+                val outlinePaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
                 outlinePaint.style = Paint.Style.STROKE
                 outlinePaint.strokeWidth = tStrokeWidth
                 outlinePaint.color = tStrokeColor
-                outlinePaint.textSize = 120f
+                outlinePaint.textSize = fontSize
                 outlinePaint.typeface = tf
-                outlinePaint.textAlign = Paint.Align.CENTER
-                canvas.drawText(text, cx, textY, outlinePaint)
+                
+                val outlineLayout = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    StaticLayout.Builder.obtain(text, 0, text.length, outlinePaint, textWidth)
+                        .setAlignment(Layout.Alignment.ALIGN_CENTER)
+                        .build()
+                } else {
+                    @Suppress("DEPRECATION")
+                    StaticLayout(text, outlinePaint, textWidth, Layout.Alignment.ALIGN_CENTER, 1.0f, 0.0f, false)
+                }
+
+                canvas.save()
+                canvas.translate(cx - textWidth / 2f, textY)
+                outlineLayout.draw(canvas)
+                canvas.restore()
             }
             
-            canvas.drawText(text, cx, textY, paint)
+            canvas.save()
+            canvas.translate(cx - textWidth / 2f, textY)
+            staticLayout.draw(canvas)
+            canvas.restore()
 
         } catch (e: Exception) {
             // Fallback plain text if JSON is malformed
-            paint.style = Paint.Style.FILL
-            paint.color = Color.WHITE
-            paint.textSize = 120f
-            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            paint.textAlign = Paint.Align.CENTER
-            val textY = cy - ((paint.descent() + paint.ascent()) / 2)
-            canvas.drawText(text, cx, textY, paint)
+            val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
+            textPaint.style = Paint.Style.FILL
+            textPaint.color = Color.WHITE
+            textPaint.textSize = 120f
+            textPaint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+
+            val textWidth = (width * 0.9f).toInt()
+            val staticLayout = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                StaticLayout.Builder.obtain(text, 0, text.length, textPaint, textWidth)
+                    .setAlignment(Layout.Alignment.ALIGN_CENTER)
+                    .build()
+            } else {
+                @Suppress("DEPRECATION")
+                StaticLayout(text, textPaint, textWidth, Layout.Alignment.ALIGN_CENTER, 1.0f, 0.0f, false)
+            }
+            val textHeight = staticLayout.height
+            val textY = cy - (textHeight / 2f)
+            
+            canvas.save()
+            canvas.translate(cx - textWidth / 2f, textY)
+            staticLayout.draw(canvas)
+            canvas.restore()
         }
 
         return bitmap

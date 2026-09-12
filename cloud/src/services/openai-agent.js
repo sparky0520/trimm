@@ -69,46 +69,68 @@ function createOpenAIDecisionProvider({
   }
 
   const generateTextOverlayConfig = async ({ description, text, videoWidth = 1920, videoHeight = 1080 }) => {
-    // simplified from gemini version
     const prompt = `You are an AI video editor designing a native text overlay with vector graphics.
 Your goal is to parse the user's description and generate a JSON blueprint (Generative Canvas DSL).
-This blueprint defines the background shapes (rectangles, circles, starbursts), text styling, and layout.
+This blueprint defines the background shapes (if requested), text styling, and layout.
 
-The target video has dimensions: ${videoWidth}x${videoHeight} (width x height). Use these dimensions to accurately position and size elements, especially for safe margins and alignment.
+The target video has dimensions: ${videoWidth}x${videoHeight} (width x height). Text wrapping is handled automatically (center aligned).
 
-The output MUST match this precise schema:
+Output a strict, valid JSON object. DO NOT include comments in the JSON. Include ONLY the necessary fields. Omit unused or default fields to avoid bloat.
+
+Use the following exact JSON schema to structure your response:
+
 {
-  "layout": {
-    "posX": 0.0, // -1.0 (left) to 1.0 (right). 0 is center.
-    "posY": 0.8, // -1.0 (bottom) to 1.0 (top). 0 is center.
-    "scale": 1.0, // multiplier
-    "rotation": 0.0 // degrees
-  },
-  "backgroundShapes": [
-    {
-      "type": "rectangle", // or "circle", "starburst"
-      "width": 500, // internal canvas pixels, where 1000x1000 is the full text box
-      "height": 200,
-      "color": "#000000",
-      "strokeColor": "#FFFFFF",
-      "strokeWidth": 2.0,
-      "cornerRadius": 10
+  "type": "object",
+  "properties": {
+    "layout": {
+      "type": "object",
+      "description": "Optional. Defines the position, scale, and rotation of the overlay.",
+      "properties": {
+        "posX": { "type": "number", "description": "Horizontal position. -1.0 (left) to 1.0 (right). 0 is center. Default: 0.0" },
+        "posY": { "type": "number", "description": "Vertical position. -1.0 (bottom) to 1.0 (top). 0 is center. Default: 0.8" },
+        "scale": { "type": "number", "description": "Scale multiplier. Default: 1.0" },
+        "rotation": { "type": "number", "description": "Rotation in degrees. Default: 0.0" }
+      }
+    },
+    "backgroundShapes": {
+      "type": "array",
+      "description": "Optional. Omit if no background is needed. Defines shapes drawn behind the text.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "enum": ["rectangle", "circle", "starburst"] },
+          "color": { "type": "string", "description": "Hex color code, e.g. '#000000'" },
+          "strokeColor": { "type": "string", "description": "Hex color code" },
+          "strokeWidth": { "type": "number" },
+          "width": { "type": "number", "description": "Only for rectangle. Width of the shape." },
+          "height": { "type": "number", "description": "Only for rectangle. Height of the shape." },
+          "cornerRadius": { "type": "number", "description": "Only for rectangle." },
+          "outerRadius": { "type": "number", "description": "Only for circle or starburst." },
+          "innerRadius": { "type": "number", "description": "Only for starburst." },
+          "points": { "type": "number", "description": "Only for starburst. Number of points." }
+        }
+      }
+    },
+    "textStyle": {
+      "type": "object",
+      "description": "Optional. Defines the typography and styling of the text.",
+      "properties": {
+        "color": { "type": "string", "description": "Hex color code, e.g. '#FFFFFF'" },
+        "strokeColor": { "type": "string", "description": "Hex color code, e.g. '#000000'" },
+        "strokeWidth": { "type": "number", "description": "Width of the text outline." },
+        "shadowRadius": { "type": "number", "description": "Radius of the text drop shadow." },
+        "shadowColor": { "type": "string", "description": "Hex color code, e.g. '#000000'" },
+        "fontFamily": { "type": "string", "enum": ["plain", "comic", "neon", "typewriter", "elegant"], "description": "Default: 'plain'" },
+        "fontSize": { "type": "number", "description": "Font size in pixels. Default: 120.0" }
+      }
     }
-  ],
-  "textStyle": {
-    "color": "#FFFFFF",
-    "strokeColor": "#000000",
-    "strokeWidth": 5.0,
-    "shadowRadius": 5.0,
-    "shadowColor": "#000000",
-    "fontFamily": "plain" // "plain", "comic", "neon", "typewriter", "elegant"
   }
 }
 
 Target text to display: "${text}"
 Effect description: ${description}
 
-Return ONLY a valid JSON blueprint matching this exact schema.`;
+Return ONLY a valid JSON object. No markdown formatting, no backticks, no comments.`;
 
     let history = [];
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -122,13 +144,16 @@ Return ONLY a valid JSON blueprint matching this exact schema.`;
       });
 
       try {
-        return JSON.parse(response.rawText);
+        let raw = response.rawText || '{}';
+        // Strip any markdown code blocks
+        raw = raw.replace(/^```json\s*/, '').replace(/```\s*$/, '').trim();
+        return JSON.parse(raw);
       } catch (e) {
         if (attempt === 3) throw Object.assign(new Error("Failed to parse text overlay response"), { code: 'text_overlay_error' });
         history = [
           { role: 'user', content: prompt },
           { role: 'assistant', content: response.rawText || '' },
-          { role: 'user', content: "The response was not valid JSON. Please fix it and output ONLY valid JSON. Error: " + e.message }
+          { role: 'user', content: "The response was not valid JSON. Please fix it and output ONLY valid JSON. Do not include comments in JSON. Error: " + e.message }
         ];
       }
     }

@@ -88,12 +88,12 @@ const PROPOSE_ASPECT_RATIO_TOOL = operationTool(
 
 const PROPOSE_TEXT_OVERLAY_TOOL = operationTool(
   'propose_add_text_overlay',
-  'Generate a native text overlay with dynamic graphics. Provide detailed visual styling instructions (e.g. font size, specific colors, exact positioning, layout, drop shadows) in the styling parameter, and a description of the desired effect.',
+  'Generate a native text overlay with dynamic graphics. \nSUPPORTED STYLES ONLY:\n- Fonts: "plain", "comic", "neon", "typewriter", "elegant"\n- Text Style: color, strokeColor, strokeWidth, shadowRadius, shadowColor, fontSize\n- Layout: posX, posY, scale, rotation\n- Background Shapes: rectangle, circle, starburst (with color, stroke, dimensions)\nIMPORTANT: If the user requests a style, font, or animation NOT explicitly listed above (e.g. gradients, italics, 3D text, animations), do NOT use this tool. Instead, use finish_without_proposal or respond explaining that the requested style is not supported.',
   ['sourceId', 'startMs', 'endMs', 'text', 'description', 'styling', 'reason'], {
   ...targetRangeProperties,
   text: { type: 'string' },
   description: { type: 'string', description: 'Describe the desired effect and graphics (e.g., comic book "BANG").' },
-  styling: { type: 'string', description: 'Detailed visual styling instructions (e.g. font size, exact colors, positioning, layout, drop shadows).' }
+  styling: { type: 'string', description: 'Detailed visual styling instructions restricted to supported styles (font size, colors, positioning, drop shadows).' }
 },
 );
 

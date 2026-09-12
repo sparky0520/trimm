@@ -216,7 +216,9 @@ object ExportCoordinator {
                                 text = textOverlay.text,
                                 blueprintJson = textOverlay.designBlueprint,
                                 startMs = outputStart,
-                                endMs = outputEnd
+                                endMs = outputEnd,
+                                videoWidth = project.export.width,
+                                videoHeight = project.export.height
                             )
                         )
                     )
