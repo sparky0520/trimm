@@ -133,9 +133,10 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                         intent = initialPrompt,
                         history = listOf(ChatMessage("user", initialPrompt)),
                         sources = project.orderedSources.mapIndexed { index, source ->
+                            val display = source.displaySize()
                             AgentSourceInventory(
                                 "${source.fingerprint}-$index", source.fingerprint, source.durationMs,
-                                source.width, source.height, source.hasAudio
+                                display.width, display.height, source.hasAudio
                             )
                         },
                         transcript = sourceTranscript(analyzed.analysis.words, project.orderedSources),

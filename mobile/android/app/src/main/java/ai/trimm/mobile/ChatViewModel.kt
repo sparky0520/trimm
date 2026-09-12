@@ -492,9 +492,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 intent = project.analysis.chatHistory.firstOrNull()?.request
                     ?: "Make this video publishable",
                 sources = project.orderedSources.mapIndexed { index, source ->
+                    val display = source.displaySize()
                     AgentSourceInventory(
                         "${source.fingerprint}-$index", source.fingerprint, source.durationMs,
-                        source.width, source.height, source.hasAudio
+                        display.width, display.height, source.hasAudio
                     )
                 },
                 transcript = sourceTranscript(project.analysis.words, project.orderedSources),
@@ -574,9 +575,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 intent = message,
                 history = history,
                 sources = project.orderedSources.mapIndexed { index, source ->
+                    val display = source.displaySize()
                     AgentSourceInventory(
                         "${source.fingerprint}-$index", source.fingerprint, source.durationMs,
-                        source.width, source.height, source.hasAudio
+                        display.width, display.height, source.hasAudio
                     )
                 },
                 transcript = sourceTranscript(project.analysis.words, project.orderedSources),
