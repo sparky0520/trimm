@@ -600,16 +600,30 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }.onSuccess { snapshot ->
                 AgentDecisionMapper.pendingProposal(snapshot)?.let { proposal ->
                     val latest = store.load(project.id)
-                    InstructionValidator.validate(latest, proposal.operations, proposal.expectedRevision)
-                    val updated = latest.copy(analysis = latest.analysis.copy(
-                        agentRun = snapshot,
-                        pendingProposal = proposal,
-                        chatHistory = latest.analysis.chatHistory.map {
-                            if (it.id == turnId) it.copy(response = proposal.summary, isPending = false, isError = false) else it
-                        }
-                    ))
-                    store.save(updated)
-                    mutable.update { it.copy(project = updated, isProcessing = false, jobMessage = "Proposed edit ready to review") }
+                    val isValid = runCatching {
+                        InstructionValidator.validate(latest, proposal.operations, proposal.expectedRevision)
+                    }.isSuccess
+                    
+                    if (isValid) {
+                        val updated = latest.copy(analysis = latest.analysis.copy(
+                            agentRun = snapshot,
+                            pendingProposal = proposal,
+                            chatHistory = latest.analysis.chatHistory.map {
+                                if (it.id == turnId) it.copy(response = proposal.summary, isPending = false, isError = false) else it
+                            }
+                        ))
+                        store.save(updated)
+                        mutable.update { it.copy(project = updated, isProcessing = false, jobMessage = "Proposed edit ready to review") }
+                    } else {
+                        val updated = latest.copy(analysis = latest.analysis.copy(
+                            agentRun = snapshot,
+                            chatHistory = latest.analysis.chatHistory.map {
+                                if (it.id == turnId) it.copy(isPending = false, isError = true, response = "Edit proposal is no longer current. Please try again.") else it
+                            }
+                        ))
+                        store.save(updated)
+                        mutable.update { it.copy(project = updated, isProcessing = false, errorMessage = "Stale edit proposal") }
+                    }
                 } ?: run {
                     val latest = store.load(project.id)
                     val updated = latest.copy(analysis = latest.analysis.copy(

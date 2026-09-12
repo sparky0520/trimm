@@ -181,8 +181,13 @@ If you decide no edits are needed, or if you cannot execute the task, you MUST c
 
     const validOperations = response.toolCalls.filter(tc => tc.name.startsWith('propose_') || !['ask_clarification', 'finalize_edit_program', 'finish_without_proposal', 'remove_draft_operation'].includes(tc.name));
 
+    const removedOperations = response.toolCalls
+      .filter(tc => tc.name === 'remove_draft_operation')
+      .map(tc => tc.args.operationId);
+
     return {
       type: "edit_program",
+      removedOperations,
       operations: await Promise.all(validOperations.map(async tc => {
         const operationName = tc.name.startsWith('propose_') ? tc.name.replace('propose_', '') : tc.name;
         let payload = tc.args.operation || tc.args;

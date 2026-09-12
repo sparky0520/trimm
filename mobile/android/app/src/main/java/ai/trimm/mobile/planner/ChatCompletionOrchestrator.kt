@@ -93,7 +93,11 @@ class ChatCompletionCoordinator(
                     } ?: emptyList()
                     
                     val newOpIds = newOps.mapNotNull { it["id"]?.jsonPrimitive?.content }.toSet()
-                    val filteredExisting = request.existingOperations.filter { it["id"]?.jsonPrimitive?.content !in newOpIds }
+                    val removedOpIds = outcome["removedOperations"]?.jsonArray?.mapNotNull { it.jsonPrimitive.content }?.toSet() ?: emptySet()
+                    val filteredExisting = request.existingOperations.filter { 
+                        val id = it["id"]?.jsonPrimitive?.content
+                        id !in newOpIds && id !in removedOpIds 
+                    }
                     val finalOperations = filteredExisting + newOps
                     
                     val summaryStr = outcome["summary"]?.jsonPrimitive?.content ?: "Proposed edit"
