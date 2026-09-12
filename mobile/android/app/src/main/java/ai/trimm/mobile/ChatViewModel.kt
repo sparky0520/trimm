@@ -299,7 +299,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             if (info.state == WorkInfo.State.SUCCEEDED) {
-                val analyzed = store.load(project.id)
+                val analyzed = runCatching { store.load(project.id) }.getOrNull() ?: project
                 mutable.update { it.copy(project = analyzed, jobMessage = "Analysis complete", isProcessing = false) }
                 renderPreview(analyzed, simulatePendingProposal = analyzed.analysis.pendingProposal != null)
                 refreshChats()
@@ -512,7 +512,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         mutable.update { it.copy(jobMessage = processingMessage(stage, percent)) }
                     },
                     onPersist = { snapshot, plan ->
-                        val latest = store.load(project.id)
+                        val latest = runCatching { store.load(project.id) }.getOrNull() ?: project
                         val updated = latest.copy(analysis = latest.analysis.copy(
                             agentRun = snapshot,
                             agentPlan = plan ?: latest.analysis.agentPlan
@@ -523,7 +523,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }.onSuccess { snapshot ->
                 AgentDecisionMapper.pendingProposal(snapshot)?.let { proposal ->
-                    val latest = store.load(project.id)
+                    val latest = runCatching { store.load(project.id) }.getOrNull() ?: project
                     val updated = latest.copy(analysis = latest.analysis.copy(
                         agentRun = snapshot,
                         pendingProposal = proposal
@@ -601,7 +601,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }.onSuccess { snapshot ->
                 AgentDecisionMapper.pendingProposal(snapshot)?.let { proposal ->
-                    val latest = store.load(project.id)
+                    val latest = runCatching { store.load(project.id) }.getOrNull() ?: project
                     val isValid = runCatching {
                         InstructionValidator.validate(latest, proposal.operations, proposal.expectedRevision)
                     }.isSuccess
@@ -627,7 +627,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         mutable.update { it.copy(project = updated, isProcessing = false, errorMessage = "Stale edit proposal") }
                     }
                 } ?: run {
-                    val latest = store.load(project.id)
+                    val latest = runCatching { store.load(project.id) }.getOrNull() ?: project
                     val updated = latest.copy(analysis = latest.analysis.copy(
                         agentRun = snapshot,
                         chatHistory = latest.analysis.chatHistory.map {
@@ -638,7 +638,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     mutable.update { it.copy(project = updated, isProcessing = false, errorMessage = "Agent returned no proposal") }
                 }
             }.onFailure { error ->
-                val latest = store.load(project.id)
+                val latest = runCatching { store.load(project.id) }.getOrNull() ?: project
                 val failed = latest.copy(analysis = latest.analysis.copy(
                     chatHistory = latest.analysis.chatHistory.map {
                         if (it.id == turnId) it.copy(isPending = false, isError = true, response = error.message ?: "Unknown error") else it
