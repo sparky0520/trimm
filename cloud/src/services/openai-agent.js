@@ -76,10 +76,39 @@ This blueprint defines the background shapes (rectangles, circles, starbursts), 
 
 The target video has dimensions: ${videoWidth}x${videoHeight} (width x height). Use these dimensions to accurately position and size elements, especially for safe margins and alignment.
 
+The output MUST match this precise schema:
+{
+  "layout": {
+    "posX": 0.0, // -1.0 (left) to 1.0 (right). 0 is center.
+    "posY": -0.8, // -1.0 (top) to 1.0 (bottom). 0 is center.
+    "scale": 1.0, // multiplier
+    "rotation": 0.0 // degrees
+  },
+  "backgroundShapes": [
+    {
+      "type": "rectangle", // or "circle", "starburst"
+      "width": 500, // internal canvas pixels, where 1000x1000 is the full text box
+      "height": 200,
+      "color": "#000000",
+      "strokeColor": "#FFFFFF",
+      "strokeWidth": 2.0,
+      "cornerRadius": 10
+    }
+  ],
+  "textStyle": {
+    "color": "#FFFFFF",
+    "strokeColor": "#000000",
+    "strokeWidth": 5.0,
+    "shadowRadius": 5.0,
+    "shadowColor": "#000000",
+    "fontFamily": "plain" // "plain", "comic", "neon", "typewriter", "elegant"
+  }
+}
+
 Target text to display: "${text}"
 Effect description: ${description}
 
-Return ONLY a valid JSON blueprint matching the required schema.`;
+Return ONLY a valid JSON blueprint matching this exact schema.`;
 
     let history = [];
     for (let attempt = 1; attempt <= 3; attempt++) {
