@@ -80,7 +80,7 @@ The output MUST match this precise schema:
 {
   "layout": {
     "posX": 0.0, // -1.0 (left) to 1.0 (right). 0 is center.
-    "posY": -0.8, // -1.0 (top) to 1.0 (bottom). 0 is center.
+    "posY": 0.8, // -1.0 (bottom) to 1.0 (top). 0 is center.
     "scale": 1.0, // multiplier
     "rotation": 0.0 // degrees
   },
