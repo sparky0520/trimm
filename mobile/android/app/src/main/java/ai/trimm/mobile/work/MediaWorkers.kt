@@ -133,7 +133,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                         intent = initialPrompt,
                         history = listOf(ChatMessage("user", initialPrompt)),
                         sources = project.orderedSources.mapIndexed { index, source ->
-                            Layer2SourceInventory(
+                            AgentSourceInventory(
                                 "${source.fingerprint}-$index", source.fingerprint, source.durationMs,
                                 source.width, source.height, source.hasAudio
                             )

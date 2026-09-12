@@ -66,7 +66,7 @@ public struct ClarificationDecision: Codable, Equatable {
     public let questions: [ClarificationQuestion]
 }
 
-public struct Layer2SourceInventory: Codable, Equatable {
+public struct AgentSourceInventory: Codable, Equatable {
     public let id: String
     public let fingerprint: String
     public let durationMs: Int64
@@ -75,7 +75,7 @@ public struct Layer2SourceInventory: Codable, Equatable {
     public let hasAudio: Bool
 }
 
-public struct Layer2TranscriptWord: Codable, Equatable {
+public struct AgentTranscriptWord: Codable, Equatable {
     public let sourceId: String
     public let text: String
     public let startMs: Int64
@@ -84,7 +84,7 @@ public struct Layer2TranscriptWord: Codable, Equatable {
     public let speakerId: String?
 }
 
-public struct Layer2Budgets: Codable, Equatable {
+public struct AgentBudgets: Codable, Equatable {
     public let maximumBytes: Int64
     public let maximumDurationMs: Int64
     public let retentionMs: Int64
@@ -95,14 +95,14 @@ public struct AgentRunRequest: Codable {
     public let deviceSessionId: String
     public let projectRevision: Int64
     public let intent: String
-    public let sources: [Layer2SourceInventory]
-    public let transcript: [Layer2TranscriptWord]
+    public let sources: [AgentSourceInventory]
+    public let transcript: [AgentTranscriptWord]
     public let evidenceJobIds: [String]
     public let existingOperations: [EditOperation]
     public let uploadInitialVideoContext: Bool
-    public let budgets: Layer2Budgets
+    public let budgets: AgentBudgets
     
-    public init(projectId: String, deviceSessionId: String, projectRevision: Int64, intent: String, sources: [Layer2SourceInventory], transcript: [Layer2TranscriptWord], evidenceJobIds: [String], existingOperations: [EditOperation], uploadInitialVideoContext: Bool, budgets: Layer2Budgets) {
+    public init(projectId: String, deviceSessionId: String, projectRevision: Int64, intent: String, sources: [AgentSourceInventory], transcript: [AgentTranscriptWord], evidenceJobIds: [String], existingOperations: [EditOperation], uploadInitialVideoContext: Bool, budgets: AgentBudgets) {
         self.projectId = projectId
         self.deviceSessionId = deviceSessionId
         self.projectRevision = projectRevision

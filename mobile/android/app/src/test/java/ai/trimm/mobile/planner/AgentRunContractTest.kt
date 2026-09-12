@@ -1,6 +1,6 @@
 package ai.trimm.mobile.planner
 
-// Layer2SourceInventory is in ai.trimm.mobile.planner — same package as this test
+// AgentSourceInventory is in ai.trimm.mobile.planner — same package as this test
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
@@ -204,7 +204,7 @@ class AgentRunContractTest {
     private fun request() = AgentRunRequest(
         projectId = "project-1", deviceSessionId = "device-1", projectRevision = 4,
         intent = "Make this publishable",
-        sources = listOf(Layer2SourceInventory("source-1", "a".repeat(64), 60_000, 1920, 1080, true)),
+        sources = listOf(AgentSourceInventory("source-1", "a".repeat(64), 60_000, 1920, 1080, true)),
         transcript = emptyList()
     )
 

@@ -68,11 +68,13 @@ function createOpenAIDecisionProvider({
     };
   }
 
-  const generateTextOverlayConfig = async ({ description, text }) => {
+  const generateTextOverlayConfig = async ({ description, text, videoWidth = 1920, videoHeight = 1080 }) => {
     // simplified from gemini version
     const prompt = `You are an AI video editor designing a native text overlay with vector graphics.
 Your goal is to parse the user's description and generate a JSON blueprint (Generative Canvas DSL).
 This blueprint defines the background shapes (rectangles, circles, starbursts), text styling, and layout.
+
+The target video has dimensions: ${videoWidth}x${videoHeight} (width x height). Use these dimensions to accurately position and size elements, especially for safe margins and alignment.
 
 Target text to display: "${text}"
 Effect description: ${description}
@@ -201,7 +203,22 @@ If you decide no edits are needed, or if you cannot execute the task, you MUST c
         }
         if (operationName === 'add_text_overlay') {
           try {
-            const blueprint = await generateTextOverlayConfig({ description: payload.description || payload.text, text: payload.text });
+            const defaultSourceId = payload.sourceId || (sources[0] && (sources[0].fingerprint || sources[0].id)) || 'default_source';
+            const source = sources.find(s => s.id === defaultSourceId || s.fingerprint === defaultSourceId) || sources[0];
+            const videoWidth = source?.width || 1920;
+            const videoHeight = source?.height || 1080;
+
+            let finalDescription = payload.description || payload.text;
+            if (payload.styling) {
+              finalDescription += `\nStyling Instructions: ${payload.styling}`;
+            }
+
+            const blueprint = await generateTextOverlayConfig({ 
+              description: finalDescription, 
+              text: payload.text,
+              videoWidth,
+              videoHeight
+            });
             return { type: operationName, target, ...payload, designBlueprint: JSON.stringify(blueprint) };
           } catch (e) {
             console.error("Failed to generate text overlay blueprint", e);

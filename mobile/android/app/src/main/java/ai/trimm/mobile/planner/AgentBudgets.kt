@@ -22,7 +22,8 @@ import java.net.HttpURLConnection
 import java.net.URI
 import ai.trimm.mobile.planning.RequestShapedMediaIndex
 
-@Serializable data class Layer2TranscriptWord(
-    val sourceId: String, val text: String, val startMs: Long, val endMs: Long,
-    val confidence: Float, val speakerId: String? = null
+@Serializable data class AgentBudgets(
+    val maximumBytes: Long = 8L * 1024 * 1024,
+    val maximumDurationMs: Long = 15_000L,
+    val retentionMs: Long = 6L * 60 * 60 * 1000
 )

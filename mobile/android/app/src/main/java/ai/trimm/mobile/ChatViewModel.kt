@@ -492,7 +492,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 intent = project.analysis.chatHistory.firstOrNull()?.request
                     ?: "Make this video publishable",
                 sources = project.orderedSources.mapIndexed { index, source ->
-                    Layer2SourceInventory(
+                    AgentSourceInventory(
                         "${source.fingerprint}-$index", source.fingerprint, source.durationMs,
                         source.width, source.height, source.hasAudio
                     )
@@ -574,7 +574,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 intent = message,
                 history = history,
                 sources = project.orderedSources.mapIndexed { index, source ->
-                    Layer2SourceInventory(
+                    AgentSourceInventory(
                         "${source.fingerprint}-$index", source.fingerprint, source.durationMs,
                         source.width, source.height, source.hasAudio
                     )

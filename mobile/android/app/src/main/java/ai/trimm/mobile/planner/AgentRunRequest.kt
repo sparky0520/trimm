@@ -31,20 +31,20 @@ data class AgentRunRequest(
     val deviceSessionId: String,
     val projectRevision: Long,
     val intent: String,
-    val sources: List<Layer2SourceInventory>,
-    val transcript: List<Layer2TranscriptWord> = emptyList(),
+    val sources: List<AgentSourceInventory>,
+    val transcript: List<AgentTranscriptWord> = emptyList(),
     val history: List<ChatMessage> = emptyList(),
     val evidenceJobIds: List<String> = emptyList(),
     val existingOperations: List<JsonObject> = emptyList(),
     val uploadInitialVideoContext: Boolean = false,
-    val budgets: Layer2Budgets = Layer2Budgets(),
-    val mediaConsent: Layer2MediaConsent = Layer2MediaConsent(),
-    val supportedContractVersions: Layer2ContractVersions = Layer2ContractVersions()
+    val budgets: AgentBudgets = AgentBudgets(),
+    val mediaConsent: AgentMediaConsent = AgentMediaConsent(),
+    val supportedContractVersions: AgentContractVersions = AgentContractVersions()
 )
 
-fun sourceTranscript(words: List<TranscriptWord>, sources: List<SourceMedia>): List<Layer2TranscriptWord> {
+fun sourceTranscript(words: List<TranscriptWord>, sources: List<SourceMedia>): List<AgentTranscriptWord> {
     var offset = 0L
-    val result = mutableListOf<Layer2TranscriptWord>()
+    val result = mutableListOf<AgentTranscriptWord>()
     sources.forEachIndexed { index, source ->
         val sourceEnd = offset + source.durationMs
         var lastWordEndMs = offset
@@ -53,9 +53,9 @@ fun sourceTranscript(words: List<TranscriptWord>, sources: List<SourceMedia>): L
             val startMs = word.range.startMs
             if (startMs - lastWordEndMs > 1000L) {
                 val gapSecs = String.format(java.util.Locale.US, "%.1f", (startMs - lastWordEndMs) / 1000f)
-                result += Layer2TranscriptWord(sourceId, "[SILENCE: $gapSecs seconds]", lastWordEndMs - offset, startMs - offset, 1.0f, null)
+                result += AgentTranscriptWord(sourceId, "[SILENCE: $gapSecs seconds]", lastWordEndMs - offset, startMs - offset, 1.0f, null)
             }
-            result += Layer2TranscriptWord(
+            result += AgentTranscriptWord(
                 sourceId, word.text, startMs - offset, word.range.endMs.coerceAtMost(sourceEnd) - offset,
                 word.confidence, word.speakerId
             )
@@ -63,7 +63,7 @@ fun sourceTranscript(words: List<TranscriptWord>, sources: List<SourceMedia>): L
         }
         if (sourceEnd - lastWordEndMs > 1000L) {
             val gapSecs = String.format(java.util.Locale.US, "%.1f", (sourceEnd - lastWordEndMs) / 1000f)
-            result += Layer2TranscriptWord(sourceId, "[SILENCE: $gapSecs seconds]", lastWordEndMs - offset, sourceEnd - offset, 1.0f, null)
+            result += AgentTranscriptWord(sourceId, "[SILENCE: $gapSecs seconds]", lastWordEndMs - offset, sourceEnd - offset, 1.0f, null)
         }
         offset = sourceEnd
     }

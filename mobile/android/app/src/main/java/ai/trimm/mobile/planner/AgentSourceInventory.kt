@@ -22,7 +22,7 @@ import java.net.HttpURLConnection
 import java.net.URI
 import ai.trimm.mobile.planning.RequestShapedMediaIndex
 
-@Serializable data class Layer2SourceInventory(
+@Serializable data class AgentSourceInventory(
     val id: String,
     val fingerprint: String,
     val durationMs: Long,

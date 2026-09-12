@@ -88,11 +88,12 @@ const PROPOSE_ASPECT_RATIO_TOOL = operationTool(
 
 const PROPOSE_TEXT_OVERLAY_TOOL = operationTool(
   'propose_add_text_overlay',
-  'Generate a native text overlay with dynamic graphics (like a comic book "BANG", title cards, or floating text). Describe the desired effect and text in the description.',
-  ['sourceId', 'startMs', 'endMs', 'text', 'description', 'reason'], {
+  'Generate a native text overlay with dynamic graphics. Provide detailed visual styling instructions (e.g. font size, specific colors, exact positioning, layout, drop shadows) in the styling parameter, and a description of the desired effect.',
+  ['sourceId', 'startMs', 'endMs', 'text', 'description', 'styling', 'reason'], {
   ...targetRangeProperties,
   text: { type: 'string' },
-  description: { type: 'string' },
+  description: { type: 'string', description: 'Describe the desired effect and graphics (e.g., comic book "BANG").' },
+  styling: { type: 'string', description: 'Detailed visual styling instructions (e.g. font size, exact colors, positioning, layout, drop shadows).' }
 },
 );
 

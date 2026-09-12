@@ -22,8 +22,14 @@ import java.net.HttpURLConnection
 import java.net.URI
 import ai.trimm.mobile.planning.RequestShapedMediaIndex
 
-@Serializable data class Layer2Budgets(
-    val maximumBytes: Long = 8L * 1024 * 1024,
-    val maximumDurationMs: Long = 15_000L,
-    val retentionMs: Long = 6L * 60 * 60 * 1000
+@Serializable data class AgentInventory(
+    val projectId: String,
+    val deviceSessionId: String,
+    val projectRevision: Long,
+    val intent: String,
+    val sources: List<AgentSourceInventory>,
+    val mediaIndex: RequestShapedMediaIndex,
+    val evidenceJobIds: List<String> = emptyList(),
+     val existingOperations: List<EditInstruction> = emptyList(),
+    val budgets: AgentBudgets = AgentBudgets()
 )

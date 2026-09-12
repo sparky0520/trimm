@@ -22,14 +22,7 @@ import java.net.HttpURLConnection
 import java.net.URI
 import ai.trimm.mobile.planning.RequestShapedMediaIndex
 
-@Serializable data class Layer2Inventory(
-    val projectId: String,
-    val deviceSessionId: String,
-    val projectRevision: Long,
-    val intent: String,
-    val sources: List<Layer2SourceInventory>,
-    val mediaIndex: RequestShapedMediaIndex,
-    val evidenceJobIds: List<String> = emptyList(),
-     val existingOperations: List<EditInstruction> = emptyList(),
-    val budgets: Layer2Budgets = Layer2Budgets()
+@Serializable data class AgentTranscriptWord(
+    val sourceId: String, val text: String, val startMs: Long, val endMs: Long,
+    val confidence: Float, val speakerId: String? = null
 )

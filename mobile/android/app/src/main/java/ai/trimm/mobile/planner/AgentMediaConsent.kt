@@ -23,9 +23,8 @@ import java.net.URI
 import ai.trimm.mobile.planning.RequestShapedMediaIndex
 
 @Serializable
-data class Layer2ContractVersions(
-    val agentRuns: List<Int> = listOf(2),
-    val activityEvents: List<Int> = listOf(2),
-    val videoToolRequests: List<Int> = listOf(2),
-    val editPrograms: List<Int> = listOf(2)
+data class AgentMediaConsent(
+    val mode: String = "video_analysis",
+    val grantedAt: String = java.time.Instant.now().toString(),
+    val disclosureVersion: String = "video-analysis-v2"
 )

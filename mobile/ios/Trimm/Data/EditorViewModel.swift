@@ -208,11 +208,11 @@ public class EditorViewModel {
         state.messages.append(ChatMessage(text: state.jobMessage!, isUser: false))
         
         Task {
-            let layer2Sources = state.sources.map {
-                Layer2SourceInventory(id: $0.uri, fingerprint: $0.fingerprint, durationMs: $0.durationMs, width: $0.width, height: $0.height, hasAudio: $0.hasAudio)
+            let agentSources = state.sources.map {
+                AgentSourceInventory(id: $0.uri, fingerprint: $0.fingerprint, durationMs: $0.durationMs, width: $0.width, height: $0.height, hasAudio: $0.hasAudio)
             }
             let transcriptWords = project.analysis.words.map {
-                Layer2TranscriptWord(
+                AgentTranscriptWord(
                     sourceId: project.source.uri,
                     text: $0.text,
                     startMs: $0.range.startMs,
@@ -227,12 +227,12 @@ public class EditorViewModel {
                 deviceSessionId: UUID().uuidString,
                 projectRevision: project.revision,
                 intent: request,
-                sources: layer2Sources,
+                sources: agentSources,
                 transcript: transcriptWords,
                 evidenceJobIds: [],
                 existingOperations: project.operations,
                 uploadInitialVideoContext: false,
-                budgets: Layer2Budgets(maximumBytes: 100_000_000, maximumDurationMs: 60000, retentionMs: 86400000)
+                budgets: AgentBudgets(maximumBytes: 100_000_000, maximumDurationMs: 60000, retentionMs: 86400000)
             )
             
             do {
