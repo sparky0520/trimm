@@ -332,9 +332,13 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     }
     fun restoreCheckpoint() = undo.lastOrNull()?.let { snapshot ->
         val restoredSources = snapshot.sources.ifEmpty { orderedSources }
+        val currentSourcesByFingerprint = orderedSources.associateBy { it.fingerprint }
+        val updatedRestoredSources = restoredSources.map { source ->
+            currentSourcesByFingerprint[source.fingerprint]?.let { source.copy(uri = it.uri) } ?: source
+        }
         copy(
-            source = restoredSources.first(),
-            sources = restoredSources,
+            source = updatedRestoredSources.first(),
+            sources = updatedRestoredSources,
             operations = snapshot.operations,
             analysis = snapshot.analysis ?: analysis,
             undo = undo.dropLast(1),
@@ -345,9 +349,13 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
 
     fun redoCheckpoint() = redo.lastOrNull()?.let { snapshot ->
         val restoredSources = snapshot.sources.ifEmpty { orderedSources }
+        val currentSourcesByFingerprint = orderedSources.associateBy { it.fingerprint }
+        val updatedRestoredSources = restoredSources.map { source ->
+            currentSourcesByFingerprint[source.fingerprint]?.let { source.copy(uri = it.uri) } ?: source
+        }
         copy(
-            source = restoredSources.first(),
-            sources = restoredSources,
+            source = updatedRestoredSources.first(),
+            sources = updatedRestoredSources,
             operations = snapshot.operations,
             analysis = snapshot.analysis ?: analysis,
             redo = redo.dropLast(1),
