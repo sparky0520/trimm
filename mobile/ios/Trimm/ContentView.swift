@@ -22,7 +22,7 @@ struct MovieFile: Transferable {
 
 struct SidebarView: View {
     @Bindable var viewModel: EditorViewModel
-    @Binding var preferredColumn: NavigationSplitViewColumn
+    @Binding var isDrawerOpen: Bool
     @State private var chatToDelete: String? = nil
     @State private var currentUser: User? = nil
     @State private var showSignOutConfirmation = false
@@ -43,7 +43,7 @@ struct SidebarView: View {
                     viewModel.state.sources = []
                     viewModel.player?.pause()
                     viewModel.player = nil
-                    preferredColumn = .detail
+                    withAnimation { isDrawerOpen = false }
                 }) {
                     Text("+")
                         .font(.system(size: 24))
@@ -71,7 +71,7 @@ struct SidebarView: View {
                         ForEach(viewModel.state.pastChats) { chat in
                             Button(action: {
                                 Task { await viewModel.loadProject(id: chat.id) }
-                                preferredColumn = .detail
+                                withAnimation { isDrawerOpen = false }
                             }) {
                                 Text(chat.title)
                             }
@@ -163,14 +163,13 @@ struct ContentView: View {
     @State private var isAuthenticated = false
     @State private var isLoggingIn = false
     @State private var errorMessage: String?
-    @State private var preferredColumn = NavigationSplitViewColumn.detail
+    @State private var isDrawerOpen = false
     
     var body: some View {
-        NavigationSplitView(preferredCompactColumn: $preferredColumn) {
-            SidebarView(viewModel: viewModel, preferredColumn: $preferredColumn)
-        } detail: {
-            ZStack {
-                Color.ink.ignoresSafeArea()
+        ZStack(alignment: .leading) {
+            NavigationStack {
+                ZStack {
+                    Color.ink.ignoresSafeArea()
                 
                 if viewModel.state.sources.isEmpty && viewModel.state.project == nil {
                     VStack(spacing: 24) {
@@ -279,14 +278,38 @@ struct ContentView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(action: {
-                        preferredColumn = .sidebar
+                        Task { await viewModel.loadPastChats() }
+                        withAnimation { isDrawerOpen = true }
                     }) {
                         Image(systemName: "line.3.horizontal")
                             .foregroundColor(.primary)
                     }
                 }
             }
-        } // NavigationSplitView
+            } // NavigationStack
+            
+            if isDrawerOpen {
+                Color.black.opacity(0.4)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation { isDrawerOpen = false }
+                    }
+                
+                SidebarView(viewModel: viewModel, isDrawerOpen: $isDrawerOpen)
+                    .frame(width: UIScreen.main.bounds.width * 0.75)
+                    .background(Color(UIColor.systemBackground))
+                    .transition(.move(edge: .leading))
+                    .gesture(
+                        DragGesture().onEnded { value in
+                            if value.translation.width < -50 {
+                                withAnimation { isDrawerOpen = false }
+                            }
+                        }
+                    )
+                    .ignoresSafeArea(.all, edges: .bottom)
+                    .zIndex(1)
+            }
+        } // ZStack
         .preferredColorScheme(.dark)
         .task {
             for await authEvent in supabase.auth.authStateChanges {
