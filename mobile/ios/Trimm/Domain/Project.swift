@@ -87,8 +87,12 @@ public struct Analysis: Codable, Equatable {
     public let completedAtEpochMs: Int64?
     public let activeTurnId: String?
     public let activeCheckpointId: String?
+    public let editorialPlan: StagedEditorialPlan?
+    public let pendingProposal: PendingEditorialProposal?
+    public let chatHistory: [EditorialConversationTurn]
+    public let settledConstraints: [SettledEditorialConstraint]
     
-    public init(words: [TranscriptWord] = [], captions: [CaptionCue] = [], speechHints: [FumbleCandidate] = [], lowConfidenceFumbles: [FumbleCandidate] = [], takeGroups: [TakeGroup] = [], warnings: [String] = [], completedAtEpochMs: Int64? = nil, activeTurnId: String? = nil, activeCheckpointId: String? = nil) {
+    public init(words: [TranscriptWord] = [], captions: [CaptionCue] = [], speechHints: [FumbleCandidate] = [], lowConfidenceFumbles: [FumbleCandidate] = [], takeGroups: [TakeGroup] = [], warnings: [String] = [], completedAtEpochMs: Int64? = nil, activeTurnId: String? = nil, activeCheckpointId: String? = nil, editorialPlan: StagedEditorialPlan? = nil, pendingProposal: PendingEditorialProposal? = nil, chatHistory: [EditorialConversationTurn] = [], settledConstraints: [SettledEditorialConstraint] = []) {
         self.words = words
         self.captions = captions
         self.speechHints = speechHints
@@ -98,6 +102,10 @@ public struct Analysis: Codable, Equatable {
         self.completedAtEpochMs = completedAtEpochMs
         self.activeTurnId = activeTurnId
         self.activeCheckpointId = activeCheckpointId
+        self.editorialPlan = editorialPlan
+        self.pendingProposal = pendingProposal
+        self.chatHistory = chatHistory
+        self.settledConstraints = settledConstraints
     }
 }
 
@@ -144,6 +152,10 @@ public struct MobileProject: Codable, Equatable {
         sources.isEmpty ? [source] : sources
     }
     
+    public var durationMs: Int64 {
+        orderedSources.reduce(0) { $0 + $1.durationMs }
+    }
+    
     public func snapshot() -> ProjectSnapshot {
         return ProjectSnapshot(operations: operations, sources: orderedSources, analysis: analysis)
     }
@@ -158,7 +170,11 @@ public struct MobileProject: Codable, Equatable {
             warnings: analysis.warnings,
             completedAtEpochMs: analysis.completedAtEpochMs,
             activeTurnId: activeTurnId,
-            activeCheckpointId: analysis.activeCheckpointId
+            activeCheckpointId: analysis.activeCheckpointId,
+            editorialPlan: analysis.editorialPlan,
+            pendingProposal: analysis.pendingProposal,
+            chatHistory: analysis.chatHistory,
+            settledConstraints: analysis.settledConstraints
         )
         let newUndo = Array((undo + [snapshot()]).suffix(30))
         return MobileProject(

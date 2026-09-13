@@ -10,6 +10,12 @@ private struct ProjectsResponse: Codable {
     let projects: [ChatSummary]
 }
 
+public struct AgentExecuteResponse: Codable, Equatable {
+    public let type: String
+    public let operations: [EditOperation]?
+    public let questions: [ClarificationQuestion]?
+}
+
 public class ChatRepository {
     public static let shared = ChatRepository()
     
@@ -59,7 +65,7 @@ public class ChatRepository {
     public func executeAgentTask(request: AgentRunRequest) async throws -> AgentExecuteResponse {
         let encoder = JSONEncoder()
         let body = try encoder.encode(request)
-        let data = try await makeRequest(endpoint: "agent/execute", method: "POST", body: body)
+        let data = try await makeRequest(endpoint: "chat/completion", method: "POST", body: body)
         
         let decoder = JSONDecoder()
         return try decoder.decode(AgentExecuteResponse.self, from: data)

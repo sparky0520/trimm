@@ -6,6 +6,8 @@ import AVFoundation
 public class EditorViewModel {
     public var state: EditorState = EditorState()
     public var player: AVPlayer?
+    private var exportSession: AVAssetExportSession?
+    private var progressTimer: Timer?
     
     public init() {
         // Load past chats on init
@@ -232,7 +234,7 @@ public class EditorViewModel {
                 evidenceJobIds: [],
                 existingOperations: project.operations,
                 uploadInitialVideoContext: false,
-                budgets: AgentBudgets(maximumBytes: 100_000_000, maximumDurationMs: 60000, retentionMs: 86400000)
+                budgets: AgentBudgets()
             )
             
             do {
@@ -263,5 +265,78 @@ public class EditorViewModel {
                 }
             }
         }
+    }
+    
+    @MainActor
+    public func export() {
+        guard let project = state.project else { return }
+        state.isExporting = true
+        state.exportProgress = 0.0
+        
+        Task {
+            do {
+                let (composition, videoComp, audioMix) = try await ExportCoordinator.shared.buildComposition(project: project)
+                
+                let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("exported_\(UUID().uuidString).mp4")
+                if FileManager.default.fileExists(atPath: outputURL.path) {
+                    try FileManager.default.removeItem(at: outputURL)
+                }
+                
+                guard let session = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) else {
+                    throw ExportError.exportFailed(nil)
+                }
+                
+                session.outputURL = outputURL
+                session.outputFileType = .mp4
+                session.videoComposition = videoComp
+                session.audioMix = audioMix
+                
+                self.exportSession = session
+                
+                // Track progress
+                self.progressTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+                    Task { @MainActor in
+                        if let s = self?.exportSession {
+                            self?.state.exportProgress = s.progress
+                        }
+                    }
+                }
+                
+                await session.export()
+                
+                self.progressTimer?.invalidate()
+                self.progressTimer = nil
+                self.exportSession = nil
+                
+                await MainActor.run {
+                    if session.status == .completed {
+                        // TODO: Save to Photos or share sheet
+                        print("Export completed at: \(outputURL)")
+                        self.state.jobMessage = "Export complete!"
+                    } else if session.status == .cancelled {
+                        self.state.jobMessage = "Export cancelled."
+                    } else {
+                        self.state.errorMessage = "Export failed: \(session.error?.localizedDescription ?? "Unknown error")"
+                    }
+                    self.state.isExporting = false
+                }
+                
+            } catch {
+                await MainActor.run {
+                    self.state.errorMessage = "Export failed: \(error.localizedDescription)"
+                    self.state.isExporting = false
+                }
+            }
+        }
+    }
+    
+    @MainActor
+    public func cancelExport() {
+        exportSession?.cancelExport()
+        exportSession = nil
+        progressTimer?.invalidate()
+        progressTimer = nil
+        state.isExporting = false
+        state.jobMessage = "Export cancelled."
     }
 }

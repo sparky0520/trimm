@@ -10,8 +10,9 @@ public struct EditorScreen: View {
     }
     
     public var body: some View {
-        VStack(spacing: 0) {
-            // Video Player Area
+        ZStack {
+            VStack(spacing: 0) {
+                // Video Player Area
             ZStack {
                 Color.ink.ignoresSafeArea()
                 if let _ = viewModel.state.project?.source {
@@ -72,6 +73,46 @@ public struct EditorScreen: View {
             .background(Color.ink)
         }
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Export") {
+                    viewModel.export()
+                }
+                .disabled(viewModel.state.project == nil || viewModel.state.isProcessing || viewModel.state.isExporting)
+                .foregroundColor(.coral)
+            }
+        }
+        
+        if viewModel.state.isExporting {
+            Color.black.opacity(0.8)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 24) {
+                Text("Exporting Video...")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                
+                ProgressView(value: viewModel.state.exportProgress)
+                    .progressViewStyle(LinearProgressViewStyle(tint: .coral))
+                    .padding(.horizontal, 40)
+                
+                Text("\(Int(viewModel.state.exportProgress * 100))%")
+                    .foregroundColor(.white)
+                
+                Button("Cancel") {
+                    viewModel.cancelExport()
+                }
+                .padding()
+                .background(Color.raised)
+                .foregroundColor(.coral)
+                .cornerRadius(8)
+            }
+            .padding(32)
+            .background(Color.ink)
+            .cornerRadius(16)
+            .shadow(radius: 20)
+        }
+        }
     }
 }
 

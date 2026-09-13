@@ -1,6 +1,6 @@
 
 import { openaiUsage } from '../schema/model-usage.js';
-import { AGENT_TOOLS } from '../schema/agent-decision-schema.js';
+import { getAgentTools } from '../schema/agent-decision-schema.js';
 
 import OpenAI from 'openai';
 
@@ -17,7 +17,7 @@ function createOpenAIDecisionProvider({
 
   async function generate({
     systemPolicy, contents, temperature, purpose = 'planning',
-    responseFormat = null, tools = true,
+    responseFormat = null, tools = true, platform = 'android',
   }) {
     if (!apiKey) throw Object.assign(new Error('API key is not configured'), { status: 503, code: 'provider_unconfigured' });
 
@@ -33,11 +33,13 @@ function createOpenAIDecisionProvider({
       messages.push({ role: 'user', content: String(contents) });
     }
 
+    const toolsArray = typeof tools === 'boolean' && tools ? getAgentTools(platform) : tools;
+    
     const requestPayload = {
       model,
       messages,
       ...(responseFormat ? { response_format: responseFormat } : {}),
-      ...(tools && AGENT_TOOLS.length > 0 ? { tools: AGENT_TOOLS.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })) } : {}),
+      ...(Array.isArray(toolsArray) && toolsArray.length > 0 ? { tools: toolsArray.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })) } : {}),
     };
 
     console.log('[DEBUG] OpenAI Request:', JSON.stringify(requestPayload, null, 2));
@@ -68,7 +70,8 @@ function createOpenAIDecisionProvider({
     };
   }
 
-  const generateTextOverlayConfig = async ({ description, text, videoWidth = 1920, videoHeight = 1080 }) => {
+  const generateTextOverlayConfig = async ({ description, text, videoWidth = 1920, videoHeight = 1080, platform = 'android' }) => {
+    const isIOS = platform === 'ios';
     const prompt = `You are an AI video editor designing a native text overlay with vector graphics.
 Your goal is to parse the user's description and generate a JSON blueprint (Generative Canvas DSL).
 This blueprint defines the background shapes (if requested), text styling, and layout.
@@ -120,8 +123,8 @@ Use the following exact JSON schema to structure your response:
         "strokeWidth": { "type": "number", "description": "Width of the text outline." },
         "shadowRadius": { "type": "number", "description": "Radius of the text drop shadow." },
         "shadowColor": { "type": "string", "description": "Hex color code, e.g. '#000000'" },
-        "fontFamily": { "type": "string", "enum": ["plain", "comic", "neon", "typewriter", "elegant"], "description": "Default: 'plain'" },
-        "fontSize": { "type": "number", "description": "Font size in pixels. Default: 120.0" }
+        "fontFamily": { "type": "string", "enum": ["plain", "comic", "neon", "typewriter", "elegant"${isIOS ? ', "system-bold", "system-heavy"' : ''}], "description": "Default: 'plain'" },
+        "fontSize": { "type": "number", "description": "Font size in pixels. Default: 120.0" }${isIOS ? `,\n        "animation": { "type": "string", "enum": ["none", "fade", "scaleUp", "typewriter", "slideIn"], "description": "Optional text entrance animation." }` : ''}
       }
     }
   }
@@ -159,10 +162,15 @@ Return ONLY a valid JSON object. No markdown formatting, no backticks, no commen
     }
   };
 
-  const generateTransitionConfig = async ({ description }) => {
-    const prompt = `You are an AI video editor designing a custom Canvas-based video transition.
-Your goal is to parse the user's description and generate a JSON blueprint (Generative Canvas DSL).
-Return ONLY a valid JSON blueprint matching the required schema.
+  const generateTransitionConfig = async ({ description, platform = 'android' }) => {
+    const isIOS = platform === 'ios';
+    const schema = isIOS 
+      ? `{ "transitionName": { "type": "string", "enum": ["CIDissolveTransition", "CISwipeTransition", "CIRippleTransition", "CIFlashTransition", "CIModTransition", "CICopyMachineTransition", "CIPageCurlTransition"] }, "durationMs": { "type": "number" } }`
+      : `{ "type": "object", "properties": { "shaderType": { "type": "string" }, "durationMs": { "type": "number" } } }`;
+
+    const prompt = `You are an AI video editor designing a custom video transition.
+Your goal is to parse the user's description and generate a JSON blueprint.
+Return ONLY a valid JSON blueprint matching the required schema: ${schema}
 
 Effect description: ${description}`;
 
@@ -190,7 +198,7 @@ Effect description: ${description}`;
     }
   };
 
-  const chatCompletion = async ({ history = [], sources = [], transcript = [], existingOperations = [] }) => {
+  const chatCompletion = async ({ history = [], sources = [], transcript = [], existingOperations = [], platform = 'android' }) => {
     const systemPolicy = `You are an AI video editor Agent.
 Your job is to execute the user's editing requests by proposing operations using the appropriate tool(s).
 You have access to the chat history, transcript, source media, and the current project state (existing operations).
@@ -214,6 +222,7 @@ If you decide no edits are needed, or if you cannot execute the task, you MUST c
       temperature: 0.2, // Slightly higher than 0.1 for conversational fluidity
       purpose: 'execution',
       tools: true,
+      platform,
     });
 
     const failure = response.toolCalls.find(tc => tc.name === 'finish_without_proposal');
@@ -276,7 +285,8 @@ If you decide no edits are needed, or if you cannot execute the task, you MUST c
               description: finalDescription, 
               text: payload.text,
               videoWidth,
-              videoHeight
+              videoHeight,
+              platform
             });
             return { type: operationName, target, ...payload, designBlueprint: JSON.stringify(blueprint) };
           } catch (e) {
@@ -286,7 +296,7 @@ If you decide no edits are needed, or if you cannot execute the task, you MUST c
         }
         if (operationName === 'add_section_transition') {
           try {
-            const blueprint = await generateTransitionConfig({ description: payload.description });
+            const blueprint = await generateTransitionConfig({ description: payload.description, platform });
             return { type: operationName, target, ...payload, designBlueprint: JSON.stringify(blueprint) };
           } catch (e) {
             console.error("Failed to generate transition blueprint", e);

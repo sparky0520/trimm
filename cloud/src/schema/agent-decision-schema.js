@@ -86,7 +86,7 @@ const PROPOSE_ASPECT_RATIO_TOOL = operationTool(
 },
 );
 
-const PROPOSE_TEXT_OVERLAY_TOOL = operationTool(
+const PROPOSE_TEXT_OVERLAY_TOOL_ANDROID = operationTool(
   'propose_add_text_overlay',
   'Generate a native text overlay with dynamic graphics. \nSUPPORTED STYLES ONLY:\n- Fonts: "plain", "comic", "neon", "typewriter", "elegant"\n- Text Style: color, strokeColor, strokeWidth, shadowRadius, shadowColor, fontSize\n- Layout: posX, posY, scale, rotation\n- Background Shapes: rectangle, circle, starburst (with color, stroke, dimensions)\nIMPORTANT: If the user requests a style, font, or animation NOT explicitly listed above (e.g. gradients, italics, 3D text, animations), do NOT use this tool. Instead, use finish_without_proposal or respond explaining that the requested style is not supported.',
   ['sourceId', 'startMs', 'endMs', 'text', 'description', 'styling', 'reason'], {
@@ -97,9 +97,30 @@ const PROPOSE_TEXT_OVERLAY_TOOL = operationTool(
 },
 );
 
-const PROPOSE_ADD_SECTION_TRANSITION_TOOL = operationTool(
+const PROPOSE_TEXT_OVERLAY_TOOL_IOS = operationTool(
+  'propose_add_text_overlay',
+  'Generate a native text overlay with dynamic graphics for iOS. \nSUPPORTED STYLES ONLY:\n- Fonts: "plain", "comic", "neon", "typewriter", "elegant", "system-bold", "system-heavy"\n- Text Style: color, strokeColor, strokeWidth, shadowRadius, shadowColor, fontSize, CoreAnimation (glow, blur radius)\n- Layout: posX, posY, scale, rotation, zIndex\n- Animations (iOS exclusive): "fade", "scaleUp", "typewriter", "slideIn"\n- Background Shapes: rectangle, circle, starburst (with color, stroke, dimensions, cornerRadius)\nIMPORTANT: If the user requests a style NOT explicitly listed above, do NOT use this tool. Instead, use finish_without_proposal or respond explaining that the requested style is not supported.',
+  ['sourceId', 'startMs', 'endMs', 'text', 'description', 'styling', 'reason'], {
+  ...targetRangeProperties,
+  text: { type: 'string' },
+  description: { type: 'string', description: 'Describe the desired effect and graphics (e.g., comic book "BANG").' },
+  styling: { type: 'string', description: 'Detailed visual styling instructions restricted to supported styles (font size, colors, positioning, drop shadows, animations).' }
+},
+);
+
+const PROPOSE_ADD_SECTION_TRANSITION_TOOL_ANDROID = operationTool(
   'propose_add_section_transition',
   'Add a video transition (e.g. fade-in, fade-out, crossfade, dissolve, wipe, slide, zoom, dip-to-black). Describe the desired effect in the description for custom transitions.',
+  ['sourceId', 'startMs', 'endMs', 'preset', 'description', 'reason'], {
+  ...targetRangeProperties,
+  preset: { type: 'string' },
+  description: { type: 'string' },
+},
+);
+
+const PROPOSE_ADD_SECTION_TRANSITION_TOOL_IOS = operationTool(
+  'propose_add_section_transition',
+  'Add a video transition (e.g. fade-in, fade-out, crossfade, dissolve, wipe, slide, zoom, dip-to-black, push, reveal, CoreImage custom filters like ripples or blur-fades). Describe the desired effect in the description for custom transitions.',
   ['sourceId', 'startMs', 'endMs', 'preset', 'description', 'reason'], {
   ...targetRangeProperties,
   preset: { type: 'string' },
@@ -227,19 +248,24 @@ const PROPOSE_CLEAR_ROTATION_TOOL = Object.freeze({
 
 
 
-const AGENT_TOOLS = Object.freeze([
-  PROPOSE_REMOVE_RANGES_TOOL,
-  PROPOSE_DIALOGUE_LOUDNESS_TOOL, PROPOSE_MUSIC_DUCKING_TOOL,
-  PROPOSE_CAPTIONS_TOOL, PROPOSE_ASPECT_RATIO_TOOL, PROPOSE_TEXT_OVERLAY_TOOL, PROPOSE_ADD_SECTION_TRANSITION_TOOL,
-  PROPOSE_ADD_BGM_TOOL, PROPOSE_ADD_BGM_EFFECT_TOOL, PROPOSE_ADD_SFX_TOOL,
-  PROPOSE_SET_ROTATION_TOOL,
-  PROPOSE_SET_SPEED_TOOL, PROPOSE_SET_VOLUME_TOOL,
-  PROPOSE_CLEAR_ROTATION_TOOL,
-  ASK_CLARIFICATION_TOOL, FINALIZE_EDIT_PROGRAM_TOOL,
-  REMOVE_DRAFT_OPERATION_TOOL, FINISH_WITHOUT_PROPOSAL_TOOL,
-]);
+const getAgentTools = (platform) => {
+  const isIOS = platform === 'ios';
+  return Object.freeze([
+    PROPOSE_REMOVE_RANGES_TOOL,
+    PROPOSE_DIALOGUE_LOUDNESS_TOOL, PROPOSE_MUSIC_DUCKING_TOOL,
+    PROPOSE_CAPTIONS_TOOL, PROPOSE_ASPECT_RATIO_TOOL,
+    isIOS ? PROPOSE_TEXT_OVERLAY_TOOL_IOS : PROPOSE_TEXT_OVERLAY_TOOL_ANDROID,
+    isIOS ? PROPOSE_ADD_SECTION_TRANSITION_TOOL_IOS : PROPOSE_ADD_SECTION_TRANSITION_TOOL_ANDROID,
+    PROPOSE_ADD_BGM_TOOL, PROPOSE_ADD_BGM_EFFECT_TOOL, PROPOSE_ADD_SFX_TOOL,
+    PROPOSE_SET_ROTATION_TOOL,
+    PROPOSE_SET_SPEED_TOOL, PROPOSE_SET_VOLUME_TOOL,
+    PROPOSE_CLEAR_ROTATION_TOOL,
+    ASK_CLARIFICATION_TOOL, FINALIZE_EDIT_PROGRAM_TOOL,
+    REMOVE_DRAFT_OPERATION_TOOL, FINISH_WITHOUT_PROPOSAL_TOOL,
+  ]);
+};
 
 export { 
-  AGENT_TOOLS,
+  getAgentTools,
   PROPOSE_REMOVE_RANGES_TOOL,
  };

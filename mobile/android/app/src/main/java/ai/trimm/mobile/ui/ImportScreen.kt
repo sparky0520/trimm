@@ -84,7 +84,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 
 @Composable fun ImportScreen(activity: Activity, onImport: (List<Uri>) -> Unit, isLoadingPastChats: Boolean = false, onOpenDrawer: (() -> Unit)? = null) {
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { if (it.isNotEmpty()) onImport(it) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { if (it.isNotEmpty()) onImport(it) }
     val sessionStatus by supabase.auth.sessionStatus.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
@@ -133,7 +133,7 @@ import kotlinx.serialization.json.jsonPrimitive
                 )
             } else {
                 Button(
-                    onClick = { launcher.launch(arrayOf("video/*")) },
+                    onClick = { launcher.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)) },
                     enabled = !isLoadingPastChats,
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(12.dp),

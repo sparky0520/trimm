@@ -226,3 +226,21 @@ public enum EditOperation: Codable, Equatable {
         }
     }
 }
+
+extension EditOperation {
+    public var id: String {
+        switch self {
+        case .removeRanges(let id, _, _, _, _, _): return id
+        case .setColorGrade(let id, _, _, _, _, _): return id
+        case .setAudioLevels(let id, _, _, _, _, _, _, _): return id
+        case .setAspectRatio(let id, _, _): return id
+        case .addTextOverlay(let id, _, _, _, _): return id
+        case .addMotionPreset(let id, _, _, _, _): return id
+        case .addCaptions(let id, _, _, _, _, _): return id
+        case .addSectionTransition(let id, _, _, _, _): return id
+        case .addBgm(let id, _, _, _, _, _): return id
+        case .addBgmEffect(let id, _, _, _, _, _): return id
+        case .addSfx(let id, _, _, _, _, _): return id
+        }
+    }
+}

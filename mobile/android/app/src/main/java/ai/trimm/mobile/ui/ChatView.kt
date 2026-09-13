@@ -159,6 +159,7 @@ import kotlinx.serialization.json.jsonPrimitive
                     Text("00:00", color = Muted, fontSize = 10.sp)
                     Text("${project.orderedSources.size} CLIPS  •  ${project.preferences.aspectRatio}", color = Muted, fontSize = 9.sp, letterSpacing = .6.sp)
                 }
+                TimelineView(project)
             }
         }
         LazyColumn(
