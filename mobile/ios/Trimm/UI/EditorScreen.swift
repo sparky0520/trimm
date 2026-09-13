@@ -4,6 +4,7 @@ import AVKit
 public struct EditorScreen: View {
     @Bindable var viewModel: EditorViewModel
     @State private var prompt: String = ""
+    @State private var isVideoVisible: Bool = true
     
     public init(viewModel: EditorViewModel) {
         self.viewModel = viewModel
@@ -13,18 +14,21 @@ public struct EditorScreen: View {
         ZStack {
             VStack(spacing: 0) {
                 // Video Player Area
-            ZStack {
-                Color.ink.ignoresSafeArea()
-                if let _ = viewModel.state.project?.source {
-                    if let player = viewModel.player {
-                        VideoPlayer(player: player)
-                    } else {
-                        ProgressView("Loading Video...")
-                            .foregroundColor(.lavender)
+                if isVideoVisible {
+                    ZStack {
+                        Color.ink.ignoresSafeArea()
+                        if let _ = viewModel.state.project?.source {
+                            if let player = viewModel.player {
+                                VideoPlayer(player: player)
+                            } else {
+                                ProgressView("Loading Video...")
+                                    .foregroundColor(.lavender)
+                            }
+                        }
                     }
+                    .frame(height: UIScreen.main.bounds.height * 0.4)
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
-            }
-            .frame(height: UIScreen.main.bounds.height * 0.4)
             
             // Conversation Area
             ZStack {
@@ -75,11 +79,22 @@ public struct EditorScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Export") {
-                    viewModel.export()
+                HStack(spacing: 16) {
+                    Button(action: {
+                        withAnimation {
+                            isVideoVisible.toggle()
+                        }
+                    }) {
+                        Image(systemName: isVideoVisible ? "eye" : "eye.slash")
+                    }
+                    .foregroundColor(.lavender)
+                    
+                    Button("Export") {
+                        viewModel.export()
+                    }
+                    .disabled(viewModel.state.project == nil || viewModel.state.isProcessing || viewModel.state.isExporting)
+                    .foregroundColor(.coral)
                 }
-                .disabled(viewModel.state.project == nil || viewModel.state.isProcessing || viewModel.state.isExporting)
-                .foregroundColor(.coral)
             }
         }
         

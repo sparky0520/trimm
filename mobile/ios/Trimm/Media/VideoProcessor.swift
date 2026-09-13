@@ -56,6 +56,9 @@ public class VideoProcessor {
         }
         
         let sourceVideoTrack = try await asset.loadTracks(withMediaType: .video).first
+        if let sourceVideo = sourceVideoTrack {
+            videoTrack.preferredTransform = try await sourceVideo.load(.preferredTransform)
+        }
         let sourceAudioTrack = try await asset.loadTracks(withMediaType: .audio).first
         
         var insertTime = CMTime.zero
