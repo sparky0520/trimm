@@ -19,7 +19,7 @@ public struct AgentExecuteResponse: Codable, Equatable {
 public class ChatRepository {
     public static let shared = ChatRepository()
     
-    private let baseURL = URL(string: "https://ctrlb-backend.onrender.com/v1")!
+    private let baseURL = URL(string: "\(Secrets.backendURL)/v1")!
     
     private init() {}
     
@@ -27,7 +27,7 @@ public class ChatRepository {
         let (data, response) = try await URLSession.shared.data(for: request)
         if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 401 {
             // Attempt retry
-            let session = try await supabase.auth.session
+            let session = try await supabase.auth.refreshSession()
             let token = session.accessToken
             var retryRequest = request
             retryRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

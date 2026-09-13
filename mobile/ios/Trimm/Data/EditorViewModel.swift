@@ -8,7 +8,6 @@ public class EditorViewModel {
     public var state: EditorState = EditorState()
     public var player: AVPlayer?
     private var exportSession: AVAssetExportSession?
-    private var progressTimer: Timer?
     
     public init() {
         // Load past chats on init
@@ -91,10 +90,22 @@ public class EditorViewModel {
                 
                 var width = 1920
                 var height = 1080
+                var rotation = 0
                 if let videoTrack = videoTracks.first {
                     let size = try await videoTrack.load(.naturalSize)
-                    width = Int(size.width)
-                    height = Int(size.height)
+                    let transform = try await videoTrack.load(.preferredTransform)
+                    
+                    // Determine if the video is portrait based on transform
+                    let isPortrait = transform.a == 0 && transform.d == 0
+                    if isPortrait {
+                        width = Int(size.height)
+                        height = Int(size.width)
+                        rotation = 90 // Defaulting to 90 for portrait, but can be extracted precisely from transform
+                    } else {
+                        width = Int(size.width)
+                        height = Int(size.height)
+                        rotation = 0
+                    }
                 }
                 
                 newSources.append(SourceMedia(
@@ -103,7 +114,7 @@ public class EditorViewModel {
                     durationMs: durationMs,
                     width: width,
                     height: height,
-                    rotation: 0,
+                    rotation: rotation,
                     hasAudio: hasAudio
                 ))
             } catch {
@@ -295,18 +306,17 @@ public class EditorViewModel {
                 self.exportSession = session
                 
                 // Track progress
-                self.progressTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-                    Task { @MainActor in
-                        if let s = self?.exportSession {
-                            self?.state.exportProgress = s.progress
-                        }
+                let progressTask = Task { @MainActor in
+                    while let s = self.exportSession {
+                        self.state.exportProgress = s.progress
+                        if s.status != .exporting && s.status != .waiting { break }
+                        try? await Task.sleep(nanoseconds: 100_000_000)
                     }
                 }
                 
                 await session.export()
                 
-                self.progressTimer?.invalidate()
-                self.progressTimer = nil
+                progressTask.cancel()
                 self.exportSession = nil
                 
                 await MainActor.run {
@@ -335,8 +345,6 @@ public class EditorViewModel {
     public func cancelExport() {
         exportSession?.cancelExport()
         exportSession = nil
-        progressTimer?.invalidate()
-        progressTimer = nil
         state.isExporting = false
         state.jobMessage = "Export cancelled."
     }

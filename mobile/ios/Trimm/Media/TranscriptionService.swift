@@ -34,7 +34,7 @@ struct UploadOffset: Codable {
 public class TranscriptionService {
     public static let shared = TranscriptionService()
     
-    private let uploadsEndpoint = "https://ctrlb-backend.onrender.com/v1/transcribe/uploads"
+    private let uploadsEndpoint = "\(Secrets.backendURL)/v1/transcribe/uploads"
     
     private init() {}
     
