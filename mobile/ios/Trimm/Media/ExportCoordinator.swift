@@ -1,6 +1,6 @@
 import Foundation
 import AVFoundation
-import CoreImage
+@preconcurrency import CoreImage
 
 enum ExportError: Error {
     case invalidSource
@@ -69,11 +69,9 @@ public class ExportCoordinator {
         var timelineStart: Int64 = 0
         var currentCursor = CMTime.zero
         
-        var layerInstructions: [AVVideoCompositionLayerInstruction] = []
-        var audioParameters: [AVMutableAudioMixInputParameters] = []
         let audioMixParam = AVMutableAudioMixInputParameters(track: audioTrack)
         
-        for (index, source) in project.orderedSources.enumerated() {
+        for source in project.orderedSources {
             let sourceStart = timelineStart
             let sourceEnd = sourceStart + source.durationMs
             timelineStart = sourceEnd

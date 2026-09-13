@@ -116,7 +116,7 @@ class DialogueAudioProcessor {
                 guard status == noErr else { return }
                 
                 let bufferList = bufferListInOut.pointee
-                guard let mBuffers = bufferList.mBuffers.mData else { return }
+                guard bufferList.mBuffers.mData != nil else { return }
                 
                 let ablPointer = UnsafeMutableAudioBufferListPointer(bufferListInOut)
                 

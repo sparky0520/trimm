@@ -124,7 +124,7 @@ struct SignInView: View {
         isLoading = true
         errorMessage = nil
         do {
-            let url = try await supabase.auth.getOAuthSignInURL(
+            let url = try supabase.auth.getOAuthSignInURL(
                 provider: .google,
                 redirectTo: URL(string: "ai.trimm.mobile://login-callback")
             )

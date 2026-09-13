@@ -10,7 +10,7 @@ class DerivativeWriter {
     static func createProxy(for inputURL: URL, outputURL: URL, resolution: String = AVAssetExportPreset1280x720) async throws {
         let asset = AVURLAsset(url: inputURL)
         
-        guard asset.isExportable else {
+        guard try await asset.load(.isExportable) else {
             throw DerivativeError.invalidAsset
         }
         

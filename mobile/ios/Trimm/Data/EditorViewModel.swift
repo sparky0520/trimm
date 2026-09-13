@@ -3,6 +3,7 @@ import Observation
 import AVFoundation
 
 @Observable
+@MainActor
 public class EditorViewModel {
     public var state: EditorState = EditorState()
     public var player: AVPlayer?

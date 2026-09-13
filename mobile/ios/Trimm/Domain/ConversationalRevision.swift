@@ -122,7 +122,7 @@ public enum ConversationalRevisionEngine {
         }
         
         let operations = current.operations.map { operation -> EditOperation in
-            if case .removeRanges(let id, let enabled, let ranges, let confidence, let reason, let pacing) = operation {
+            if case .removeRanges(let id, let enabled, let ranges, let confidence, _, let pacing) = operation {
                 let uniqueRanges = Array(NSOrderedSet(array: ranges + alternateRanges)) as! [TimeRange]
                 let sorted = uniqueRanges.sorted { $0.startMs < $1.startMs }
                 return .removeRanges(id: id, enabled: enabled, ranges: sorted, confidence: confidence, reason: "Superseded alternate take", pacing: pacing)

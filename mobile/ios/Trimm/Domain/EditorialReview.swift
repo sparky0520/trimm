@@ -34,11 +34,11 @@ public enum EditorialReviewBuilder {
     public static func editorialRead(project: MobileProject) -> EditorialRead {
         let groups = project.analysis.takeGroups
         
-        var likelyStory = [String]()
+        let likelyStory = [String]()
         // Placeholder for storyGraph.beats since we don't have StoryGraph implemented yet
         // In full implementation, parse beats and format them.
         
-        var usefulProductShots = [String]()
+        let usefulProductShots = [String]()
         
         var uncertaintyList = [String]()
         let allFumbles = (project.analysis.speechHints + project.analysis.lowConfidenceFumbles)
