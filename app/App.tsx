@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { SafeAreaView, StyleSheet, View, Text, KeyboardAvoidingView, Platform, Button, TouchableOpacity, Alert } from 'react-native';
+import { StyleSheet, View, Text, KeyboardAvoidingView, Platform, Button, TouchableOpacity, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSharedValue, withTiming, Easing, cancelAnimation, withRepeat } from 'react-native-reanimated';
 import { PreviewEngine } from './src/components/PreviewEngine';
@@ -70,7 +71,7 @@ function App(): React.JSX.Element {
           </View>
           
           <View style={styles.previewContainer}>
-            <PreviewEngine currentTime={currentTime} />
+            <PreviewEngine currentTime={currentTime} isPlaying={isPlaying} />
           </View>
 
           <View style={styles.timelineContainer}>

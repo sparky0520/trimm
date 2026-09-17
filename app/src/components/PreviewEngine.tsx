@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
 import { Canvas, Text as SkiaText, useFont, Group, Rect, SkFont } from '@shopify/react-native-skia';
-import { SharedValue, useDerivedValue, interpolate, Extrapolation } from 'react-native-reanimated';
+import { SharedValue, useAnimatedReaction, useDerivedValue, interpolate, Extrapolation, runOnJS } from 'react-native-reanimated';
+import Video, { VideoRef } from 'react-native-video';
 import { useProjectStore } from '../store/projectStore';
 import { TimelineNode, TextNode, OverlayNode, Transform } from '../types/schema';
 
@@ -10,6 +11,7 @@ const HEIGHT = 300;
 
 interface PreviewEngineProps {
   currentTime: SharedValue<number>;
+  isPlaying: boolean;
 }
 
 // Sub-component to render an individual layer using derived values for visibility and animations
@@ -106,17 +108,50 @@ const SkiaLayer = ({ node, currentTime, font }: { node: TimelineNode, currentTim
   return null;
 };
 
-export const PreviewEngine = ({ currentTime }: PreviewEngineProps) => {
+export const PreviewEngine = ({ currentTime, isPlaying }: PreviewEngineProps) => {
   const schema = useProjectStore((state) => state.present);
-  const font = useFont(require('../../node_modules/react-native-vector-icons/Fonts/Roboto.ttf'), 32); 
+  const font = useFont(require('../assets/fonts/Roboto.ttf'), 32); 
+  const videoRefs = useRef<{ [key: string]: VideoRef | null }>({});
+  const lastSeek = useRef(0);
+
+  // Handle frame-by-frame scrubbing
+  useAnimatedReaction(
+    () => currentTime.value,
+    (time) => {
+      // Only manually seek if we are paused (scrubbing). If playing, let native player handle playback.
+      if (!isPlaying) {
+        runOnJS(handleSeek)(time);
+      }
+    }
+  );
+
+  const handleSeek = (time: number) => {
+    const now = Date.now();
+    if (now - lastSeek.current > 100) { // Throttle seek to ~10 times per second
+      lastSeek.current = now;
+      schema.timeline.filter(n => n.type === 'video').forEach(video => {
+        const ref = videoRefs.current[video.id];
+        if (ref && time >= video.start && time <= video.end) {
+          ref.seek(time - video.start);
+        }
+      });
+    }
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: schema.settings.backgroundColor }]}>
       <View style={styles.videoUnderlay}>
         {schema.timeline.filter(n => n.type === 'video').map(video => (
-          <View key={video.id} style={styles.mockVideoContainer}>
-            <View style={styles.mockVideoFrame} />
-          </View>
+          <Video
+            key={video.id}
+            ref={(r) => { videoRefs.current[video.id] = r; }}
+            source={{ uri: video.src }}
+            style={styles.mockVideoContainer}
+            paused={!isPlaying}
+            muted={video.volume === 0}
+            volume={video.volume ?? 1}
+            resizeMode="cover"
+          />
         ))}
       </View>
 
@@ -132,7 +167,6 @@ export const PreviewEngine = ({ currentTime }: PreviewEngineProps) => {
 const styles = StyleSheet.create({
   container: { width: '100%', height: HEIGHT, overflow: 'hidden', position: 'relative' },
   videoUnderlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
-  mockVideoContainer: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', opacity: 0.3 },
-  mockVideoFrame: { width: '80%', height: '80%', backgroundColor: '#444', borderWidth: 2, borderColor: '#666' },
+  mockVideoContainer: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, width: '100%', height: '100%' },
   canvas: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 },
 });

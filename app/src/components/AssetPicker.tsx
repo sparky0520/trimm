@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Button, StyleSheet } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
+import { FFprobeKit } from 'ffmpeg-kit-extended';
 import { useProjectStore } from '../store/projectStore';
 
 export const AssetPicker = () => {
@@ -17,14 +18,30 @@ export const AssetPicker = () => {
       
       const isVideo = asset.type?.startsWith('video');
       
-      // We assume every imported clip starts at 0 and ends at 5s for this basic implementation.
-      // In a real app, we'd read the actual video duration.
+      let endDuration = 5;
+      if (typeof asset.duration === 'number' && asset.duration > 0) {
+        endDuration = asset.duration;
+      } else if (isVideo && asset.uri) {
+        try {
+          const session = await FFprobeKit.getMediaInformation(asset.uri);
+          const info = session.getMediaInformation();
+          if (info && info.duration) {
+            const parsed = parseFloat(info.duration);
+            if (!isNaN(parsed)) {
+              endDuration = parsed;
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to get duration from FFprobeKit', e);
+        }
+      }
+      
       processToolCall({
         tool: 'add_clip',
         type: isVideo ? 'video' : 'image',
         source: asset.uri || '',
         start: 0,
-        end: 5,
+        end: endDuration,
         volume: isVideo ? 1 : undefined,
       });
     }

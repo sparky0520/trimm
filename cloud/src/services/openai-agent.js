@@ -1,5 +1,52 @@
 import OpenAI from 'openai';
 import { getAgentTools } from '../schema/agent-decision-schema.js';
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+let mcpClientInstance = null;
+let mcpToolsCache = null;
+
+async function getMcpClient() {
+  if (mcpClientInstance) return mcpClientInstance;
+  try {
+    const transport = new StdioClientTransport({
+      command: "node",
+      args: [path.join(__dirname, "../../../../.agents/mcp/google-fonts/src/index.js")]
+    });
+    const client = new Client({ name: "trimm-backend", version: "1.0.0" }, { capabilities: { tools: {} } });
+    await client.connect(transport);
+    mcpClientInstance = client;
+    return client;
+  } catch (e) {
+    console.error("Failed to initialize MCP client", e);
+    return null;
+  }
+}
+
+async function getMcpTools() {
+  if (mcpToolsCache) return mcpToolsCache;
+  const client = await getMcpClient();
+  if (!client) return [];
+  try {
+    const listRes = await client.listTools();
+    mcpToolsCache = listRes.tools.map(t => ({
+      type: 'function',
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.inputSchema
+      }
+    }));
+    return mcpToolsCache;
+  } catch (e) {
+    console.error("Failed to list MCP tools", e);
+    return [];
+  }
+}
 
 function createOpenAIDecisionProvider({
   apiKey = process.env.LLM_API_KEY,
@@ -21,75 +68,105 @@ Current Project Schema:
 ${JSON.stringify(projectSchema, null, 2)}
 
 You must ONLY respond by calling the provided tools. 
-Do not explain your thought process in plain text. Simply execute the tool calls required to satisfy the user's request.
-`;
+Do not explain your thought process in plain text. Simply execute the tool calls required to satisfy the user's request.`;
 
     const contents = history.map(msg => ({ role: msg.role, content: msg.content }));
-    const messages = [{ role: 'system', content: systemPolicy }, ...contents];
-    const tools = getAgentTools();
-
-    const requestPayload = {
-      model,
-      messages,
-      temperature: 0.1,
-      stream: true,
-      tools: tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
-    };
+    let currentMessages = [{ role: 'system', content: systemPolicy }, ...contents];
+    
+    const baseTools = getAgentTools();
+    const mcpTools = await getMcpTools();
+    const tools = [
+      ...baseTools.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })),
+      ...mcpTools
+    ];
 
     console.log('[DEBUG] OpenAI Stream Request Initiated');
 
-    let stream;
-    try {
-      stream = await openai.chat.completions.create(requestPayload);
-    } catch (err) {
-      console.error(`[DEBUG] OpenAI API Error:`, err);
-      throw err;
-    }
+    while (true) {
+      const requestPayload = {
+        model,
+        messages: currentMessages,
+        temperature: 0.1,
+        stream: true,
+        tools
+      };
 
-    // We need to parse chunked tool calls. OpenAI streams them piecewise.
-    // The `kimi-k3` API behaves identically to OpenAI.
-    let toolCallId = null;
-    let functionName = '';
-    let functionArgs = '';
-
-    for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta;
-      if (!delta) continue;
-
-      if (delta.content) {
-        // Yield plain text if the model decides to speak
-        yield { type: 'text', content: delta.content };
+      let stream;
+      try {
+        stream = await openai.chat.completions.create(requestPayload);
+      } catch (err) {
+        console.error(`[DEBUG] OpenAI API Error:`, err);
+        throw err;
       }
 
-      if (delta.tool_calls && delta.tool_calls.length > 0) {
-        const tc = delta.tool_calls[0];
-        
-        // If it's a new tool call
-        if (tc.id) {
-          // If we were already tracking one, yield it before starting the new one
-          if (toolCallId && functionName) {
-            try {
-              yield { type: 'tool_call', tool: functionName, args: JSON.parse(functionArgs) };
-            } catch (e) {
-              console.error("Failed to parse streamed function arguments", functionArgs);
-            }
+      let toolCallId = null;
+      let functionName = '';
+      let functionArgs = '';
+
+      let hasMcpCall = false;
+      let mcpToolCallId = null;
+      let mcpFunctionName = '';
+      let mcpFunctionArgs = '';
+
+      const handleCompletedToolCall = function* (id, name, args) {
+        const isMcp = mcpTools.some(t => t.function.name === name);
+        if (isMcp) {
+          hasMcpCall = true;
+          mcpToolCallId = id;
+          mcpFunctionName = name;
+          mcpFunctionArgs = args;
+          currentMessages.push({ role: 'assistant', content: null, tool_calls: [{ id, type: 'function', function: { name, arguments: args } }] });
+        } else {
+          try {
+            yield { type: 'tool_call', tool: name, args: JSON.parse(args) };
+          } catch (e) {
+            console.error("Failed to parse tool call args", args);
           }
-          toolCallId = tc.id;
-          functionName = tc.function.name;
-          functionArgs = tc.function.arguments || '';
-        } else if (tc.function && tc.function.arguments) {
-          // Append to the current function arguments
-          functionArgs += tc.function.arguments;
+        }
+      };
+
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta;
+        if (!delta) continue;
+
+        if (delta.content) {
+          yield { type: 'text', content: delta.content };
+        }
+
+        if (delta.tool_calls && delta.tool_calls.length > 0) {
+          const tc = delta.tool_calls[0];
+          
+          if (tc.id) {
+            if (toolCallId && functionName) {
+              yield* handleCompletedToolCall(toolCallId, functionName, functionArgs);
+            }
+            toolCallId = tc.id;
+            functionName = tc.function.name;
+            functionArgs = tc.function.arguments || '';
+          } else if (tc.function && tc.function.arguments) {
+            functionArgs += tc.function.arguments;
+          }
         }
       }
-    }
 
-    // Yield the very last tool call
-    if (toolCallId && functionName) {
-      try {
-        yield { type: 'tool_call', tool: functionName, args: JSON.parse(functionArgs) };
-      } catch (e) {
-        console.error("Failed to parse final streamed function arguments", functionArgs);
+      if (toolCallId && functionName) {
+        yield* handleCompletedToolCall(toolCallId, functionName, functionArgs);
+      }
+
+      if (hasMcpCall) {
+        console.log(`[DEBUG] Executing MCP Tool: ${mcpFunctionName}`);
+        const client = await getMcpClient();
+        try {
+          const parsedArgs = JSON.parse(mcpFunctionArgs);
+          const result = await client.callTool({ name: mcpFunctionName, arguments: parsedArgs });
+          const textResult = result.content[0].text;
+          currentMessages.push({ role: 'tool', tool_call_id: mcpToolCallId, name: mcpFunctionName, content: textResult });
+        } catch (e) {
+          console.error(`[DEBUG] MCP Tool Error:`, e);
+          currentMessages.push({ role: 'tool', tool_call_id: mcpToolCallId, name: mcpFunctionName, content: `Error: ${e.message}` });
+        }
+      } else {
+        break; // Loop until no MCP tools are called
       }
     }
   }

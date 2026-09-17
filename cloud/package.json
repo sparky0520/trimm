@@ -10,6 +10,7 @@
     "start": "npm run backend:serve"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@supabase/supabase-js": "^2.115.0",
     "assemblyai": "^4.37.1",
     "cors": "^2.8.5",

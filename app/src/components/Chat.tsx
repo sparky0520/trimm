@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator,
 import Animated, { FadeInDown, FadeOut, Layout } from 'react-native-reanimated';
 import EventSource from 'react-native-sse';
 import { useProjectStore } from '../store/projectStore';
+import { BACKEND_URL } from '../utils/config';
 
 interface Message {
   id: string;
@@ -36,7 +37,7 @@ export const Chat = () => {
 
     // The backend runs on localhost:8787
     // In Android emulator, localhost is 10.0.2.2. Assuming iOS simulator here which uses localhost.
-    const es = new EventSource('http://localhost:8787/v1/chat/completion', {
+    const es = new EventSource(`${BACKEND_URL}/v1/chat/completion`, {
       headers: {
         'Content-Type': 'application/json',
       },

@@ -8,6 +8,12 @@
       "headers": {
         "Authorization": "Bearer rnd_q9rvSArrEiyfRJ0n7XR1p65jAiCU"
       }
+    },
+    "google-fonts": {
+      "command": "node",
+      "args": [
+        ".agents/mcp/google-fonts/src/index.js"
+      ]
     }
   }
 }
