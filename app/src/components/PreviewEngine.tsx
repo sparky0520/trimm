@@ -3,7 +3,7 @@ import { View, StyleSheet, Dimensions } from 'react-native';
 import { Canvas, Text as SkiaText, useFont, Group, Rect, SkFont } from '@shopify/react-native-skia';
 import { SharedValue, useDerivedValue, interpolate, Extrapolation } from 'react-native-reanimated';
 import { useProjectStore } from '../store/projectStore';
-import { TimelineNode, TextNode, OverlayNode, Transform, AnimationType } from '../types/schema';
+import { TimelineNode, TextNode, OverlayNode, Transform } from '../types/schema';
 
 const { width } = Dimensions.get('window');
 const HEIGHT = 300;

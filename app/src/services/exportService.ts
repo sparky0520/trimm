@@ -1,4 +1,4 @@
-import { FFmpegKit, ReturnCode, Statistics } from 'ffmpeg-kit-react-native';
+import { FFmpegKit, isSuccessReturnCode, Statistics } from 'ffmpeg-kit-extended';
 import { CameraRoll } from '@react-native-camera-roll/camera-roll';
 import RNFS from 'react-native-fs';
 import { ProjectSchema } from '../types/schema';
@@ -22,11 +22,10 @@ export const exportProject = async (
 
       console.log('Executing FFmpeg command:', command);
 
-      FFmpegKit.executeAsync(
-        command,
-        async (session) => {
+      FFmpegKit.executeAsync(command, {
+        completeCallback: async (session: any) => {
           const returnCode = await session.getReturnCode();
-          if (ReturnCode.isSuccess(returnCode)) {
+          if (isSuccessReturnCode(returnCode)) {
             console.log('Export succeeded!');
             // Save to gallery
             try {
@@ -45,17 +44,17 @@ export const exportProject = async (
             reject(new Error('FFmpeg process failed'));
           }
         },
-        (log) => {
+        logCallback: (_log: any) => {
           // console.log(log.getMessage());
         },
-        (statistics: Statistics) => {
-          const time = statistics.getTime();
+        statisticsCallback: (statistics: Statistics) => {
+          const time = statistics.time ?? 0;
           if (time > 0) {
             const progress = Math.min(time / totalMilliseconds, 1);
             onProgress(progress);
           }
         }
-      );
+      });
     } catch (e) {
       reject(e);
     }

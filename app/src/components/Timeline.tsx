@@ -1,21 +1,20 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, SharedValue } from 'react-native-reanimated';
 import { useProjectStore } from '../store/projectStore';
 import { TimelineNode } from '../types/schema';
 import { TIMELINE_MAX_SECONDS } from '../../App';
 
-const { width } = Dimensions.get('window');
 const PIXELS_PER_SECOND = 40; // Increased for better scrubbing
 const contentWidth = TIMELINE_MAX_SECONDS * PIXELS_PER_SECOND;
 
 interface TimelineProps {
   currentTime: SharedValue<number>;
-  onScrubStart: () => void;
+  _onScrubStart?: () => void;
 }
 
-export const Timeline = ({ currentTime, onScrubStart }: TimelineProps) => {
+export const Timeline = ({ currentTime, _onScrubStart }: TimelineProps) => {
   const present = useProjectStore(state => state.present);
 
   const pan = Gesture.Pan()

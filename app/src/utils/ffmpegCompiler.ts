@@ -1,4 +1,4 @@
-import { ProjectSchema, TimelineNode, TextNode, VideoNode, AudioNode } from '../types/schema';
+import { ProjectSchema, TextNode, VideoNode, AudioNode } from '../types/schema';
 
 export const compileSchemaToCommand = (schema: ProjectSchema, outputPath: string): string => {
   const inputs: string[] = [];

@@ -31,6 +31,7 @@ function App(): React.JSX.Element {
     }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (isPlaying) {
       // Loop from current time to end
@@ -45,10 +46,11 @@ function App(): React.JSX.Element {
     } else {
       cancelAnimation(currentTime);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying]);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={styles.container}>
       <SafeAreaView style={styles.container}>
         <KeyboardAvoidingView 
           style={styles.keyboardView} 
@@ -56,7 +58,7 @@ function App(): React.JSX.Element {
         >
           <View style={styles.header}>
             <Text style={styles.title}>Trimm Studio</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={styles.buttonContainer}>
               <Button 
                 title={isPlaying ? "Pause" : "Play"} 
                 onPress={() => setIsPlaying(!isPlaying)} 
@@ -122,6 +124,10 @@ const styles = StyleSheet.create({
   exportText: {
     color: '#FFF',
     fontWeight: 'bold',
+  },
+  buttonContainer: {
+    flexDirection: 'row', 
+    alignItems: 'center'
   },
   previewContainer: { flex: 3, backgroundColor: '#111' },
   timelineContainer: { flex: 2, backgroundColor: '#1A1A1A' },

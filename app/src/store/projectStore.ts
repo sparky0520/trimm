@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { ProjectSchema, TimelineNode } from '../types/schema';
+import { ProjectSchema } from '../types/schema';
 import { AgentToolCall } from '../types/contracts';
 
 interface HistoryState {
@@ -133,8 +133,9 @@ export const useProjectStore = create<ProjectState>((set) => ({
       case 'remove_animation':
         newTimeline = newTimeline.map(node => {
           if (node.id === call.targetId) {
-            const { animation, ...rest } = node;
-            return rest;
+            const copy = { ...node };
+            delete (copy as any).animation;
+            return copy;
           }
           return node;
         });
