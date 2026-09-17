@@ -1,5 +1,0 @@
-{
-  "version": 1,
-  "items": [],
-  "notice": "Development fallback only. Production loads the configured HTTPS catalog endpoint."
-}

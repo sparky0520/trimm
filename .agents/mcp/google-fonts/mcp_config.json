@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "google-fonts": {
+      "command": "node",
+      "args": [
+        "src/index.js"
+      ]
+    }
+  }
+}

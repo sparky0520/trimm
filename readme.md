@@ -1,68 +1,57 @@
 # Trimm Application
 
-This repository contains the full source code for the Trimm application, including the mobile clients, backend, and Supabase database structure.
+This repository contains the full source code for the Trimm application, including the React Native cross-platform client and the Node.js backend services.
 
-## Structure
+## Architecture
 
-- `cloud/` - Node.js Backend services and Supabase configurations
-- `mobile/` - Mobile clients
-  - `mobile/android/` - Native Android client (Kotlin + Jetpack Compose)
-  - `mobile/ios/` - Native iOS client (Swift + SwiftUI)
+Trimm is a completely declarative, AI-driven video editor. The core principle is that the AI never manipulates the UI directly. Instead, the AI agent outputs tool calls that mutate a unified **Project Schema** (the single source of truth).
+
+The application components are:
+- **`app/`**: The React Native cross-platform client (iOS & Android)
+  - Uses `zustand` for state management.
+  - Uses `@shopify/react-native-skia` for real-time high-performance preview rendering.
+  - Uses `react-native-reanimated` for gesture-driven timeline interactions and UI motion.
+  - Uses `ffmpeg-kit-react-native` to compile the schema into background video exports.
+- **`cloud/`**: Node.js Backend services
+  - Exposes an SSE-streaming OpenAI agent endpoint (`/v1/chat/completion`) connected to Moonshot AI / OpenAI.
+  - Emits JSON tool calls directly to the mobile app for real-time UI updates.
 
 ## Prerequisites
 
 - Node.js (v18+)
 - npm or yarn
 - Supabase CLI
-- Android Studio (for Android client)
-- Xcode (for iOS client)
+- Xcode (for iOS development)
+- Android Studio (for Android development)
 
 ## Setup & Running
 
 ### 1. Supabase (Database)
-
-First, set up and run the local Supabase instance.
-
+Start the local Supabase instance to run migrations.
 ```bash
 cd cloud
 supabase start
 ```
 
-This will run the migrations located in `cloud/supabase/migrations` and provide you with local database URLs and API keys. Note these down.
-
 ### 2. Backend (Cloud)
-
-Set up the Node.js backend. Create a `.env` file in the `cloud/` directory with necessary credentials (e.g., Supabase URL, LLM API keys).
-
+Set up the Node.js backend. Ensure you have the required API keys in `cloud/.env`.
 ```bash
 cd cloud
 npm install
-npm run backend:serve
+npm start
 ```
-*(Alternatively, you can just use `npm start`)*
+The server will run on `http://localhost:8787`.
 
-### 3. Android Client
+### 3. Mobile App (React Native)
+Install dependencies and run the metro bundler.
+```bash
+cd app
+npm install
+npm run ios # or npm run android
+```
 
-To run the Android client:
+Make sure the backend is running locally so the AI chat can connect to the server's SSE endpoint. 
 
-1. Open Android Studio.
-2. Select **Open an existing project**.
-3. Navigate to and select the `mobile/android` directory.
-4. Let Gradle sync and build the project.
-5. Setup an Emulator or connect a physical device.
-6. Click the **Run** button to install and launch the app.
-
-### 4. iOS Client
-
-To run the iOS client:
-
-1. Open Xcode.
-2. Select **Open a project or file**.
-3. Navigate to the `mobile/ios` directory and open the `.xcodeproj` or `.xcworkspace` file (if cocoapods is used).
-4. Select a Simulator or connect a physical iOS device.
-5. Click the **Run** button (or press `Cmd + R`) to build and launch the app.
-
-## Additional Notes
-
-- Both clients maintain feature parity and communicate with the `trimm-cloud` backend.
-- Ensure the backend URL in the mobile clients points to your local network IP when testing on physical devices.
+## Documentation
+- **Architecture**: See `architecture.md` for a deep dive into the schema-driven rendering.
+- **Web Pages**: Visit the `docs/` directory for visual explainers and cost estimation tools.
