@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
-import { Canvas, Text, Font, useFont, Group, Rect } from '@shopify/react-native-skia';
+import { Canvas, Text as SkiaText, useFont, Group, Rect, SkFont } from '@shopify/react-native-skia';
 import { SharedValue, useDerivedValue, interpolate, Extrapolation } from 'react-native-reanimated';
 import { useProjectStore } from '../store/projectStore';
 import { TimelineNode, TextNode, OverlayNode, Transform, AnimationType } from '../types/schema';
@@ -13,7 +13,7 @@ interface PreviewEngineProps {
 }
 
 // Sub-component to render an individual layer using derived values for visibility and animations
-const SkiaLayer = ({ node, currentTime, font }: { node: TimelineNode, currentTime: SharedValue<number>, font: Font | null }) => {
+const SkiaLayer = ({ node, currentTime, font }: { node: TimelineNode, currentTime: SharedValue<number>, font: SkFont | null }) => {
   
   // Base visibility block
   const isWithinTime = useDerivedValue(() => {
@@ -82,13 +82,13 @@ const SkiaLayer = ({ node, currentTime, font }: { node: TimelineNode, currentTim
         {textNode.backgroundColor && (
            <Rect x={x - 5} y={y - textNode.fontSize! + 5} width={textWidth + 10} height={textNode.fontSize! + 10} color={textNode.backgroundColor} />
         )}
-        <Text
+        <SkiaText
           x={x}
           y={y}
           text={textNode.content}
           font={font}
-          color={textNode.color || 'white'}
-          blendMode={textNode.blendMode || 'srcOver'}
+          opacity={textNode.opacity ?? 1}
+          blendMode={textNode.blendMode === 'normal' ? 'srcOver' : (textNode.blendMode || 'srcOver') as any}
         />
       </Group>
     );
@@ -98,7 +98,7 @@ const SkiaLayer = ({ node, currentTime, font }: { node: TimelineNode, currentTim
     const overlayNode = node as OverlayNode;
     return (
       <Group opacity={animatedOpacity}>
-        <Rect x={0} y={0} width={width} height={HEIGHT} color={overlayNode.color || 'rgba(0,0,0,0.5)'} blendMode={overlayNode.blendMode || 'srcOver'} />
+        <Rect x={0} y={0} width={width} height={HEIGHT} color={overlayNode.color || 'rgba(0,0,0,0.5)'} blendMode={overlayNode.blendMode === 'normal' ? 'srcOver' : (overlayNode.blendMode || 'srcOver') as any} />
       </Group>
     );
   }
@@ -131,8 +131,8 @@ export const PreviewEngine = ({ currentTime }: PreviewEngineProps) => {
 
 const styles = StyleSheet.create({
   container: { width: '100%', height: HEIGHT, overflow: 'hidden', position: 'relative' },
-  videoUnderlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
-  mockVideoContainer: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', opacity: 0.3 },
+  videoUnderlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
+  mockVideoContainer: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', opacity: 0.3 },
   mockVideoFrame: { width: '80%', height: '80%', backgroundColor: '#444', borderWidth: 2, borderColor: '#666' },
-  canvas: { ...StyleSheet.absoluteFillObject },
+  canvas: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 },
 });

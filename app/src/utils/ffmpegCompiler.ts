@@ -9,11 +9,13 @@ export const compileSchemaToCommand = (schema: ProjectSchema, outputPath: string
   const texts = schema.timeline.filter(n => n.type === 'text') as TextNode[];
 
   // 1. Inputs
-  videos.forEach(v => inputs.push(`-i "${v.source}"`));
-  audios.forEach(a => inputs.push(`-i "${a.source}"`));
+  videos.forEach(v => inputs.push(`-i "${v.src}"`));
+  audios.forEach(a => inputs.push(`-i "${a.src}"`));
   
   // Create a base black background using color filter
-  const { width = 1920, height = 1080 } = schema.settings.resolution || {};
+  let width = 1920, height = 1080;
+  if (schema.settings.aspectRatio === '9:16') { width = 1080; height = 1920; }
+  else if (schema.settings.aspectRatio === '1:1') { width = 1080; height = 1080; }
   const fps = schema.settings.fps || 30;
   const bgColor = (schema.settings.backgroundColor || '#000000').replace('#', '0x');
   

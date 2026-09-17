@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { SafeAreaView, StyleSheet, View, Text, KeyboardAvoidingView, Platform, Button, TouchableOpacity } from 'react-native';
+import { SafeAreaView, StyleSheet, View, Text, KeyboardAvoidingView, Platform, Button, TouchableOpacity, Alert } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSharedValue, withTiming, Easing, cancelAnimation, withRepeat } from 'react-native-reanimated';
 import { PreviewEngine } from './src/components/PreviewEngine';
@@ -23,9 +23,9 @@ function App(): React.JSX.Element {
       const uri = await exportProject(presentSchema, (prog) => {
         setExportProgress(prog);
       });
-      alert(`Export Successful! Saved to ${uri}`);
-    } catch (e) {
-      alert(`Export Failed: ${e.message}`);
+      Alert.alert(`Export Successful! Saved to ${uri}`);
+    } catch (e: any) {
+      Alert.alert(`Export Failed: ${e.message}`);
     } finally {
       setExportProgress(null);
     }
@@ -127,7 +127,11 @@ const styles = StyleSheet.create({
   timelineContainer: { flex: 2, backgroundColor: '#1A1A1A' },
   chatContainer: { flex: 3, backgroundColor: '#222' },
   exportOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
     backgroundColor: 'rgba(0,0,0,0.8)',
     justifyContent: 'center',
     alignItems: 'center',
