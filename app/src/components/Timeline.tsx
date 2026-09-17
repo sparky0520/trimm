@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, SharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, SharedValue, runOnJS } from 'react-native-reanimated';
 import { useProjectStore } from '../store/projectStore';
 import { TimelineNode } from '../types/schema';
 import { TIMELINE_MAX_SECONDS } from '../../App';
@@ -11,17 +11,17 @@ const contentWidth = TIMELINE_MAX_SECONDS * PIXELS_PER_SECOND;
 
 interface TimelineProps {
   currentTime: SharedValue<number>;
-  _onScrubStart?: () => void;
+  onScrubStart?: () => void;
 }
 
-export const Timeline = ({ currentTime, _onScrubStart }: TimelineProps) => {
+export const Timeline = ({ currentTime, onScrubStart }: TimelineProps) => {
   const present = useProjectStore(state => state.present);
 
   const pan = Gesture.Pan()
     .onStart(() => {
-      // Call JS callback to pause playback
-      // Note: In Reanimated 3, calling JS from UI thread requires runOnJS.
-      // For simplicity in this mock, we can just use the gesture to update the value.
+      if (onScrubStart) {
+        runOnJS(onScrubStart)();
+      }
     })
     .onChange((event) => {
       const newTime = currentTime.value + event.changeX / PIXELS_PER_SECOND;
