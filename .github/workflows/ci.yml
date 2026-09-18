@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: mobile/android
+        working-directory: app/android
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -37,3 +37,18 @@ jobs:
       - uses: android-actions/setup-android@v3
       - run: chmod +x gradlew
       - run: ./gradlew testDebugUnitTest assembleDebug --no-daemon
+
+  ios:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: app/ios
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+      - run: npm ci
+        working-directory: app
+      - run: pod install
+      - run: xcodebuild -workspace TrimmApp.xcworkspace -scheme TrimmApp -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 15' build CODE_SIGNING_ALLOWED=NO
