@@ -257,8 +257,8 @@ const styles = StyleSheet.create({
 
   inputArea: { 
     flexDirection: 'row', 
-    paddingHorizontal: 12, 
-    paddingBottom: 24, // extra padding for safe area
+    paddingHorizontal: 12,
+    paddingBottom: 0,
     backgroundColor: 'transparent', 
     alignItems: 'center',
   },

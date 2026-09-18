@@ -106,7 +106,8 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 0,
+    paddingBottom: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -167,7 +168,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
   },
   accountControl: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 0,
   },
   authBtn: {
     backgroundColor: '#FAFAFA',
