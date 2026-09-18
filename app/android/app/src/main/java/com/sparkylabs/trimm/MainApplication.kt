@@ -1,4 +1,4 @@
-package com.trimmapp
+package com.sparkylabs.trimm
 
 import android.app.Application
 import com.facebook.react.PackageList

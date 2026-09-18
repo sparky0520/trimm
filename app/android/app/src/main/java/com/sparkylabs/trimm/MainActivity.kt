@@ -1,4 +1,4 @@
-package com.trimmapp
+package com.sparkylabs.trimm
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

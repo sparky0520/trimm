@@ -35,8 +35,6 @@ export const Chat = () => {
       projectSchema: presentSchema,
     };
 
-    // The backend runs on localhost:8787
-    // In Android emulator, localhost is 10.0.2.2. Assuming iOS simulator here which uses localhost.
     const es = new EventSource(`${BACKEND_URL}/v1/chat/completion`, {
       headers: {
         'Content-Type': 'application/json',
@@ -62,7 +60,6 @@ export const Chat = () => {
         if (chunk.type === 'text') {
           aiResponseText += chunk.content;
         } else if (chunk.type === 'tool_call') {
-          // Immediately dispatch the tool call to Zustand to see UI update in real-time
           processToolCall({ tool: chunk.tool, ...chunk.args });
         }
       } catch (e) {
@@ -77,23 +74,39 @@ export const Chat = () => {
     });
   };
 
-  const renderItem = ({ item }: { item: Message }) => (
-    <Animated.View 
-      entering={FadeInDown.springify()} 
-      exiting={FadeOut} 
-      layout={Layout.springify()}
-      style={[styles.messageBubble, item.role === 'user' ? styles.userBubble : styles.aiBubble]}
-    >
-      <Text style={styles.messageText}>{item.content}</Text>
-    </Animated.View>
-  );
+  const renderItem = ({ item }: { item: Message }) => {
+    if (item.role === 'user') {
+      return (
+        <Animated.View 
+          entering={FadeInDown.springify()} 
+          exiting={FadeOut} 
+          layout={Layout.springify()}
+          style={styles.userBubbleWrapper}
+        >
+          <View style={styles.userBubble}>
+            <Text style={styles.userMessageText}>{item.content}</Text>
+          </View>
+        </Animated.View>
+      );
+    } else {
+      return (
+        <Animated.View 
+          entering={FadeInDown.springify()} 
+          exiting={FadeOut} 
+          layout={Layout.springify()}
+          style={styles.aiBubbleWrapper}
+        >
+          <View style={styles.aiBubble}>
+            <Text style={styles.aiTitle}>Trimm</Text>
+            <Text style={styles.aiMessageText}>{item.content}</Text>
+          </View>
+        </Animated.View>
+      );
+    }
+  };
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>AI Agent</Text>
-      </View>
-
       <FlatList
         data={messages}
         keyExtractor={item => item.id}
@@ -106,14 +119,14 @@ export const Chat = () => {
         <TextInput
           style={styles.input}
           placeholder="Ask AI to edit..."
-          placeholderTextColor="#666"
+          placeholderTextColor="#A1A1AA"
           value={inputText}
           onChangeText={setInputText}
           onSubmitEditing={sendMessage}
         />
         <TouchableOpacity style={styles.sendButton} onPress={sendMessage} disabled={isProcessing}>
           {isProcessing ? (
-            <ActivityIndicator size="small" color="#FFF" />
+            <ActivityIndicator size="small" color="#09090B" />
           ) : (
             <Text style={styles.sendButtonText}>Send</Text>
           )}
@@ -124,16 +137,76 @@ export const Chat = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#1E1E1E', borderTopWidth: 1, borderTopColor: '#333' },
-  header: { padding: 8, backgroundColor: '#2A2A2A', borderBottomWidth: 1, borderBottomColor: '#333' },
-  title: { color: '#CCC', fontSize: 12, fontWeight: 'bold' },
+  container: { flex: 1, backgroundColor: '#09090B' },
   messageList: { padding: 16 },
-  messageBubble: { padding: 12, borderRadius: 8, marginBottom: 8, maxWidth: '80%' },
-  userBubble: { backgroundColor: '#2196F3', alignSelf: 'flex-end', borderBottomRightRadius: 2 },
-  aiBubble: { backgroundColor: '#333', alignSelf: 'flex-start', borderBottomLeftRadius: 2 },
-  messageText: { color: '#FFF', fontSize: 14 },
-  inputArea: { flexDirection: 'row', padding: 8, backgroundColor: '#2A2A2A', alignItems: 'center' },
-  input: { flex: 1, backgroundColor: '#111', color: '#FFF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, marginRight: 8 },
-  sendButton: { backgroundColor: '#4CAF50', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  sendButtonText: { color: '#FFF', fontWeight: 'bold' },
+  
+  userBubbleWrapper: { 
+    flexDirection: 'row', 
+    justifyContent: 'flex-end',
+    marginBottom: 8 
+  },
+  userBubble: { 
+    backgroundColor: '#1B365D', 
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    borderBottomRightRadius: 4,
+    borderBottomLeftRadius: 12,
+    paddingHorizontal: 14, 
+    paddingVertical: 10, 
+    maxWidth: '85%' 
+  },
+  userMessageText: { color: '#F4F4F5', fontSize: 14, lineHeight: 20 },
+  
+  aiBubbleWrapper: { 
+    flexDirection: 'row', 
+    justifyContent: 'flex-start',
+    marginBottom: 8 
+  },
+  aiBubble: { 
+    backgroundColor: '#27272A',
+    borderColor: '#3F3F46',
+    borderWidth: 1,
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 12,
+    borderBottomRightRadius: 12,
+    borderBottomLeftRadius: 12,
+    padding: 14,
+    width: '92%'
+  },
+  aiTitle: {
+    color: '#D4D4D8',
+    fontWeight: 'bold',
+    fontSize: 11,
+    marginBottom: 5,
+  },
+  aiMessageText: { color: '#FAFAFA', fontSize: 14, lineHeight: 20 },
+  
+  inputArea: { 
+    flexDirection: 'row', 
+    padding: 12, 
+    backgroundColor: '#27272A', 
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#3F3F46'
+  },
+  input: { 
+    flex: 1, 
+    backgroundColor: '#18181B', 
+    color: '#FAFAFA', 
+    paddingHorizontal: 16, 
+    paddingVertical: 10, 
+    borderRadius: 20, 
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#3F3F46'
+  },
+  sendButton: { 
+    backgroundColor: '#FAFAFA', 
+    paddingHorizontal: 16, 
+    paddingVertical: 10, 
+    borderRadius: 20, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  sendButtonText: { color: '#09090B', fontWeight: 'bold' },
 });

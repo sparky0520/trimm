@@ -38,15 +38,15 @@ export const Timeline = ({ currentTime, onScrubStart }: TimelineProps) => {
     const left = node.start * PIXELS_PER_SECOND;
     const itemWidth = (node.end - node.start) * PIXELS_PER_SECOND;
 
-    let color = '#555';
+    let color = '#3F3F46'; // Default Border color
     let label = node.type;
 
-    if (node.type === 'video') color = '#2196F3';
+    if (node.type === 'video') color = '#1B365D'; // UserBlue
     if (node.type === 'text') {
-      color = '#4CAF50';
+      color = '#27272A'; // Raised
       label = (node as any).content;
     }
-    if (node.type === 'audio') color = '#FFC107';
+    if (node.type === 'audio') color = '#D4D4D8'; // Lavender
 
     return (
       <View
@@ -56,16 +56,13 @@ export const Timeline = ({ currentTime, onScrubStart }: TimelineProps) => {
           { left, width: itemWidth, backgroundColor: color, top: index * 40 }
         ]}
       >
-        <Text style={styles.nodeText} numberOfLines={1}>{label}</Text>
+        <Text style={[styles.nodeText, { color: node.type === 'text' ? '#FAFAFA' : '#FAFAFA' }]} numberOfLines={1}>{label}</Text>
       </View>
     );
   };
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Timeline</Text>
-      </View>
       <ScrollView horizontal contentContainerStyle={{ width: contentWidth }}>
         <GestureDetector gesture={pan}>
           <View style={styles.timelineArea}>
@@ -95,21 +92,10 @@ export const Timeline = ({ currentTime, onScrubStart }: TimelineProps) => {
 
 const styles = StyleSheet.create({
   container: {
-    height: 200,
-    backgroundColor: '#1E1E1E',
+    height: 180,
+    backgroundColor: '#09090B',
     borderTopWidth: 1,
-    borderTopColor: '#333',
-  },
-  header: {
-    padding: 8,
-    backgroundColor: '#2A2A2A',
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
-  },
-  title: {
-    color: '#CCC',
-    fontSize: 12,
-    fontWeight: 'bold',
+    borderTopColor: '#3F3F46',
   },
   timelineArea: {
     flex: 1,
@@ -118,22 +104,22 @@ const styles = StyleSheet.create({
   },
   ruler: {
     height: 20,
-    backgroundColor: '#222',
+    backgroundColor: '#18181B',
     borderBottomWidth: 1,
-    borderBottomColor: '#444',
+    borderBottomColor: '#3F3F46',
   },
   tick: {
     position: 'absolute',
     width: 1,
     height: 10,
-    backgroundColor: '#666',
+    backgroundColor: '#3F3F46',
     top: 10,
   },
   tickText: {
     position: 'absolute',
     top: -10,
     left: 2,
-    color: '#888',
+    color: '#A1A1AA',
     fontSize: 8,
   },
   layers: {
@@ -148,10 +134,9 @@ const styles = StyleSheet.create({
     padding: 4,
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.2)',
+    borderColor: '#3F3F46',
   },
   nodeText: {
-    color: '#FFF',
     fontSize: 10,
     fontWeight: 'bold',
   },
@@ -167,12 +152,12 @@ const styles = StyleSheet.create({
   playheadHead: {
     width: 10,
     height: 10,
-    backgroundColor: '#F44336',
+    backgroundColor: '#FAFAFA', // Coral was 0xFFFAFAFA
     borderRadius: 5,
   },
   playheadLine: {
     width: 2,
     flex: 1,
-    backgroundColor: '#F44336',
+    backgroundColor: '#FAFAFA', // Coral was 0xFFFAFAFA
   },
 });
