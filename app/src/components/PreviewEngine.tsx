@@ -6,8 +6,7 @@ import Video, { VideoRef } from 'react-native-video';
 import { useProjectStore } from '../store/projectStore';
 import { TimelineNode, TextNode, OverlayNode, Transform } from '../types/schema';
 
-const { width } = Dimensions.get('window');
-const HEIGHT = 300;
+const { width, height: screenHeight } = Dimensions.get('window');
 
 interface PreviewEngineProps {
   currentTime: SharedValue<number>;
@@ -75,7 +74,7 @@ const SkiaLayer = ({ node, currentTime, font }: { node: TimelineNode, currentTim
     const textNode = node as TextNode;
     const textWidth = font.getTextWidth(textNode.content);
     const defaultX = width / 2 - textWidth / 2;
-    const defaultY = HEIGHT / 2;
+    const defaultY = screenHeight * 0.25;
     const x = textNode.transform?.x !== undefined ? 0 : defaultX;
     const y = textNode.transform?.y !== undefined ? 0 : defaultY;
 
@@ -100,7 +99,7 @@ const SkiaLayer = ({ node, currentTime, font }: { node: TimelineNode, currentTim
     const overlayNode = node as OverlayNode;
     return (
       <Group opacity={animatedOpacity}>
-        <Rect x={0} y={0} width={width} height={HEIGHT} color={overlayNode.color || 'rgba(0,0,0,0.5)'} blendMode={overlayNode.blendMode === 'normal' ? 'srcOver' : (overlayNode.blendMode || 'srcOver') as any} />
+        <Rect x={0} y={0} width={width} height={screenHeight} color={overlayNode.color || 'rgba(0,0,0,0.5)'} blendMode={overlayNode.blendMode === 'normal' ? 'srcOver' : (overlayNode.blendMode || 'srcOver') as any} />
       </Group>
     );
   }
@@ -150,7 +149,8 @@ export const PreviewEngine = ({ currentTime, isPlaying }: PreviewEngineProps) =>
             paused={!isPlaying}
             muted={video.volume === 0}
             volume={video.volume ?? 1}
-            resizeMode="cover"
+            resizeMode="contain"
+            controls={true}
           />
         ))}
       </View>
@@ -165,7 +165,7 @@ export const PreviewEngine = ({ currentTime, isPlaying }: PreviewEngineProps) =>
 };
 
 const styles = StyleSheet.create({
-  container: { width: '100%', height: HEIGHT, overflow: 'hidden', position: 'relative' },
+  container: { flex: 1, width: '100%', overflow: 'hidden', position: 'relative' },
   videoUnderlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
   mockVideoContainer: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, width: '100%', height: '100%' },
   canvas: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 },

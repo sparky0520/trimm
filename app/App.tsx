@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Text, KeyboardAvoidingView, Platform, TouchableOpacity, Alert } from 'react-native';
+import { StyleSheet, View, Text, KeyboardAvoidingView, Platform, TouchableOpacity, Alert, Dimensions, DeviceEventEmitter } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { useSharedValue, withTiming, Easing, cancelAnimation, withRepeat } from 'react-native-reanimated';
+import { GestureHandlerRootView, Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, withTiming, Easing, cancelAnimation, withRepeat, useAnimatedStyle } from 'react-native-reanimated';
 import { PreviewEngine } from './src/components/PreviewEngine';
 
 import { Chat } from './src/components/Chat';
@@ -21,6 +21,8 @@ const Drawer = createDrawerNavigator();
 
 function TrimmStudioScreen({ navigation }: any): React.JSX.Element {
   const currentTime = useSharedValue(0);
+  const { height: screenHeight } = Dimensions.get('window');
+  const topSectionHeight = useSharedValue(screenHeight * 0.4);
   const [isPlaying, setIsPlaying] = useState(true);
   const [exportProgress, setExportProgress] = useState<number | null>(null);
   const presentSchema = useProjectStore(state => state.present);
@@ -55,6 +57,29 @@ function TrimmStudioScreen({ navigation }: any): React.JSX.Element {
     }
   }, [isPlaying, currentTime]);
 
+  useEffect(() => {
+    const previewSub = DeviceEventEmitter.addListener('togglePreview', () => setIsPlaying(p => !p));
+    const exportSub = DeviceEventEmitter.addListener('triggerExport', handleExport);
+    return () => {
+      previewSub.remove();
+      exportSub.remove();
+    };
+  }, [isPlaying, handleExport]);
+
+  const panGesture = Gesture.Pan()
+    .onChange((e) => {
+      const newHeight = topSectionHeight.value + e.changeY;
+      if (newHeight > 100 && newHeight < screenHeight - 150) {
+        topSectionHeight.value = newHeight;
+      }
+    });
+
+  const animatedTopStyle = useAnimatedStyle(() => {
+    return {
+      height: topSectionHeight.value,
+    };
+  });
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView 
@@ -62,37 +87,30 @@ function TrimmStudioScreen({ navigation }: any): React.JSX.Element {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.header}>
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuBtn}>
-              <Text style={styles.menuIcon}>☰</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity 
-              onPress={() => setIsPlaying(!isPlaying)}
-              style={styles.playBtn}
-            >
-              <Text style={styles.playText}>Preview</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.exportBtn} onPress={handleExport}>
-              <Text style={styles.exportText}>Export</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuBtn}>
+            <Text style={styles.menuIcon}>☰</Text>
+          </TouchableOpacity>
         </View>
         
-        {hasMedia && (
-          <View style={styles.previewContainer}>
+        <Animated.View style={[
+          styles.previewContainer, 
+          !hasMedia && { justifyContent: 'center', alignItems: 'center' },
+          animatedTopStyle
+        ]}>
+          {hasMedia ? (
             <PreviewEngine currentTime={currentTime} isPlaying={isPlaying} />
-          </View>
-        )}
-
-        {hasMedia && (
-          <View style={styles.assetPickerContainer}>
+          ) : (
             <AssetPicker />
+          )}
+        </Animated.View>
+
+        <GestureDetector gesture={panGesture}>
+          <View style={styles.resizer}>
+            <View style={styles.resizerHandle} />
           </View>
-        )}
+        </GestureDetector>
         
-        <View style={[styles.chatContainer, !hasMedia && { paddingTop: 60 }]}>
+        <View style={styles.chatContainer}>
           <Chat />
         </View>
       </KeyboardAvoidingView>
@@ -192,7 +210,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row', 
     alignItems: 'center'
   },
-  previewContainer: { flex: 1, backgroundColor: '#18181B' },
+  previewContainer: { backgroundColor: '#18181B', overflow: 'hidden' },
+  resizer: {
+    height: 24,
+    width: '100%',
+    backgroundColor: '#09090B',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 20,
+  },
+  resizerHandle: {
+    width: 48,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#3F3F46',
+  },
   assetPickerContainer: { backgroundColor: '#09090B' },
   chatContainer: { flex: 1, backgroundColor: '#09090B' },
   exportOverlay: {

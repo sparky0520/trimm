@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, RefreshControl, DeviceEventEmitter } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
@@ -90,6 +90,22 @@ export function ChatDrawerContent(props: DrawerContentComponentProps) {
           />
         }
       >
+        <Text style={styles.sectionTitle}>Studio Actions</Text>
+        <View style={styles.actionRow}>
+          <TouchableOpacity 
+            style={styles.actionBtn} 
+            onPress={() => { DeviceEventEmitter.emit('togglePreview'); props.navigation.closeDrawer(); }}
+          >
+            <Text style={styles.actionBtnText}>Toggle Preview</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.actionBtn} 
+            onPress={() => { DeviceEventEmitter.emit('triggerExport'); props.navigation.closeDrawer(); }}
+          >
+            <Text style={styles.actionBtnText}>Export Video</Text>
+          </TouchableOpacity>
+        </View>
+
         <Text style={styles.sectionTitle}>Past Chats</Text>
         
         {pastChats.map((chat) => (
@@ -179,6 +195,27 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginTop: 12,
     marginBottom: 8,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    marginHorizontal: -4,
+  },
+  actionBtn: {
+    flex: 1,
+    backgroundColor: '#18181B',
+    paddingVertical: 10,
+    marginHorizontal: 4,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#27272A',
+  },
+  actionBtnText: {
+    color: '#FAFAFA',
+    fontSize: 14,
+    fontWeight: '600',
   },
   chatRow: {
     flexDirection: 'row',

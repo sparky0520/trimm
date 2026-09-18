@@ -9,8 +9,9 @@ export const AssetPicker = () => {
 
   const openPicker = async () => {
     const result = await launchImageLibrary({
-      mediaType: 'mixed', // allow images and videos
+      mediaType: 'video', // only allow videos
       selectionLimit: 1,
+      assetRepresentationMode: 'current',
     });
 
     if (result.assets && result.assets.length > 0) {

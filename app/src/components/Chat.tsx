@@ -120,11 +120,6 @@ export const Chat = () => {
           <Text style={styles.emptySubtitle}>
             {hasMedia ? "Describe your edits below or use a suggestion." : "Import media to get started, or describe what you want to edit."}
           </Text>
-          {!hasMedia && (
-            <View style={{ marginTop: 24 }}>
-              <AssetPicker />
-            </View>
-          )}
         </View>
       ) : (
         <FlatList
