@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, RefreshControl } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
@@ -11,11 +11,39 @@ export function ChatDrawerContent(props: DrawerContentComponentProps) {
   const [showSignOut, setShowSignOut] = useState(false);
   const insets = useSafeAreaInsets();
   
-  // Dummy past chats for now, just to match the UI
-  const pastChats = [
-    { id: '1', title: 'Editing Session 1' },
-    { id: '2', title: 'Project Trimm' }
-  ];
+  const [pastChats, setPastChats] = useState<{id: string, title: string}[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchChats = async () => {
+    if (!user) {
+      setPastChats([]);
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('chats')
+        .select('id, title')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false });
+        
+      if (error) throw error;
+      if (data) {
+        setPastChats(data);
+      }
+    } catch (e) {
+      console.error("Error fetching chats", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchChats();
+  }, [user]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchChats();
+    setRefreshing(false);
+  }, [user]);
 
   const handleSignIn = async () => {
     try {
@@ -48,7 +76,20 @@ export function ChatDrawerContent(props: DrawerContentComponentProps) {
         </TouchableOpacity>
       </View>
 
-      <DrawerContentScrollView {...props} style={styles.scrollArea} contentContainerStyle={{ paddingTop: 0 }}>
+      <DrawerContentScrollView 
+        {...props} 
+        style={styles.scrollArea} 
+        contentContainerStyle={{ paddingTop: 0 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#A1A1AA"
+            colors={['#09090B']}
+            progressBackgroundColor="#FAFAFA"
+          />
+        }
+      >
         <Text style={styles.sectionTitle}>Past Chats</Text>
         
         {pastChats.map((chat) => (
