@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Alert } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { supabase } from '../utils/supabase';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
@@ -8,6 +9,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 export function ChatDrawerContent(props: DrawerContentComponentProps) {
   const { user, signOut } = useAuthStore();
   const [showSignOut, setShowSignOut] = useState(false);
+  const insets = useSafeAreaInsets();
   
   // Dummy past chats for now, just to match the UI
   const pastChats = [
@@ -38,15 +40,15 @@ export function ChatDrawerContent(props: DrawerContentComponentProps) {
   const avatarUrl = user?.user_metadata?.avatar_url;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={styles.header}>
-        <Text style={styles.title}>Trimm</Text>
-        <TouchableOpacity onPress={() => {/* new chat */}}>
+        <Text style={styles.title}>History</Text>
+        <TouchableOpacity style={styles.newChatBtnContainer} onPress={() => {/* new chat */}}>
           <Text style={styles.newChatBtn}>+</Text>
         </TouchableOpacity>
       </View>
 
-      <DrawerContentScrollView {...props} style={styles.scrollArea}>
+      <DrawerContentScrollView {...props} style={styles.scrollArea} contentContainerStyle={{ paddingTop: 0 }}>
         <Text style={styles.sectionTitle}>Past Chats</Text>
         
         {pastChats.map((chat) => (
@@ -54,8 +56,8 @@ export function ChatDrawerContent(props: DrawerContentComponentProps) {
             <TouchableOpacity style={styles.chatTitleBtn}>
               <Text style={styles.chatTitle}>{chat.title}</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => {/* delete */}}>
-              <Text style={styles.deleteIcon}>🗑️</Text>
+            <TouchableOpacity onPress={() => {/* delete */}} style={styles.deleteBtn}>
+              <Text style={styles.deleteIcon}>✕</Text>
             </TouchableOpacity>
           </View>
         ))}
@@ -100,32 +102,40 @@ export function ChatDrawerContent(props: DrawerContentComponentProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#171717',
+    backgroundColor: '#09090B',
   },
   header: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 40, // safe area approximation
   },
   title: {
     color: '#FAFAFA',
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '600',
-    letterSpacing: -1,
+    letterSpacing: -0.5,
+  },
+  newChatBtnContainer: {
+    padding: 4,
   },
   newChatBtn: {
     color: '#FAFAFA',
     fontSize: 24,
+    fontWeight: '300',
   },
   scrollArea: {
     flex: 1,
     paddingHorizontal: 16,
   },
   sectionTitle: {
-    color: 'gray',
+    color: '#71717A',
     fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 12,
     marginBottom: 8,
   },
   chatRow: {
@@ -133,71 +143,88 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginVertical: 8,
+    paddingVertical: 4,
   },
   chatTitleBtn: {
     flex: 1,
   },
   chatTitle: {
-    color: '#FAFAFA',
+    color: '#D4D4D8',
     fontSize: 14,
+    fontWeight: '500',
+  },
+  deleteBtn: {
+    padding: 4,
   },
   deleteIcon: {
-    fontSize: 16,
+    color: '#71717A',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   divider: {
     height: 1,
-    backgroundColor: '#3F3F46',
-    marginVertical: 8,
+    backgroundColor: '#27272A',
+    marginHorizontal: 16,
   },
   accountControl: {
     padding: 16,
-    marginBottom: 20,
   },
   authBtn: {
-    paddingVertical: 8,
+    backgroundColor: '#FAFAFA',
+    paddingVertical: 12,
+    borderRadius: 24,
+    alignItems: 'center',
   },
   authBtnText: {
-    color: '#FAFAFA',
+    color: '#09090B',
     fontSize: 14,
+    fontWeight: 'bold',
   },
   profileRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     marginRight: 12,
   },
   avatarPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#3F3F46',
     marginRight: 12,
   },
   name: {
     color: '#FAFAFA',
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   signOutMenu: {
-    marginTop: 12,
-    backgroundColor: '#27272A',
+    marginTop: 16,
+    backgroundColor: '#18181B',
     padding: 12,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#27272A',
   },
   emailText: {
     color: '#A1A1AA',
     fontSize: 12,
-    marginBottom: 8,
+    marginBottom: 12,
   },
   signOutBtn: {
-    paddingVertical: 4,
+    backgroundColor: '#EF4444',
+    paddingVertical: 8,
+    borderRadius: 6,
+    alignItems: 'center',
   },
   signOutBtnText: {
     color: '#FAFAFA',
     fontSize: 14,
+    fontWeight: '600',
   }
 });
+

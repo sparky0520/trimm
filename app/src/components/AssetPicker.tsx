@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Button, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { FFprobeKit } from 'ffmpeg-kit-extended';
 import { useProjectStore } from '../store/projectStore';
@@ -49,18 +49,34 @@ export const AssetPicker = () => {
 
   return (
     <View style={styles.container}>
-      <Button title="Import Media" onPress={openPicker} color="#4CAF50" />
+      <TouchableOpacity style={styles.button} onPress={openPicker}>
+        <Text style={styles.buttonText}>+ Import Media</Text>
+      </TouchableOpacity>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    padding: 8,
-    backgroundColor: '#2A2A2A',
-    borderTopWidth: 1,
-    borderTopColor: '#333',
+    paddingVertical: 12,
+    backgroundColor: 'transparent',
     flexDirection: 'row',
     justifyContent: 'center',
   },
+  button: {
+    backgroundColor: '#FAFAFA',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  buttonText: {
+    color: '#09090B',
+    fontSize: 15,
+    fontWeight: '600',
+  }
 });

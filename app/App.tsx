@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSharedValue, withTiming, Easing, cancelAnimation, withRepeat } from 'react-native-reanimated';
 import { PreviewEngine } from './src/components/PreviewEngine';
-import { Timeline } from './src/components/Timeline';
+
 import { Chat } from './src/components/Chat';
 import { AssetPicker } from './src/components/AssetPicker';
 import { useProjectStore } from './src/store/projectStore';
@@ -24,6 +24,7 @@ function TrimmStudioScreen({ navigation }: any): React.JSX.Element {
   const [isPlaying, setIsPlaying] = useState(true);
   const [exportProgress, setExportProgress] = useState<number | null>(null);
   const presentSchema = useProjectStore(state => state.present);
+  const hasMedia = presentSchema.timeline.length > 0;
 
   const handleExport = async () => {
     try {
@@ -62,17 +63,16 @@ function TrimmStudioScreen({ navigation }: any): React.JSX.Element {
       >
         <View style={styles.header}>
           <View style={styles.buttonContainer}>
-            <TouchableOpacity onPress={() => navigation.openDrawer()} style={{marginRight: 12}}>
+            <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.menuBtn}>
               <Text style={styles.menuIcon}>☰</Text>
             </TouchableOpacity>
-            <Text style={styles.title}>Trimm</Text>
           </View>
           <View style={styles.buttonContainer}>
             <TouchableOpacity 
               onPress={() => setIsPlaying(!isPlaying)}
               style={styles.playBtn}
             >
-              <Text style={styles.playText}>{isPlaying ? "Pause" : "Play"}</Text>
+              <Text style={styles.playText}>Preview</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.exportBtn} onPress={handleExport}>
               <Text style={styles.exportText}>Export</Text>
@@ -80,19 +80,19 @@ function TrimmStudioScreen({ navigation }: any): React.JSX.Element {
           </View>
         </View>
         
-        <View style={styles.previewContainer}>
-          <PreviewEngine currentTime={currentTime} isPlaying={isPlaying} />
-        </View>
+        {hasMedia && (
+          <View style={styles.previewContainer}>
+            <PreviewEngine currentTime={currentTime} isPlaying={isPlaying} />
+          </View>
+        )}
 
-        <View style={styles.timelineContainer}>
-          <Timeline 
-            currentTime={currentTime} 
-            onScrubStart={() => setIsPlaying(false)}
-          />
-          <AssetPicker />
-        </View>
+        {hasMedia && (
+          <View style={styles.assetPickerContainer}>
+            <AssetPicker />
+          </View>
+        )}
         
-        <View style={styles.chatContainer}>
+        <View style={[styles.chatContainer, !hasMedia && { paddingTop: 60 }]}>
           <Chat />
         </View>
       </KeyboardAvoidingView>
@@ -127,8 +127,13 @@ function App(): React.JSX.Element {
     <GestureHandlerRootView style={styles.wrapper}>
       <NavigationContainer>
         <Drawer.Navigator 
-          drawerContent={ChatDrawerContent}
-          screenOptions={{ headerShown: false, drawerStyle: { width: 300 } }}
+          drawerContent={props => <ChatDrawerContent {...props} />}
+          screenOptions={{ 
+            headerShown: false, 
+            drawerStyle: { width: 300 },
+            swipeEnabled: true,
+            swipeEdgeWidth: 100
+          }}
         >
           <Drawer.Screen name="Studio" component={TrimmStudioScreen} />
         </Drawer.Navigator>
@@ -146,17 +151,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#09090B',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
   },
-  menuIcon: { color: '#FAFAFA', fontSize: 24 },
-  title: { color: '#FAFAFA', fontSize: 24, fontWeight: '600', letterSpacing: -1 },
+  menuBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(24, 24, 27, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuIcon: { color: '#FAFAFA', fontSize: 20 },
   playBtn: {
     paddingHorizontal: 16,
     paddingVertical: 8,
+    backgroundColor: 'rgba(24, 24, 27, 0.8)',
+    borderRadius: 20,
   },
   playText: {
     color: '#FAFAFA',
     fontSize: 14,
+    fontWeight: '500',
   },
   exportBtn: {
     backgroundColor: '#FAFAFA',
@@ -173,9 +192,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row', 
     alignItems: 'center'
   },
-  previewContainer: { flex: 3, backgroundColor: '#18181B' },
-  timelineContainer: { flex: 2, backgroundColor: '#09090B' },
-  chatContainer: { flex: 3, backgroundColor: '#09090B' },
+  previewContainer: { flex: 1, backgroundColor: '#18181B' },
+  assetPickerContainer: { backgroundColor: '#09090B' },
+  chatContainer: { flex: 1, backgroundColor: '#09090B' },
   exportOverlay: {
     position: 'absolute',
     top: 0,
