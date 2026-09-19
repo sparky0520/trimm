@@ -12,6 +12,8 @@ export interface BaseNode {
   id: string;
   start: number; // in seconds
   end: number;   // in seconds
+  sourceStart?: number; // in seconds
+  sourceEnd?: number; // in seconds
   animation?: AnimationType;
   opacity?: number; // 0 to 1
   blendMode?: BlendMode;

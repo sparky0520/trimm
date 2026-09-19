@@ -62,10 +62,14 @@ export const useProjectStore = create<ProjectState>((set) => ({
       case 'trim_clip':
         newTimeline = newTimeline.map(node => {
           if (node.id === call.targetId && (node.type === 'video' || node.type === 'audio')) {
+            const oldStart = node.start;
+            const newStart = call.start !== undefined ? call.start : node.start;
+            const diff = newStart - oldStart;
             return {
               ...node,
-              start: call.start !== undefined ? call.start : node.start,
+              start: newStart,
               end: call.end !== undefined ? call.end : node.end,
+              sourceStart: (node.sourceStart || 0) + diff,
             };
           }
           return node;

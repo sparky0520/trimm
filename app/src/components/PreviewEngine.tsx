@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
 import { Canvas, Text as SkiaText, useFont, Group, Rect, SkFont } from '@shopify/react-native-skia';
 import { SharedValue, useAnimatedReaction, useDerivedValue, interpolate, Extrapolation, runOnJS, useAnimatedStyle } from 'react-native-reanimated';
@@ -18,6 +18,15 @@ const NativeVideoLayer = ({ video, currentTime, isPlaying, videoRef }: { video: 
   const isWithinTime = useDerivedValue(() => {
     return currentTime.value >= video.start && currentTime.value <= video.end;
   });
+
+  const [isVisible, setIsVisible] = useState(false);
+  
+  useAnimatedReaction(
+    () => isWithinTime.value,
+    (within) => {
+      runOnJS(setIsVisible)(within);
+    }
+  );
 
   const animatedOpacity = useDerivedValue(() => {
     if (!isWithinTime.value) return 0;
@@ -68,7 +77,7 @@ const NativeVideoLayer = ({ video, currentTime, isPlaying, videoRef }: { video: 
         ref={videoRef}
         source={{ uri: video.src }}
         style={StyleSheet.absoluteFill}
-        paused={!isPlaying}
+        paused={!isPlaying || !isVisible}
         muted={video.volume === 0}
         volume={video.volume ?? 1}
         resizeMode="contain"
@@ -178,12 +187,14 @@ export const PreviewEngine = ({ currentTime, isPlaying }: PreviewEngineProps) =>
   const videoRefs = useRef<{ [key: string]: VideoRef | null }>({});
   const lastSeek = useRef(0);
 
-  // Handle frame-by-frame scrubbing
+  // Handle frame-by-frame scrubbing and timeline looping
   useAnimatedReaction(
     () => currentTime.value,
-    (time) => {
-      // Only manually seek if we are paused (scrubbing). If playing, let native player handle playback.
+    (time, previousTime) => {
       if (!isPlaying) {
+        runOnJS(handleSeek)(time);
+      } else if (previousTime !== null && time < previousTime) {
+        // Timeline looped back to start, sync videos
         runOnJS(handleSeek)(time);
       }
     }
@@ -195,8 +206,13 @@ export const PreviewEngine = ({ currentTime, isPlaying }: PreviewEngineProps) =>
       lastSeek.current = now;
       schema.timeline.filter(n => n.type === 'video').forEach(video => {
         const ref = videoRefs.current[video.id];
-        if (ref && time >= video.start && time <= video.end) {
-          ref.seek(time - video.start);
+        if (ref) {
+          const sStart = video.sourceStart || 0;
+          if (time < video.start) {
+            ref.seek(sStart);
+          } else if (time >= video.start && time <= video.end) {
+            ref.seek((time - video.start) + sStart);
+          }
         }
       });
     }
