@@ -62,6 +62,7 @@ export interface ProjectSettings {
 }
 
 export interface ProjectSchema {
+  id?: string;
   settings: ProjectSettings;
   timeline: TimelineNode[];
 }

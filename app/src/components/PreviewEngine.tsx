@@ -68,7 +68,8 @@ const NativeVideoLayer = ({ video, currentTime, isPlaying, videoRef }: { video: 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: animatedOpacity.value,
     transform: animatedTransform.value,
-    display: isWithinTime.value ? 'flex' : 'none',
+    // Avoid display: 'none' as it detaches the surface on Android and causes .seek() to crash
+    top: isWithinTime.value ? 0 : 9999,
   }));
 
   return (
@@ -197,7 +198,8 @@ export const PreviewEngine = ({ currentTime, isPlaying }: PreviewEngineProps) =>
         // Timeline looped back to start, sync videos
         runOnJS(handleSeek)(time);
       }
-    }
+    },
+    [isPlaying]
   );
 
   const handleSeek = (time: number) => {

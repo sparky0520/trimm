@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { ProjectSchema } from '../types/schema';
 import { AgentToolCall } from '../types/contracts';
+import { useAuthStore } from './authStore';
+import { BACKEND_URL } from '../utils/config';
 
 interface HistoryState {
   past: ProjectSchema[];
@@ -62,14 +64,14 @@ export const useProjectStore = create<ProjectState>((set) => ({
       case 'trim_clip':
         newTimeline = newTimeline.map(node => {
           if (node.id === call.targetId && (node.type === 'video' || node.type === 'audio')) {
-            const oldStart = node.start;
-            const newStart = call.start !== undefined ? call.start : node.start;
+            const oldStart = Number(node.start);
+            const newStart = call.start !== undefined ? Number(call.start) : oldStart;
             const diff = newStart - oldStart;
             return {
               ...node,
               start: newStart,
-              end: call.end !== undefined ? call.end : node.end,
-              sourceStart: (node.sourceStart || 0) + diff,
+              end: call.end !== undefined ? Number(call.end) : Number(node.end),
+              sourceStart: (Number(node.sourceStart) || 0) + diff,
             };
           }
           return node;
@@ -180,6 +182,27 @@ export const useProjectStore = create<ProjectState>((set) => ({
     }
 
     newSchema.timeline = newTimeline;
+
+    // Assign an ID if this is the first edit operation
+    if (!newSchema.id) {
+      newSchema.id = `proj_${generateId()}`;
+    }
+
+    // Fire and forget sync to backend
+    const session = useAuthStore.getState().session;
+    if (session?.access_token) {
+      fetch(`${BACKEND_URL}/v1/projects/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          ...newSchema,
+          title: 'New Edit'
+        })
+      }).catch(err => console.error('Failed to sync project', err));
+    }
 
     // Update state with history
     return {
