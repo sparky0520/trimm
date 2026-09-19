@@ -1,51 +1,48 @@
 import OpenAI from 'openai';
 import { getAgentTools } from '../schema/agent-decision-schema.js';
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-let mcpClientInstance = null;
-let mcpToolsCache = null;
-
-async function getMcpClient() {
-  if (mcpClientInstance) return mcpClientInstance;
-  try {
-    const transport = new StdioClientTransport({
-      command: "node",
-      args: [path.join(__dirname, "../../../../.agents/mcp/google-fonts/src/index.js")]
-    });
-    const client = new Client({ name: "trimm-backend", version: "1.0.0" }, { capabilities: { tools: {} } });
-    await client.connect(transport);
-    mcpClientInstance = client;
-    return client;
-  } catch (e) {
-    console.error("Failed to initialize MCP client", e);
-    return null;
-  }
-}
-
-async function getMcpTools() {
-  if (mcpToolsCache) return mcpToolsCache;
-  const client = await getMcpClient();
-  if (!client) return [];
-  try {
-    const listRes = await client.listTools();
-    mcpToolsCache = listRes.tools.map(t => ({
-      type: 'function',
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: t.inputSchema
+const nativeToolsSchema = [
+  {
+    type: 'function',
+    function: {
+      name: 'search_google_fonts',
+      description: 'Search for a Google Font and get its direct .ttf URL.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: "The name of the font (e.g. 'Roboto', 'Open Sans')" }
+        },
+        required: ['query'],
+        additionalProperties: false
       }
-    }));
-    return mcpToolsCache;
-  } catch (e) {
-    console.error("Failed to list MCP tools", e);
-    return [];
+    }
   }
+];
+
+async function executeNativeTool(name, args) {
+  if (name === 'search_google_fonts') {
+    try {
+      const { query } = JSON.parse(args);
+      const FONTSOURCE_API = "https://api.fontsource.org/v1";
+      const response = await fetch(`${FONTSOURCE_API}/fonts`);
+      if (!response.ok) return "Failed to fetch fonts list";
+      
+      const fonts = await response.json();
+      const match = fonts.find(f => f.family.toLowerCase().includes(query.toLowerCase()));
+      
+      if (!match) return `No font found matching "${query}"`;
+
+      const detailResponse = await fetch(`${FONTSOURCE_API}/fonts/${match.id}`);
+      const details = await detailResponse.json();
+      
+      // Attempt to extract the first available URL, prioritizing TTF
+      const urls = Object.values(details.files || {});
+      const ttfFile = urls.find(f => typeof f === 'string' && f.includes('.ttf')) || urls[0];
+      return `Found font: ${match.family}. URL: ${ttfFile}`;
+    } catch (e) {
+      return `Error: ${e.message}`;
+    }
+  }
+  return "Tool not found";
 }
 
 function createOpenAIDecisionProvider({
@@ -74,10 +71,9 @@ Do not explain your thought process in plain text. Simply execute the tool calls
     let currentMessages = [{ role: 'system', content: systemPolicy }, ...contents];
     
     const baseTools = getAgentTools();
-    const mcpTools = await getMcpTools();
     const tools = [
       ...baseTools.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })),
-      ...mcpTools
+      ...nativeToolsSchema
     ];
 
     console.log('[DEBUG] OpenAI Stream Request Initiated');
@@ -86,7 +82,7 @@ Do not explain your thought process in plain text. Simply execute the tool calls
       const requestPayload = {
         model,
         messages: currentMessages,
-        temperature: 0.1,
+        temperature: 1,
         stream: true,
         tools
       };
@@ -103,18 +99,18 @@ Do not explain your thought process in plain text. Simply execute the tool calls
       let functionName = '';
       let functionArgs = '';
 
-      let hasMcpCall = false;
-      let mcpToolCallId = null;
-      let mcpFunctionName = '';
-      let mcpFunctionArgs = '';
+      let hasNativeCall = false;
+      let nativeToolCallId = null;
+      let nativeFunctionName = '';
+      let nativeFunctionArgs = '';
 
       const handleCompletedToolCall = function* (id, name, args) {
-        const isMcp = mcpTools.some(t => t.function.name === name);
-        if (isMcp) {
-          hasMcpCall = true;
-          mcpToolCallId = id;
-          mcpFunctionName = name;
-          mcpFunctionArgs = args;
+        const isNative = nativeToolsSchema.some(t => t.function.name === name);
+        if (isNative) {
+          hasNativeCall = true;
+          nativeToolCallId = id;
+          nativeFunctionName = name;
+          nativeFunctionArgs = args;
           currentMessages.push({ role: 'assistant', content: null, tool_calls: [{ id, type: 'function', function: { name, arguments: args } }] });
         } else {
           try {
@@ -153,20 +149,12 @@ Do not explain your thought process in plain text. Simply execute the tool calls
         yield* handleCompletedToolCall(toolCallId, functionName, functionArgs);
       }
 
-      if (hasMcpCall) {
-        console.log(`[DEBUG] Executing MCP Tool: ${mcpFunctionName}`);
-        const client = await getMcpClient();
-        try {
-          const parsedArgs = JSON.parse(mcpFunctionArgs);
-          const result = await client.callTool({ name: mcpFunctionName, arguments: parsedArgs });
-          const textResult = result.content[0].text;
-          currentMessages.push({ role: 'tool', tool_call_id: mcpToolCallId, name: mcpFunctionName, content: textResult });
-        } catch (e) {
-          console.error(`[DEBUG] MCP Tool Error:`, e);
-          currentMessages.push({ role: 'tool', tool_call_id: mcpToolCallId, name: mcpFunctionName, content: `Error: ${e.message}` });
-        }
+      if (hasNativeCall) {
+        console.log(`[DEBUG] Executing Native Tool: ${nativeFunctionName}`);
+        const result = await executeNativeTool(nativeFunctionName, nativeFunctionArgs);
+        currentMessages.push({ role: 'tool', tool_call_id: nativeToolCallId, name: nativeFunctionName, content: result });
       } else {
-        break; // Loop until no MCP tools are called
+        break; // Loop until no native tools are called
       }
     }
   }

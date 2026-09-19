@@ -19,7 +19,7 @@ import { AudioGeneration } from './services/audio-generation.js';
 const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.LLM_API_KEY;
 const baseURL = process.env.LLM_OPENAI_BASE_URL || 'https://api.moonshot.ai/v1';
-const model = process.env.MODEL || 'kimi-k3';
+const model = process.env.MODEL || 'kimi-k2.7-code';
 const MAX_BODY_BYTES = 512 * 1024;
 
 const transcriptionUploads = new TranscriptionUploads();
@@ -104,6 +104,18 @@ const server = http.createServer(async (request, response) => {
     });
   }
 
+  // Handle CORS preflight
+  const origin = request.headers.origin || '*';
+  response.setHeader('Access-Control-Allow-Origin', origin);
+  response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  response.setHeader('Access-Control-Expose-Headers', 'upload-offset');
+
+  if (request.method === 'OPTIONS') {
+    response.writeHead(204);
+    return response.end();
+  }
+
   let principal;
   const requestId = correlationId(request);
   if (requestUrl.pathname.startsWith('/v1/')) {
@@ -184,7 +196,7 @@ const server = http.createServer(async (request, response) => {
   if (request.method === 'POST' && requestUrl.pathname === '/v1/chat/completion') {
     try {
       const payload = await collect(request, 5 * 1024 * 1024);
-      
+
       response.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
@@ -195,7 +207,7 @@ const server = http.createServer(async (request, response) => {
       for await (const chunk of stream) {
         response.write(`data: ${JSON.stringify(chunk)}\n\n`);
       }
-      
+
       response.write(`data: [DONE]\n\n`);
       return response.end();
     } catch (error) {
@@ -206,6 +218,8 @@ const server = http.createServer(async (request, response) => {
           code: error?.code || 'chat_completion_failed',
           requestId,
         });
+      } else {
+        response.write(`event: error\ndata: ${JSON.stringify({ error: error?.message || 'Failed to generate chat completion.' })}\n\n`);
       }
       return response.end();
     }

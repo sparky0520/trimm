@@ -1,10 +1,11 @@
 import React, { useRef } from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
 import { Canvas, Text as SkiaText, useFont, Group, Rect, SkFont } from '@shopify/react-native-skia';
-import { SharedValue, useAnimatedReaction, useDerivedValue, interpolate, Extrapolation, runOnJS } from 'react-native-reanimated';
+import { SharedValue, useAnimatedReaction, useDerivedValue, interpolate, Extrapolation, runOnJS, useAnimatedStyle } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 import Video, { VideoRef } from 'react-native-video';
 import { useProjectStore } from '../store/projectStore';
-import { TimelineNode, TextNode, OverlayNode, Transform } from '../types/schema';
+import { TimelineNode, TextNode, OverlayNode, Transform, VideoNode } from '../types/schema';
 
 const { width, height: screenHeight } = Dimensions.get('window');
 
@@ -12,6 +13,70 @@ interface PreviewEngineProps {
   currentTime: SharedValue<number>;
   isPlaying: boolean;
 }
+
+const NativeVideoLayer = ({ video, currentTime, isPlaying, videoRef }: { video: VideoNode, currentTime: SharedValue<number>, isPlaying: boolean, videoRef: (r: VideoRef | null) => void }) => {
+  const isWithinTime = useDerivedValue(() => {
+    return currentTime.value >= video.start && currentTime.value <= video.end;
+  });
+
+  const animatedOpacity = useDerivedValue(() => {
+    if (!isWithinTime.value) return 0;
+    
+    let baseOpacity = video.opacity !== undefined ? video.opacity : 1;
+    
+    if (video.animation === 'fade_in') {
+      const fadeVal = interpolate(currentTime.value, [video.start, video.start + 1], [0, 1], Extrapolation.CLAMP);
+      return baseOpacity * fadeVal;
+    } else if (video.animation === 'fade_out') {
+      const fadeVal = interpolate(currentTime.value, [video.end - 1, video.end], [1, 0], Extrapolation.CLAMP);
+      return baseOpacity * fadeVal;
+    }
+
+    return baseOpacity;
+  });
+
+  const animatedTransform = useDerivedValue(() => {
+    const ops: any[] = [];
+    
+    if (video.transform) {
+      if (video.transform.x !== undefined) ops.push({ translateX: video.transform.x });
+      if (video.transform.y !== undefined) ops.push({ translateY: video.transform.y });
+      if (video.transform.scale !== undefined) ops.push({ scale: video.transform.scale });
+      if (video.transform.rotation !== undefined) ops.push({ rotate: `${video.transform.rotation}deg` });
+    }
+
+    if (video.animation === 'slide_in') {
+      const slideX = interpolate(currentTime.value, [video.start, video.start + 1], [-width, 0], Extrapolation.CLAMP);
+      ops.push({ translateX: slideX });
+    } else if (video.animation === 'scale_in') {
+      const scaleVal = interpolate(currentTime.value, [video.start, video.start + 1], [0, 1], Extrapolation.CLAMP);
+      ops.push({ scale: scaleVal });
+    }
+
+    return ops;
+  });
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: animatedOpacity.value,
+    transform: animatedTransform.value,
+    display: isWithinTime.value ? 'flex' : 'none',
+  }));
+
+  return (
+    <Animated.View style={[styles.mockVideoContainer, animatedStyle]}>
+      <Video
+        ref={videoRef}
+        source={{ uri: video.src }}
+        style={StyleSheet.absoluteFill}
+        paused={!isPlaying}
+        muted={video.volume === 0}
+        volume={video.volume ?? 1}
+        resizeMode="contain"
+        controls={true}
+      />
+    </Animated.View>
+  );
+};
 
 // Sub-component to render an individual layer using derived values for visibility and animations
 const SkiaLayer = ({ node, currentTime, font }: { node: TimelineNode, currentTime: SharedValue<number>, font: SkFont | null }) => {
@@ -141,16 +206,12 @@ export const PreviewEngine = ({ currentTime, isPlaying }: PreviewEngineProps) =>
     <View style={[styles.container, { backgroundColor: schema.settings.backgroundColor }]}>
       <View style={styles.videoUnderlay}>
         {schema.timeline.filter(n => n.type === 'video').map(video => (
-          <Video
+          <NativeVideoLayer
             key={video.id}
-            ref={(r) => { videoRefs.current[video.id] = r; }}
-            source={{ uri: video.src }}
-            style={styles.mockVideoContainer}
-            paused={!isPlaying}
-            muted={video.volume === 0}
-            volume={video.volume ?? 1}
-            resizeMode="contain"
-            controls={true}
+            video={video as VideoNode}
+            currentTime={currentTime}
+            isPlaying={isPlaying}
+            videoRef={(r) => { videoRefs.current[video.id] = r; }}
           />
         ))}
       </View>

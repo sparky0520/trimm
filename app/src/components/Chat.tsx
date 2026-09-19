@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator,
 import Animated, { FadeInDown, FadeOut, Layout } from 'react-native-reanimated';
 import EventSource from 'react-native-sse';
 import { useProjectStore } from '../store/projectStore';
+import { useAuthStore } from '../store/authStore';
 import { BACKEND_URL } from '../utils/config';
 import { AssetPicker } from './AssetPicker';
 
@@ -36,10 +37,18 @@ export const Chat = () => {
       projectSchema: presentSchema,
     };
 
+    const session = useAuthStore.getState().session;
+    const token = session?.access_token;
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const es = new EventSource(`${BACKEND_URL}/v1/chat/completion`, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       method: 'POST',
       body: JSON.stringify(payload)
     });
@@ -108,7 +117,7 @@ export const Chat = () => {
 
   const suggestions = hasMedia 
     ? ["Add cinematic text", "Add a slow zoom", "Trim the first 2 seconds"]
-    : ["Make it cinematic", "Add a black background", "Create a title sequence"];
+    : [];
 
   return (
     <View style={styles.container}>
@@ -131,7 +140,7 @@ export const Chat = () => {
         />
       )}
 
-      {messages.length === 0 && (
+      {messages.length === 0 && hasMedia && suggestions.length > 0 && (
         <View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.suggestionsScroll}>
             {suggestions.map((suggestion, idx) => (
@@ -145,18 +154,23 @@ export const Chat = () => {
 
       <View style={styles.inputArea}>
         <TextInput
-          style={styles.input}
-          placeholder="Ask AI to edit..."
+          style={[styles.input, !hasMedia && styles.inputDisabled]}
+          placeholder={hasMedia ? "Ask AI to edit..." : "Import video to start chat"}
           placeholderTextColor="#A1A1AA"
           value={inputText}
           onChangeText={setInputText}
           onSubmitEditing={() => sendMessage(inputText)}
+          editable={hasMedia}
         />
-        <TouchableOpacity style={styles.sendButton} onPress={() => sendMessage(inputText)} disabled={isProcessing}>
+        <TouchableOpacity 
+          style={[styles.sendButton, (!hasMedia || isProcessing) && styles.sendButtonDisabled]} 
+          onPress={() => sendMessage(inputText)} 
+          disabled={!hasMedia || isProcessing}
+        >
           {isProcessing ? (
             <ActivityIndicator size="small" color="#09090B" />
           ) : (
-            <Text style={styles.sendButtonText}>Send</Text>
+            <Text style={[styles.sendButtonText, (!hasMedia || isProcessing) && styles.sendButtonTextDisabled]}>Send</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -269,6 +283,9 @@ const styles = StyleSheet.create({
     borderColor: '#27272A',
     fontSize: 15,
   },
+  inputDisabled: {
+    opacity: 0.5,
+  },
   sendButton: { 
     backgroundColor: '#FAFAFA', 
     paddingHorizontal: 20, 
@@ -277,5 +294,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center', 
     alignItems: 'center' 
   },
+  sendButtonDisabled: {
+    backgroundColor: '#27272A',
+  },
   sendButtonText: { color: '#09090B', fontWeight: 'bold', fontSize: 15 },
+  sendButtonTextDisabled: { color: '#52525B' },
 });
