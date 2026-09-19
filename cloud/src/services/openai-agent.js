@@ -128,6 +128,9 @@ Do not explain your thought process in plain text. Simply execute the tool calls
         if (delta.content) {
           yield { type: 'text', content: delta.content };
         }
+        if (delta.reasoning_content) {
+          yield { type: 'text', content: delta.reasoning_content };
+        }
 
         if (delta.tool_calls && delta.tool_calls.length > 0) {
           const tc = delta.tool_calls[0];
@@ -139,7 +142,7 @@ Do not explain your thought process in plain text. Simply execute the tool calls
             toolCallId = tc.id;
             functionName = tc.function.name;
             functionArgs = tc.function.arguments || '';
-          } else if (tc.function && tc.function.arguments) {
+          } else if (tc.function && tc.function.arguments !== undefined) {
             functionArgs += tc.function.arguments;
           }
         }
