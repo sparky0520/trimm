@@ -183,9 +183,13 @@ export const useProjectStore = create<ProjectState>((set) => ({
 
     newSchema.timeline = newTimeline;
 
-    // Assign an ID if this is the first edit operation
     if (!newSchema.id) {
-      newSchema.id = `proj_${generateId()}`;
+      // Use standard UUID v4 for the project ID so it can be inserted into Supabase UUID columns
+      newSchema.id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
     }
 
     // Fire and forget sync to backend
