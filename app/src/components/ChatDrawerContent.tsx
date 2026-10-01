@@ -6,6 +6,33 @@ import { useAuthStore } from '../store/authStore';
 import { supabase } from '../utils/supabase';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
+const getReadableError = (error: unknown): string => {
+  if (!error) return 'Unknown error';
+
+  if (error instanceof Error) {
+    const anyError = error as Error & { code?: string; status?: number; details?: string; hint?: string };
+    const parts = [
+      anyError.code ? `code=${anyError.code}` : null,
+      typeof anyError.status === 'number' ? `status=${anyError.status}` : null,
+      anyError.message ? `message=${anyError.message}` : null,
+      anyError.details ? `details=${anyError.details}` : null,
+      anyError.hint ? `hint=${anyError.hint}` : null,
+    ].filter(Boolean);
+
+    return parts.length > 0 ? parts.join('\n') : 'Unknown error';
+  }
+
+  if (typeof error === 'object') {
+    try {
+      return JSON.stringify(error, null, 2);
+    } catch {
+      return String(error);
+    }
+  }
+
+  return String(error);
+};
+
 export function ChatDrawerContent(props: DrawerContentComponentProps) {
   const { user, signOut } = useAuthStore();
   const [showSignOut, setShowSignOut] = useState(false);
@@ -58,9 +85,10 @@ export function ChatDrawerContent(props: DrawerContentComponentProps) {
       } else {
         throw new Error('no ID token present!');
       }
-    } catch (error: any) {
-      console.error(error);
-      Alert.alert('Sign in failed', error.message);
+    } catch (error: unknown) {
+      const details = getReadableError(error);
+      console.error('Google sign-in failed:', details, error);
+      Alert.alert('Sign in failed', details);
     }
   };
 
@@ -308,4 +336,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   }
 });
-
