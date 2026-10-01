@@ -5,7 +5,6 @@ import EventSource from 'react-native-sse';
 import { useProjectStore } from '../store/projectStore';
 import { useAuthStore } from '../store/authStore';
 import { BACKEND_URL } from '../utils/config';
-import { AssetPicker } from './AssetPicker';
 
 interface Message {
   id: string;

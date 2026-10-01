@@ -41,7 +41,7 @@ export function ChatDrawerContent(props: DrawerContentComponentProps) {
   const [pastChats, setPastChats] = useState<{id: string, title: string}[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchChats = async () => {
+  const fetchChats = useCallback(async () => {
     if (!user) {
       setPastChats([]);
       return;
@@ -60,17 +60,17 @@ export function ChatDrawerContent(props: DrawerContentComponentProps) {
     } catch (e) {
       console.error("Error fetching chats", e);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     fetchChats();
-  }, [user]);
+  }, [fetchChats]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchChats();
     setRefreshing(false);
-  }, [user]);
+  }, [fetchChats]);
 
   const handleSignIn = async () => {
     try {

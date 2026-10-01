@@ -24,10 +24,8 @@ const NodeRenderer = ({ node, currentTime, width, height, typeface }: { node: Ti
       return op;
     });
   });
-
-  const isActive = useDerivedValue(() => {
-    return currentTime.value >= node.start && currentTime.value <= node.end && animatedOpacity.value > 0;
-  });
+  const textOpacityMultiplier = node.type === 'text' ? ((node as TextNode).opacity ?? 1) : 1;
+  const bgOpacity = useDerivedValue(() => animatedOpacity.value * textOpacityMultiplier);
 
   if (node.type === 'video' || node.type === 'audio') return null;
 
@@ -52,7 +50,6 @@ const NodeRenderer = ({ node, currentTime, width, height, typeface }: { node: Ti
     const x = textNode.transform?.x !== undefined ? 0 : defaultX;
     const y = textNode.transform?.y !== undefined ? 0 : defaultY;
     const color = textNode.color || 'white';
-    const bgOpacity = useDerivedValue(() => animatedOpacity.value * (textNode.opacity ?? 1));
 
     return (
       <Group transform={animatedTransform as any} opacity={animatedOpacity}>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { StyleSheet, View, Text, KeyboardAvoidingView, Platform, TouchableOpacity, Alert, Dimensions, DeviceEventEmitter } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView, Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -28,7 +28,7 @@ function TrimmStudioScreen({ navigation }: any): React.JSX.Element {
   const presentSchema = useProjectStore(state => state.present);
   const hasMedia = presentSchema.timeline.length > 0;
 
-  const handleExport = async () => {
+  const handleExport = useCallback(async () => {
     try {
       setExportProgress(0);
       const uri = await exportProject(presentSchema, (prog) => {
@@ -40,7 +40,7 @@ function TrimmStudioScreen({ navigation }: any): React.JSX.Element {
     } finally {
       setExportProgress(null);
     }
-  };
+  }, [presentSchema]);
 
   useEffect(() => {
     if (isPlaying) {
@@ -64,7 +64,7 @@ function TrimmStudioScreen({ navigation }: any): React.JSX.Element {
       previewSub.remove();
       exportSub.remove();
     };
-  }, [isPlaying, handleExport]);
+  }, [handleExport]);
 
   const panGesture = Gesture.Pan()
     .onChange((e) => {

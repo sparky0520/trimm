@@ -1,13 +1,12 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
-import { Canvas, Skia, useTypeface } from '@shopify/react-native-skia';
+import { Canvas, useTypeface } from '@shopify/react-native-skia';
 import { SharedValue, useAnimatedReaction, useDerivedValue, runOnJS, useAnimatedStyle } from 'react-native-reanimated';
 import Animated from 'react-native-reanimated';
 import Video, { VideoRef } from 'react-native-video';
 import { useProjectStore } from '../store/projectStore';
 import { VideoNode } from '../types/schema';
 import { getAnimatedOpacity, getAnimatedTransform } from '../utils/animations';
-import { drawTimelineToCanvas } from '../utils/canvasRenderer';
 import { TimelineSkiaRenderer } from './TimelineSkiaRenderer';
 
 const { width, height: screenHeight } = Dimensions.get('window');

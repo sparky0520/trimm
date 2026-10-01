@@ -25,7 +25,7 @@ export const getAnimatedTransform = (
   node: TimelineNode, 
   time: number, 
   width: number, 
-  height: number
+  _height: number
 ): { translateX?: number; translateY?: number; scale?: number; rotate?: string | number }[] | undefined => {
   'worklet';
   if (time < node.start || time > node.end) return undefined;
