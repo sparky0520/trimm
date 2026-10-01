@@ -136,7 +136,7 @@ function App(): React.JSX.Element {
   useEffect(() => {
     initialize();
     GoogleSignin.configure({
-      webClientId: '781659307868-b58g4qtacl6hjvdfs19nel896kbdomm8.apps.googleusercontent.com',
+      webClientId: '781659307868-5o0i2h1am54t81i68skqqvei837m34fg.apps.googleusercontent.com',
       iosClientId: '781659307868-19r9atulmptqncgqnsm08ttin94l850p.apps.googleusercontent.com',
     });
   }, [initialize]);
