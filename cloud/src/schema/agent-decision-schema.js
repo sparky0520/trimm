@@ -241,6 +241,74 @@ const PROPOSE_CLEAR_ROTATION_TOOL = Object.freeze({
   }
 });
 
+const PROPOSE_APPLY_VIDEO_DSL_TOOL = Object.freeze({
+  name: 'propose_apply_video_dsl',
+  description: `Generate a Universal Video JSON DSL document to edit the video. Use this to apply complex spatial animations, compositing, blend modes, audio fades, and mathematical effects (like colorMatrix). 
+Recipes:
+- Vintage Film / Warmth: Use a colorMatrix to boost reds and yellows. Reduce contrast slightly. "effects": [{"type": "colorMatrix", "matrix": [1.2, 0.1, 0, 0, 0,  0, 0.9, 0, 0, 0,  0, 0, 0.8, 0, 0,  0, 0, 0, 1, 0]}]
+- VHS Glitch: Duplicate the target media layer 3 times perfectly overlapping. On layer 1, apply a colorMatrix isolating Red. On layer 2, isolate Green. On layer 3, isolate Blue. Set all three layers blendMode to screen. Apply rapid spatial keyframes (jittering x by +/- 5 pixels) to the Red and Blue layers.`,
+  parameters: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id', 'enabled', 'confidence', 'reason', 'dsl'],
+    properties: {
+      id: { type: 'string' },
+      enabled: { type: 'boolean' },
+      confidence: { type: 'number' },
+      reason: { type: 'string' },
+      dsl: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['project', 'timeline'],
+        properties: {
+          project: {
+            type: 'object', additionalProperties: false, required: ['dimensions', 'fps', 'durationMs'],
+            properties: {
+              dimensions: { type: 'object', additionalProperties: false, required: ['width', 'height'], properties: { width: { type: 'number' }, height: { type: 'number' } } },
+              fps: { type: 'number' }, durationMs: { type: 'integer' }
+            }
+          },
+          timeline: {
+            type: 'object', additionalProperties: false, required: ['layers'],
+            properties: {
+              layers: {
+                type: 'array', items: {
+                  type: 'object', additionalProperties: false, required: ['id', 'type', 'startMs', 'durationMs'],
+                  properties: {
+                    id: { type: 'string' }, type: { type: 'string' },
+                    source: { type: 'object', additionalProperties: false, required: ['url'], properties: { url: { type: 'string' }, mediaStartTimeMs: { type: 'integer' } } },
+                    startMs: { type: 'integer' }, durationMs: { type: 'integer' },
+                    spatial: {
+                      type: 'object', additionalProperties: false, required: ['keyframes'], properties: {
+                        anchor: { type: 'object', additionalProperties: false, required: ['x', 'y'], properties: { x: { type: 'number' }, y: { type: 'number' } } },
+                        keyframes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['timeMs'], properties: { timeMs: { type: 'integer' }, x: { type: 'number' }, y: { type: 'number' }, scale: { type: 'number' }, rotation: { type: 'number' }, easing: { type: 'string' } } } }
+                      }
+                    },
+                    compositing: {
+                      type: 'object', additionalProperties: false, properties: {
+                        blendMode: { type: 'string' },
+                        opacity: { type: 'object', additionalProperties: false, required: ['keyframes'], properties: { keyframes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['timeMs', 'value'], properties: { timeMs: { type: 'integer' }, value: { type: 'number' }, easing: { type: 'string' } } } } } }
+                      }
+                    },
+                    audio: {
+                      type: 'object', additionalProperties: false, properties: {
+                        volume: { type: 'object', additionalProperties: false, required: ['keyframes'], properties: { keyframes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['timeMs', 'value'], properties: { timeMs: { type: 'integer' }, value: { type: 'number' }, easing: { type: 'string' } } } } } }
+                      }
+                    },
+                    effects: {
+                      type: 'array', items: { type: 'object', additionalProperties: false, required: ['type'], properties: { type: { type: 'string' }, matrix: { type: 'array', items: { type: 'number' } } } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+});
+
 
 
 
@@ -260,6 +328,7 @@ const getAgentTools = (platform) => {
     PROPOSE_SET_ROTATION_TOOL,
     PROPOSE_SET_SPEED_TOOL, PROPOSE_SET_VOLUME_TOOL,
     PROPOSE_CLEAR_ROTATION_TOOL,
+    PROPOSE_APPLY_VIDEO_DSL_TOOL,
     ASK_CLARIFICATION_TOOL, FINALIZE_EDIT_PROGRAM_TOOL,
     REMOVE_DRAFT_OPERATION_TOOL, FINISH_WITHOUT_PROPOSAL_TOOL,
   ]);

@@ -32,12 +32,13 @@ public enum EditOperation: Codable, Equatable {
     case addBgm(id: String, enabled: Bool, target: OperationTarget?, prompt: String, reason: String, url: String)
     case addBgmEffect(id: String, enabled: Bool, target: OperationTarget?, prompt: String, reason: String, url: String)
     case addSfx(id: String, enabled: Bool, target: OperationTarget?, prompt: String, reason: String, url: String)
+    case applyVideoDSL(id: String, enabled: Bool, reason: String, dsl: String)
     
     private enum CodingKeys: String, CodingKey {
         case type, id, enabled, ranges, confidence, reason, pacing
         case grade, target, parameter, value, dialogueLufs, musicDuckDb, attackMs, releaseMs
         case ratio, text, designBlueprint, range, preset, intensity, cues, speakerId, style
-        case customBlueprint, prompt, role, url
+        case customBlueprint, prompt, role, url, dsl
     }
     
     public init(from decoder: Decoder) throws {
@@ -131,6 +132,12 @@ public enum EditOperation: Codable, Equatable {
                 reason: try container.decodeIfPresent(String.self, forKey: .reason) ?? "",
                 url: try container.decodeIfPresent(String.self, forKey: .url) ?? ""
             )
+        case "apply_video_dsl":
+            self = .applyVideoDSL(
+                id: id, enabled: enabled,
+                reason: try container.decodeIfPresent(String.self, forKey: .reason) ?? "",
+                dsl: try container.decode(String.self, forKey: .dsl)
+            )
         default:
             throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Unknown edit operation type: \(type)")
         }
@@ -223,6 +230,12 @@ public enum EditOperation: Codable, Equatable {
             try container.encode(prompt, forKey: .prompt)
             try container.encode(reason, forKey: .reason)
             try container.encode(url, forKey: .url)
+        case .applyVideoDSL(let id, let enabled, let reason, let dsl):
+            try container.encode("apply_video_dsl", forKey: .type)
+            try container.encode(id, forKey: .id)
+            try container.encode(enabled, forKey: .enabled)
+            try container.encode(reason, forKey: .reason)
+            try container.encode(dsl, forKey: .dsl)
         }
     }
 }
@@ -241,6 +254,7 @@ extension EditOperation {
         case .addBgm(let id, _, _, _, _, _): return id
         case .addBgmEffect(let id, _, _, _, _, _): return id
         case .addSfx(let id, _, _, _, _, _): return id
+        case .applyVideoDSL(let id, _, _, _): return id
         }
     }
 }

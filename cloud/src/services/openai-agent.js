@@ -42,12 +42,9 @@ function createOpenAIDecisionProvider({
       ...(Array.isArray(toolsArray) && toolsArray.length > 0 ? { tools: toolsArray.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })) } : {}),
     };
 
-    console.log('[DEBUG] OpenAI Request:', JSON.stringify(requestPayload, null, 2));
-
     let response;
     try {
       response = await openai.chat.completions.create(requestPayload, { maxRetries: 4 });
-      console.log('[DEBUG] OpenAI Response:', JSON.stringify(response, null, 2));
     } catch (err) {
       console.error(`[DEBUG] OpenAI API Error:`, err);
       throw err;
@@ -302,6 +299,9 @@ If you decide no edits are needed, or if you cannot execute the task, you MUST c
             console.error("Failed to generate transition blueprint", e);
             return { type: operationName, target, ...payload, designBlueprint: "{}" };
           }
+        }
+        if (operationName === 'apply_video_dsl') {
+          return { type: operationName, target, ...payload, dsl: typeof payload.dsl === 'string' ? payload.dsl : JSON.stringify(payload.dsl) };
         }
 
         return { type: operationName, target, ...payload };
