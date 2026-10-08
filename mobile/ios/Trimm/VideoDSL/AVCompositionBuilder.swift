@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import CoreImage
 
 class AVCompositionBuilder {
     enum BuilderError: Error {
@@ -67,7 +68,7 @@ class AVCompositionBuilder {
                                 let startTransform = preferredTransform.concatenating(self.transform(for: startKf))
                                 let endTransform = preferredTransform.concatenating(self.transform(for: endKf))
                                 
-                                layerInstruction.setTransformRamp(fromStartTransform: startTransform, toEndTransform: endTransform, timeRange: rampRange)
+                                layerInstruction.setTransformRamp(fromStart: startTransform, toEnd: endTransform, timeRange: rampRange)
                             }
                         }
                     } else {
