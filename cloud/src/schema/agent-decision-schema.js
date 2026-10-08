@@ -86,91 +86,45 @@ const PROPOSE_ASPECT_RATIO_TOOL = operationTool(
 },
 );
 
-const PROPOSE_TEXT_OVERLAY_TOOL_ANDROID = operationTool(
+const PROPOSE_ADD_TEXT_OVERLAY_TOOL = operationTool(
   'propose_add_text_overlay',
-  'Generate a native text overlay with dynamic graphics. \nSUPPORTED STYLES ONLY:\n- Fonts: "plain", "comic", "neon", "typewriter", "elegant"\n- Text Style: color, strokeColor, strokeWidth, shadowRadius, shadowColor, fontSize\n- Layout: posX, posY, scale, rotation\n- Background Shapes: rectangle, circle, starburst (with color, stroke, dimensions)\nIMPORTANT: If the user requests a style, font, or animation NOT explicitly listed above (e.g. gradients, italics, 3D text, animations), do NOT use this tool. Instead, use finish_without_proposal or respond explaining that the requested style is not supported.',
-  ['sourceId', 'startMs', 'endMs', 'text', 'description', 'styling', 'reason'], {
+  'Add a simple text overlay. Use this for basic titles, subtitles, or labels. For complex animations or custom rendering, use propose_apply_video_dsl instead.',
+  ['sourceId', 'startMs', 'endMs', 'text', 'style', 'reason'], {
   ...targetRangeProperties,
   text: { type: 'string' },
-  description: { type: 'string', description: 'Describe the desired effect and graphics (e.g., comic book "BANG").' },
-  styling: { type: 'string', description: 'Detailed visual styling instructions restricted to supported styles (font size, colors, positioning, drop shadows).' }
-},
-);
+  style: { type: 'string', enum: ['standard', 'comic', 'neon', 'elegant', 'typewriter'] },
+});
 
-const PROPOSE_TEXT_OVERLAY_TOOL_IOS = operationTool(
-  'propose_add_text_overlay',
-  'Generate a native text overlay with dynamic graphics for iOS. \nSUPPORTED STYLES ONLY:\n- Fonts: "plain", "comic", "neon", "typewriter", "elegant", "system-bold", "system-heavy"\n- Text Style: color, strokeColor, strokeWidth, shadowRadius, shadowColor, fontSize, CoreAnimation (glow, blur radius)\n- Layout: posX, posY, scale, rotation, zIndex\n- Animations (iOS exclusive): "fade", "scaleUp", "typewriter", "slideIn"\n- Background Shapes: rectangle, circle, starburst (with color, stroke, dimensions, cornerRadius)\nIMPORTANT: If the user requests a style NOT explicitly listed above, do NOT use this tool. Instead, use finish_without_proposal or respond explaining that the requested style is not supported.',
-  ['sourceId', 'startMs', 'endMs', 'text', 'description', 'styling', 'reason'], {
-  ...targetRangeProperties,
-  text: { type: 'string' },
-  description: { type: 'string', description: 'Describe the desired effect and graphics (e.g., comic book "BANG").' },
-  styling: { type: 'string', description: 'Detailed visual styling instructions restricted to supported styles (font size, colors, positioning, drop shadows, animations).' }
-},
-);
-
-const PROPOSE_ADD_SECTION_TRANSITION_TOOL_ANDROID = operationTool(
+const PROPOSE_ADD_SECTION_TRANSITION_TOOL = operationTool(
   'propose_add_section_transition',
-  'Add a video transition (e.g. fade-in, fade-out, crossfade, dissolve, wipe, slide, zoom, dip-to-black). Describe the desired effect in the description for custom transitions.',
-  ['sourceId', 'startMs', 'endMs', 'preset', 'description', 'reason'], {
+  'Add a standard video transition between clips. For complex custom transitions, use propose_apply_video_dsl instead.',
+  ['sourceId', 'startMs', 'endMs', 'type', 'reason'], {
   ...targetRangeProperties,
-  preset: { type: 'string' },
-  description: { type: 'string' },
-},
-);
-
-const PROPOSE_ADD_SECTION_TRANSITION_TOOL_IOS = operationTool(
-  'propose_add_section_transition',
-  'Add a video transition (e.g. fade-in, fade-out, crossfade, dissolve, wipe, slide, zoom, dip-to-black, push, reveal, CoreImage custom filters like ripples or blur-fades). Describe the desired effect in the description for custom transitions.',
-  ['sourceId', 'startMs', 'endMs', 'preset', 'description', 'reason'], {
-  ...targetRangeProperties,
-  preset: { type: 'string' },
-  description: { type: 'string' },
-},
-);
-
-
-
-const PROPOSE_ADD_BGM_TOOL = operationTool(
-  'propose_add_bgm',
-  'Generate and add a continuous background music bed. This tool is strictly for long-duration background music that spans the video. Do not use this for short musical effects.',
-  ['prompt', 'reason'], {
-  ...targetRangeProperties,
-  prompt: { type: 'string' },
-});
-
-const PROPOSE_ADD_BGM_EFFECT_TOOL = operationTool(
-  'propose_add_bgm_effect',
-  'Generate and add a longer duration musical effect (default length around 10 to 12 seconds). Use this for musical stingers, crescendos, or drum rolls meant to be layered at specific times. Examples: "10 second rising crescendo", "long drum roll", "suspenseful orchestral build".',
-  ['sourceId', 'startMs', 'endMs', 'prompt', 'reason'], {
-  ...targetRangeProperties,
-  prompt: { type: 'string' },
-});
-
-const PROPOSE_ADD_SFX_TOOL = operationTool(
-  'propose_add_sfx',
-  'Generate and add a short duration foley or sound effect (default length around 2 seconds). Do NOT use this for longer musical effects; use propose_add_bgm_effect for those. Examples: "short swoosh", "punch", "door slam", "quick cymbal crash".',
-  ['sourceId', 'startMs', 'endMs', 'prompt', 'reason'], {
-  ...targetRangeProperties,
-  prompt: { type: 'string' },
+  type: { type: 'string', enum: ['fade', 'dissolve', 'wipe', 'slide', 'zoom'] },
 });
 
 
-const ASK_CLARIFICATION_TOOL = Object.freeze({
-  name: 'ask_clarification',
-  description: 'Pause and ask one to three consequential questions if the user request is vague, needs additional direction, or involves an unresolved consequential choice. Prefer concrete options and recommend the safest useful default when possible.',
+
+
+const ASK_USER_QUESTION_TOOL = Object.freeze({
+  name: 'ask_user_question',
+  description: 'Pause and ask the user a question if the request is vague, needs additional direction, or involves an unresolved consequential choice. Use this only when absolutely necessary.',
   parameters: {
     type: 'object', additionalProperties: false, required: ['questions'], properties: {
       questions: {
         type: 'array', items: {
-          type: 'object', additionalProperties: false, required: ['id', 'prompt', 'options', 'recommendedOptionId'],
+          type: 'object', additionalProperties: false, required: ['id', 'question', 'options', 'isMultiSelect'],
           properties: {
-            id: { type: 'string' }, prompt: { type: 'string' },
+            id: { type: 'string' },
+            question: { type: 'string' },
+            isMultiSelect: { type: 'boolean', description: 'If true, allows the user to select multiple options.' },
             options: {
               type: 'array', items: {
                 type: 'object', additionalProperties: false, required: ['id', 'label', 'description'],
                 properties: { id: { type: 'string' }, label: { type: 'string' }, description: { type: 'string' } },
               }
-            }, recommendedOptionId: { type: 'string', description: 'Recommended option ID, or an empty string when no recommendation is justified.' },
+            },
+            recommendedOptionId: { type: 'string', description: 'Recommended option ID, or an empty string when no recommendation is justified.' },
           },
         }
       },
@@ -197,7 +151,7 @@ const REMOVE_DRAFT_OPERATION_TOOL = Object.freeze({
   },
 });
 const FINISH_WITHOUT_PROPOSAL_TOOL = Object.freeze({
-  name: 'finish_without_proposal', description: 'Finish safely when the request is unsupported or cannot be grounded.',
+  name: 'finish_without_proposal', description: 'Use this ONLY AS A LAST RESORT when the user request is fundamentally impossible or completely unsupported. Make every attempt to use other tools or apply video DSL before giving up.',
   parameters: { type: 'object', additionalProperties: false, required: ['reason'], properties: { reason: { type: 'string' } } },
 });
 
@@ -243,7 +197,7 @@ const PROPOSE_CLEAR_ROTATION_TOOL = Object.freeze({
 
 const PROPOSE_APPLY_VIDEO_DSL_TOOL = Object.freeze({
   name: 'propose_apply_video_dsl',
-  description: `Generate a Universal Video JSON DSL document to edit the video. Use this to apply complex spatial animations, compositing, blend modes, audio fades, and mathematical effects (like colorMatrix). 
+  description: `Generate a Universal Video JSON DSL document to edit the video. Use this as your "God Tool" to apply advanced motion graphics, complex spatial animations, custom styling, compositing, blend modes, and mathematical effects (like colorMatrix) that go beyond the basic predefined tools. 
 Recipes:
 - Vintage Film / Warmth: Use a colorMatrix to boost reds and yellows. Reduce contrast slightly. "effects": [{"type": "colorMatrix", "matrix": [1.2, 0.1, 0, 0, 0,  0, 0.9, 0, 0, 0,  0, 0, 0.8, 0, 0,  0, 0, 0, 1, 0]}]
 - VHS Glitch: Duplicate the target media layer 3 times perfectly overlapping. On layer 1, apply a colorMatrix isolating Red. On layer 2, isolate Green. On layer 3, isolate Blue. Set all three layers blendMode to screen. Apply rapid spatial keyframes (jittering x by +/- 5 pixels) to the Red and Blue layers.`,
@@ -316,20 +270,17 @@ Recipes:
 
 
 
-const getAgentTools = (platform) => {
-  const isIOS = platform === 'ios';
+const getAgentTools = () => {
   return Object.freeze([
     PROPOSE_REMOVE_RANGES_TOOL,
     PROPOSE_DIALOGUE_LOUDNESS_TOOL, PROPOSE_MUSIC_DUCKING_TOOL,
     PROPOSE_CAPTIONS_TOOL, PROPOSE_ASPECT_RATIO_TOOL,
-    isIOS ? PROPOSE_TEXT_OVERLAY_TOOL_IOS : PROPOSE_TEXT_OVERLAY_TOOL_ANDROID,
-    isIOS ? PROPOSE_ADD_SECTION_TRANSITION_TOOL_IOS : PROPOSE_ADD_SECTION_TRANSITION_TOOL_ANDROID,
-    PROPOSE_ADD_BGM_TOOL, PROPOSE_ADD_BGM_EFFECT_TOOL, PROPOSE_ADD_SFX_TOOL,
+    PROPOSE_ADD_TEXT_OVERLAY_TOOL, PROPOSE_ADD_SECTION_TRANSITION_TOOL,
     PROPOSE_SET_ROTATION_TOOL,
     PROPOSE_SET_SPEED_TOOL, PROPOSE_SET_VOLUME_TOOL,
     PROPOSE_CLEAR_ROTATION_TOOL,
     PROPOSE_APPLY_VIDEO_DSL_TOOL,
-    ASK_CLARIFICATION_TOOL, FINALIZE_EDIT_PROGRAM_TOOL,
+    ASK_USER_QUESTION_TOOL, FINALIZE_EDIT_PROGRAM_TOOL,
     REMOVE_DRAFT_OPERATION_TOOL, FINISH_WITHOUT_PROPOSAL_TOOL,
   ]);
 };

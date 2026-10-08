@@ -17,7 +17,7 @@ function createOpenAIDecisionProvider({
 
   async function generate({
     systemPolicy, contents, temperature, purpose = 'planning',
-    responseFormat = null, tools = true, platform = 'android',
+    responseFormat = null, tools = true
   }) {
     if (!apiKey) throw Object.assign(new Error('API key is not configured'), { status: 503, code: 'provider_unconfigured' });
 
@@ -33,7 +33,7 @@ function createOpenAIDecisionProvider({
       messages.push({ role: 'user', content: String(contents) });
     }
 
-    const toolsArray = typeof tools === 'boolean' && tools ? getAgentTools(platform) : tools;
+    const toolsArray = typeof tools === 'boolean' && tools ? getAgentTools() : tools;
     
     const requestPayload = {
       model,
@@ -67,135 +67,49 @@ function createOpenAIDecisionProvider({
     };
   }
 
-  const generateTextOverlayConfig = async ({ description, text, videoWidth = 1920, videoHeight = 1080, platform = 'android' }) => {
-    const isIOS = platform === 'ios';
-    const prompt = `You are an AI video editor designing a native text overlay with vector graphics.
-Your goal is to parse the user's description and generate a JSON blueprint (Generative Canvas DSL).
-This blueprint defines the background shapes (if requested), text styling, and layout.
 
-The target video has dimensions: ${videoWidth}x${videoHeight} (width x height). Text wrapping is handled automatically (center aligned).
 
-Output a strict, valid JSON object. DO NOT include comments in the JSON. Include ONLY the necessary fields. Omit unused or default fields to avoid bloat.
+  const chatCompletion = async ({ history = [], sources = [], transcript = [], existingOperations = [] }) => {
+    
+    // Pre-process transcript for LLM visibility
+    const preprocessedTranscript = [];
+    let lastSpeakerId = null;
+    let lastEndMs = 0;
 
-Use the following exact JSON schema to structure your response:
-
-{
-  "type": "object",
-  "properties": {
-    "layout": {
-      "type": "object",
-      "description": "Optional. Defines the position, scale, and rotation of the overlay.",
-      "properties": {
-        "posX": { "type": "number", "description": "Horizontal position. -1.0 (left) to 1.0 (right). 0 is center. Default: 0.0" },
-        "posY": { "type": "number", "description": "Vertical position. -1.0 (bottom) to 1.0 (top). 0 is center. Default: 0.8" },
-        "scale": { "type": "number", "description": "Scale multiplier. Default: 1.0" },
-        "rotation": { "type": "number", "description": "Rotation in degrees. Default: 0.0" }
+    for (const word of transcript) {
+      const startMs = word.startMs ?? word.range?.startMs ?? 0;
+      const endMs = word.endMs ?? word.range?.endMs ?? startMs;
+      
+      // 1. Inject speaker change events
+      if (word.speakerId && word.speakerId !== lastSpeakerId) {
+        preprocessedTranscript.push({
+          type: "speaker_change",
+          newSpeaker: word.speakerId,
+          timestampMs: startMs
+        });
+        lastSpeakerId = word.speakerId;
       }
-    },
-    "backgroundShapes": {
-      "type": "array",
-      "description": "Optional. Omit if no background is needed. Defines shapes drawn behind the text.",
-      "items": {
-        "type": "object",
-        "properties": {
-          "type": { "type": "string", "enum": ["rectangle", "circle", "starburst"] },
-          "color": { "type": "string", "description": "Hex color code, e.g. '#000000'" },
-          "strokeColor": { "type": "string", "description": "Hex color code" },
-          "strokeWidth": { "type": "number" },
-          "width": { "type": "number", "description": "Only for rectangle. Width of the shape." },
-          "height": { "type": "number", "description": "Only for rectangle. Height of the shape." },
-          "cornerRadius": { "type": "number", "description": "Only for rectangle." },
-          "outerRadius": { "type": "number", "description": "Only for circle or starburst." },
-          "innerRadius": { "type": "number", "description": "Only for starburst." },
-          "points": { "type": "number", "description": "Only for starburst. Number of points." }
-        }
+
+      // 2. Inject explicit SILENCE blocks for gaps >= 400ms
+      const gap = startMs - lastEndMs;
+      if (lastEndMs > 0 && gap >= 400) {
+        preprocessedTranscript.push({
+          type: "silence",
+          startMs: lastEndMs,
+          endMs: startMs,
+          durationMs: gap
+        });
       }
-    },
-    "textStyle": {
-      "type": "object",
-      "description": "Optional. Defines the typography and styling of the text.",
-      "properties": {
-        "color": { "type": "string", "description": "Hex color code, e.g. '#FFFFFF'" },
-        "strokeColor": { "type": "string", "description": "Hex color code, e.g. '#000000'" },
-        "strokeWidth": { "type": "number", "description": "Width of the text outline." },
-        "shadowRadius": { "type": "number", "description": "Radius of the text drop shadow." },
-        "shadowColor": { "type": "string", "description": "Hex color code, e.g. '#000000'" },
-        "fontFamily": { "type": "string", "enum": ["plain", "comic", "neon", "typewriter", "elegant"${isIOS ? ', "system-bold", "system-heavy"' : ''}], "description": "Default: 'plain'" },
-        "fontSize": { "type": "number", "description": "Font size in pixels. Default: 120.0" }${isIOS ? `,\n        "animation": { "type": "string", "enum": ["none", "fade", "scaleUp", "typewriter", "slideIn"], "description": "Optional text entrance animation." }` : ''}
-      }
-    }
-  }
-}
 
-Target text to display: "${text}"
-Effect description: ${description}
-
-Return ONLY a valid JSON object. No markdown formatting, no backticks, no comments.`;
-
-    let history = [];
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      const response = await generate({
-        systemPolicy: "You are a Generative Canvas DSL design agent.",
-        contents: history.length > 0 ? history : prompt,
-        temperature: 0.4,
-        purpose: 'text_overlay_generation',
-        tools: false,
-        responseFormat: { type: 'json_object' }
+      // 3. Pre-calculate durationMs on the word itself
+      preprocessedTranscript.push({
+        ...word,
+        durationMs: endMs - startMs
       });
 
-      try {
-        let raw = response.rawText || '{}';
-        // Strip any markdown code blocks
-        raw = raw.replace(/^```json\s*/, '').replace(/```\s*$/, '').trim();
-        return JSON.parse(raw);
-      } catch (e) {
-        if (attempt === 3) throw Object.assign(new Error("Failed to parse text overlay response"), { code: 'text_overlay_error' });
-        history = [
-          { role: 'user', content: prompt },
-          { role: 'assistant', content: response.rawText || '' },
-          { role: 'user', content: "The response was not valid JSON. Please fix it and output ONLY valid JSON. Do not include comments in JSON. Error: " + e.message }
-        ];
-      }
+      lastEndMs = endMs;
     }
-  };
 
-  const generateTransitionConfig = async ({ description, platform = 'android' }) => {
-    const isIOS = platform === 'ios';
-    const schema = isIOS 
-      ? `{ "transitionName": { "type": "string", "enum": ["CIDissolveTransition", "CISwipeTransition", "CIRippleTransition", "CIFlashTransition", "CIModTransition", "CICopyMachineTransition", "CIPageCurlTransition"] }, "durationMs": { "type": "number" } }`
-      : `{ "type": "object", "properties": { "shaderType": { "type": "string" }, "durationMs": { "type": "number" } } }`;
-
-    const prompt = `You are an AI video editor designing a custom video transition.
-Your goal is to parse the user's description and generate a JSON blueprint.
-Return ONLY a valid JSON blueprint matching the required schema: ${schema}
-
-Effect description: ${description}`;
-
-    let history = [];
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      const response = await generate({
-        systemPolicy: "You are a Generative Canvas DSL design agent.",
-        contents: history.length > 0 ? history : prompt,
-        temperature: 0.4,
-        purpose: 'transition_generation',
-        tools: false,
-        responseFormat: { type: 'json_object' }
-      });
-
-      try {
-        return JSON.parse(response.rawText);
-      } catch (e) {
-        if (attempt === 3) throw Object.assign(new Error("Failed to parse transition response"), { code: 'transition_error' });
-        history = [
-          { role: 'user', content: prompt },
-          { role: 'assistant', content: response.rawText || '' },
-          { role: 'user', content: "The response was not valid JSON. Please fix it and output ONLY valid JSON. Error: " + e.message }
-        ];
-      }
-    }
-  };
-
-  const chatCompletion = async ({ history = [], sources = [], transcript = [], existingOperations = [], platform = 'android' }) => {
     const systemPolicy = `You are an AI video editor Agent.
 Your job is to execute the user's editing requests by proposing operations using the appropriate tool(s).
 You have access to the chat history, transcript, source media, and the current project state (existing operations).
@@ -207,9 +121,20 @@ Existing Operations (current project state):
 ${JSON.stringify(existingOperations)}
 
 Transcript Data (use this to detect dead space, silences, and timings):
-${JSON.stringify(transcript)}
+${JSON.stringify(preprocessedTranscript)}
 
-If you decide no edits are needed, or if you cannot execute the task, you MUST call the finish_without_proposal tool and thoroughly explain WHY in the reason field. DO NOT use the ask_clarification tool.`;
+Use the finish_without_proposal tool ONLY AS A LAST RESORT if the request is fundamentally impossible. Always try to fulfill the user's creative intent using the available tools or the universal Video DSL before giving up. DO NOT use the ask_user_question tool unless absolutely necessary.
+
+# Tool Usage Examples (Few-Shot Prompts):
+
+1. User: "Cut out the silence at the beginning and the part where I messed up saying 'hello'."
+-> call propose_remove_ranges(ranges: [{startMs: 0, endMs: 2500}, {startMs: 14000, endMs: 18000}])
+
+2. User: "Put a comic book title on screen that says BAM!"
+-> call propose_add_text_overlay(text: "BAM!", style: "comic", startMs: 4000, endMs: 6000)
+
+3. User: "Make it look like a vintage VHS tape from the 90s."
+-> call propose_apply_video_dsl(dsl: {"project": {"dimensions": {"width": 1080, "height": 1920}, "fps": 30, "durationMs": 10000}, "timeline": {"layers": [{"id": "vhs_base", "type": "media", "startMs": 0, "durationMs": 10000, "effects": [{"type": "colorMatrix", "matrix": [1.2,0,0,0,0, 0,0.9,0,0,0, 0,0,0.8,0,0, 0,0,0,1,0]}]}]}})`;
 
     const contents = history.map(msg => ({ role: msg.role, content: msg.content }));
 
@@ -218,8 +143,7 @@ If you decide no edits are needed, or if you cannot execute the task, you MUST c
       contents,
       temperature: 0.2, // Slightly higher than 0.1 for conversational fluidity
       purpose: 'execution',
-      tools: true,
-      platform,
+      tools: true
     });
 
     const failure = response.toolCalls.find(tc => tc.name === 'finish_without_proposal');
@@ -234,12 +158,12 @@ If you decide no edits are needed, or if you cannot execute the task, you MUST c
       throw Object.assign(new Error("Agent did not return any operations or text response."), { code: 'worker_execution_error' });
     }
 
-    const clarification = response.toolCalls.find(tc => tc.name === 'ask_clarification');
+    const clarification = response.toolCalls.find(tc => tc.name === 'ask_user_question');
     if (clarification) {
       return { type: "clarification", questions: clarification.args.questions };
     }
 
-    const validOperations = response.toolCalls.filter(tc => tc.name.startsWith('propose_') || !['ask_clarification', 'finalize_edit_program', 'finish_without_proposal', 'remove_draft_operation'].includes(tc.name));
+    const validOperations = response.toolCalls.filter(tc => tc.name.startsWith('propose_') || !['ask_user_question', 'finalize_edit_program', 'finish_without_proposal', 'remove_draft_operation'].includes(tc.name));
 
     const removedOperations = response.toolCalls
       .filter(tc => tc.name === 'remove_draft_operation')
@@ -266,40 +190,7 @@ If you decide no edits are needed, or if you cannot execute the task, you MUST c
         if (operationName === 'set_music_ducking') {
           return { type: 'set_audio_levels', musicDuckDb: payload.duckDb, attackMs: payload.attackMs, releaseMs: payload.releaseMs, reason: payload.reason, target };
         }
-        if (operationName === 'add_text_overlay') {
-          try {
-            const defaultSourceId = payload.sourceId || (sources[0] && (sources[0].fingerprint || sources[0].id)) || 'default_source';
-            const source = sources.find(s => s.id === defaultSourceId || s.fingerprint === defaultSourceId) || sources[0];
-            const videoWidth = source?.width || 1920;
-            const videoHeight = source?.height || 1080;
 
-            let finalDescription = payload.description || payload.text;
-            if (payload.styling) {
-              finalDescription += `\nStyling Instructions: ${payload.styling}`;
-            }
-
-            const blueprint = await generateTextOverlayConfig({ 
-              description: finalDescription, 
-              text: payload.text,
-              videoWidth,
-              videoHeight,
-              platform
-            });
-            return { type: operationName, target, ...payload, designBlueprint: JSON.stringify(blueprint) };
-          } catch (e) {
-            console.error("Failed to generate text overlay blueprint", e);
-            return { type: operationName, target, ...payload, designBlueprint: "{}" };
-          }
-        }
-        if (operationName === 'add_section_transition') {
-          try {
-            const blueprint = await generateTransitionConfig({ description: payload.description, platform });
-            return { type: operationName, target, ...payload, designBlueprint: JSON.stringify(blueprint) };
-          } catch (e) {
-            console.error("Failed to generate transition blueprint", e);
-            return { type: operationName, target, ...payload, designBlueprint: "{}" };
-          }
-        }
         if (operationName === 'apply_video_dsl') {
           return { type: operationName, target, ...payload, dsl: typeof payload.dsl === 'string' ? payload.dsl : JSON.stringify(payload.dsl) };
         }

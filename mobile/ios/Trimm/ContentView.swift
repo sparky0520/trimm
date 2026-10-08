@@ -58,6 +58,9 @@ struct SidebarView: View {
             List {
                 Section(header: HStack {
                     Text("Past Chats")
+                        .textCase(nil)
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
                     if viewModel.state.isLoadingPastChats {
                         Spacer()
                         ProgressView().scaleEffect(0.5)
@@ -67,6 +70,8 @@ struct SidebarView: View {
                         Text("No past chats.")
                             .foregroundColor(.gray)
                             .italic()
+                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                            .listRowBackground(Color.clear)
                     } else {
                         ForEach(viewModel.state.pastChats) { chat in
                             Button(action: {
@@ -82,11 +87,14 @@ struct SidebarView: View {
                                     Label("Delete", systemImage: "trash")
                                 }
                             }
+                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                            .listRowBackground(Color.clear)
                         }
                     }
                 }
             }
-            .listStyle(.sidebar)
+            .listStyle(.plain)
+            .padding(.horizontal, 16)
             
             Divider()
             

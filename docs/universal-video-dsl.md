@@ -3,12 +3,12 @@
 ## Overview
 This document outlines the architecture for the "Universal Video JSON DSL" (Domain Specific Language). This architecture separates the AI Agent (the "Brain/Director") from the rendering client (the "Projectionist/Engine"). 
 
-The AI outputs a strictly typed JSON document representing video edits using universal mathematical primitives (time, space, color, composition) rather than platform-specific or tool-specific instructions. Any client (iOS AVFoundation, Android Media3, Web Remotion) acts merely as a parser that translates this JSON into native rendering commands.
+The AI outputs a strictly typed JSON document representing video edits. 
 
-## Core Philosophy
-1. **Platform Agnostic:** The JSON must never reference Apple-specific filters (e.g., `CIGaussianBlur`) or React Native specific tools.
-2. **Mathematical Primitives over "Magic Tools":** Instead of an effect called `"type": "cyberpunk"`, the AI uses raw math (e.g., a `colorMatrix` combined with a `blendMode`) to achieve styles.
-3. **Graceful Degradation:** Clients must be built to parse the JSON incrementally. If an older client encounters an unknown `"effect"` block, it logs a warning and skips it, rather than crashing the timeline.
+### Two-Tiered Engine
+We use a two-tiered system for edits:
+1. **Simple Tool Definitions:** For 90% of requests (basic text overlays, fast-forwards, jump cuts, audio ducking, simple fades), the LLM outputs a simplified tool format (e.g., `propose_add_text_overlay`). The iOS client translates these native intents instantly.
+2. **The Video DSL (God Tool):** For complex requests (VHS glitches, multi-layer compositing, color matrices), the LLM generates a complete Universal JSON DSL document using universal mathematical primitives (time, space, color, composition). Any client (iOS AVFoundation, Android Media3) acts merely as a parser that translates this JSON into native rendering commands.
 
 ---
 

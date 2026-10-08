@@ -1,10 +1,13 @@
 import SwiftUI
 import AVKit
+import PhotosUI
 
 public struct EditorScreen: View {
     @Bindable var viewModel: EditorViewModel
     @State private var prompt: String = ""
     @State private var isVideoVisible: Bool = true
+    @State private var showAssetsModal: Bool = false
+    @State private var selectedNewItem: PhotosPickerItem?
     
     public init(viewModel: EditorViewModel) {
         self.viewModel = viewModel
@@ -54,13 +57,31 @@ public struct EditorScreen: View {
             }
             
             // Input Area
-            HStack {
+            HStack(spacing: 12) {
+                PhotosPicker(selection: $selectedNewItem, matching: .videos) {
+                    Image(systemName: "plus")
+                        .font(.title2)
+                        .foregroundColor(.lavender)
+                }
+                .onChange(of: selectedNewItem) { _, newValue in
+                    if let newValue = newValue {
+                        Task {
+                            if let movie = try? await newValue.loadTransferable(type: MovieFile.self) {
+                                await viewModel.importSources(urls: [movie.url])
+                                // Transcription and preprocessing is triggered during importSources
+                            }
+                            selectedNewItem = nil // Reset
+                        }
+                    }
+                }
+                
                 TextField("Ask Trimm to change something...", text: $prompt)
                     .textFieldStyle(PlainTextFieldStyle())
-                    .padding(12)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
                     .background(Color.workspace)
                     .foregroundColor(.creamRaised)
-                    .cornerRadius(8)
+                    .cornerRadius(20)
                     .disabled(viewModel.state.isProcessing)
                 
                 Button(action: {
@@ -73,13 +94,22 @@ public struct EditorScreen: View {
                 }
                 .disabled(prompt.isEmpty || viewModel.state.isProcessing)
             }
-            .padding()
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
             .background(Color.ink)
         }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 16) {
+                    Button(action: {
+                        showAssetsModal = true
+                    }) {
+                        Image(systemName: "square.stack.3d.up")
+                    }
+                    .foregroundColor(.lavender)
+                    
                     Button(action: {
                         withAnimation {
                             isVideoVisible.toggle()
@@ -127,6 +157,25 @@ public struct EditorScreen: View {
             .cornerRadius(16)
             .shadow(radius: 20)
         }
+        }
+        .sheet(isPresented: $showAssetsModal) {
+            NavigationView {
+                List(viewModel.state.sources, id: \.id) { source in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(source.id).font(.headline)
+                        Text("Duration: \(source.durationMs)ms").font(.subheadline).foregroundColor(.gray)
+                        Text("Has Audio: \(source.hasAudio ? "Yes" : "No")").font(.caption).foregroundColor(.gray)
+                    }
+                    .padding(.vertical, 4)
+                }
+                .navigationTitle("Project Assets")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Done") { showAssetsModal = false }
+                    }
+                }
+            }
         }
     }
 }
