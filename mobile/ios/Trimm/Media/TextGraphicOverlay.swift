@@ -128,26 +128,34 @@ class TextGraphicOverlay: @unchecked Sendable {
                 }
             }
             
-            if let textStyle = blueprint["textStyle"] as? [String: Any] {
-                let textColor = parseColor(textStyle["color"] as? String, defaultColor: .white)
-                let fontSize = textStyle["fontSize"] as? CGFloat ?? 120.0
-                
-                let paragraphStyle = NSMutableParagraphStyle()
-                paragraphStyle.alignment = .center
-                
-                let font = UIFont.systemFont(ofSize: fontSize, weight: .bold)
-                
-                let attributes: [NSAttributedString.Key: Any] = [
-                    .font: font,
-                    .foregroundColor: textColor,
-                    .paragraphStyle: paragraphStyle
-                ]
-                
-                let textSize = text.boundingRect(with: CGSize(width: width - 40, height: .greatestFiniteMagnitude), options: .usesLineFragmentOrigin, attributes: attributes, context: nil).size
-                let textRect = CGRect(x: cx - textSize.width/2, y: cy - textSize.height/2, width: textSize.width, height: textSize.height)
-                
-                text.draw(in: textRect, withAttributes: attributes)
+            let textStyle = blueprint["textStyle"] as? [String: Any] ?? [:]
+            let textColor = parseColor(textStyle["color"] as? String, defaultColor: .white)
+            let fontSize = textStyle["fontSize"] as? CGFloat ?? 120.0
+            
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.alignment = .center
+            
+            let font = UIFont.systemFont(ofSize: fontSize, weight: .bold)
+            
+            // Add text stroke for better visibility
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: textColor,
+                .strokeColor: UIColor.black,
+                .strokeWidth: -3.0,
+                .paragraphStyle: paragraphStyle
+            ]
+            
+            let textSize = text.boundingRect(with: CGSize(width: width - 40, height: .greatestFiniteMagnitude), options: .usesLineFragmentOrigin, attributes: attributes, context: nil).size
+            
+            // If no layout is provided, default to centering near the bottom
+            if blueprint["layout"] == nil {
+                posY = -0.35 // 35% down from center (near bottom)
             }
+            
+            let textRect = CGRect(x: cx - textSize.width/2, y: cy - textSize.height/2, width: textSize.width, height: textSize.height)
+            
+            text.draw(in: textRect, withAttributes: attributes)
         }
 
         let cgImage = UIGraphicsGetImageFromCurrentImageContext()?.cgImage
@@ -157,6 +165,9 @@ class TextGraphicOverlay: @unchecked Sendable {
             // Apply layout transformations (Scale and translate)
             var transform = CGAffineTransform(translationX: (posX * width / 2), y: -(posY * height / 2))
             transform = transform.scaledBy(x: configScale, y: configScale)
+            
+            let videoScale = CGFloat(videoWidth) / width
+            transform = transform.concatenating(CGAffineTransform(scaleX: videoScale, y: videoScale))
             
             return CIImage(cgImage: cgImage).transformed(by: transform)
         }

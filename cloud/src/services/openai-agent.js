@@ -152,11 +152,14 @@ Use the finish_without_proposal tool ONLY AS A LAST RESORT if the request is fun
 1. User: "Cut out the silence at the beginning and the part where I messed up saying 'hello'."
 -> call propose_remove_ranges(ranges: [{startMs: 0, endMs: 2500}, {startMs: 14000, endMs: 18000}])
 
-2. User: "Put a comic book title on screen that says BAM!"
--> call propose_add_text_overlay(text: "BAM!", style: "comic", startMs: 4000, endMs: 6000)
+3. User: "Put a comic book title on screen that says BAM!"
+-> call propose_add_text_overlay(text: "BAM!", designBlueprint: {"layout": {"posX": 0.0, "posY": 0.0, "scale": 1.2, "rotation": 0.1}, "textStyle": {"color": "#FFD700", "fontSize": 150}, "backgroundShapes": [{"type": "starburst", "color": "#FF0000", "innerRadius": 180, "outerRadius": 250, "points": 12}]}, startMs: 4000, endMs: 6000)
 
-3. User: "Make it look like a vintage VHS tape from the 90s."
--> call propose_apply_video_dsl(dsl: {"project": {"dimensions": {"width": 1080, "height": 1920}, "fps": 30, "durationMs": 10000}, "timeline": {"layers": [{"id": "vhs_r", "type": "media", "startMs": 0, "durationMs": 10000, "effects": [{"type": "colorMatrix", "matrix": [1,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,1,0]}], "spatial": {"keyframes": [{"timeMs": 0, "x": -5, "y": 0}, {"timeMs": 100, "x": 5, "y": 0}]}}, {"id": "vhs_g", "type": "media", "startMs": 0, "durationMs": 10000, "compositing": {"blendMode": "screen"}, "effects": [{"type": "colorMatrix", "matrix": [0,0,0,0,0, 0,1,0,0,0, 0,0,0,0,0, 0,0,0,1,0]}]}, {"id": "vhs_b", "type": "media", "startMs": 0, "durationMs": 10000, "compositing": {"blendMode": "screen"}, "effects": [{"type": "colorMatrix", "matrix": [0,0,0,0,0, 0,0,0,0,0, 0,0,1,0,0, 0,0,0,1,0]}], "spatial": {"keyframes": [{"timeMs": 0, "x": 5, "y": 0}, {"timeMs": 150, "x": -5, "y": 0}]}}]}})`;
+4. User: "Make it look like a vintage VHS tape from the 90s."
+-> call propose_apply_video_dsl(dsl: {"project": {"dimensions": {"width": 1080, "height": 1920}, "fps": 30, "durationMs": 10000}, "timeline": {"layers": [{"id": "vhs_r", "type": "media", "startMs": 0, "durationMs": 10000, "effects": [{"type": "colorMatrix", "matrix": [1,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,1,0]}], "spatial": {"keyframes": [{"timeMs": 0, "x": -5, "y": 0}, {"timeMs": 100, "x": 5, "y": 0}]}}, {"id": "vhs_g", "type": "media", "startMs": 0, "durationMs": 10000, "compositing": {"blendMode": "screen"}, "effects": [{"type": "colorMatrix", "matrix": [0,0,0,0,0, 0,1,0,0,0, 0,0,0,0,0, 0,0,0,1,0]}]}, {"id": "vhs_b", "type": "media", "startMs": 0, "durationMs": 10000, "compositing": {"blendMode": "screen"}, "effects": [{"type": "colorMatrix", "matrix": [0,0,0,0,0, 0,0,0,0,0, 0,0,1,0,0, 0,0,0,1,0]}], "spatial": {"keyframes": [{"timeMs": 0, "x": 5, "y": 0}, {"timeMs": 150, "x": -5, "y": 0}]}}]}})
+
+5. User: "Add captions."
+-> call propose_add_captions(cues: [...], designBlueprint: {"layout": {"posX": 0.0, "posY": -0.35, "scale": 1.0, "rotation": 0.0}, "textStyle": {"color": "#FFFFFF", "fontSize": 100}, "backgroundShapes": [{"type": "rectangle", "width": 800, "height": 180, "color": "#000000", "cornerRadius": 20}]})`;
 
     const contents = history.map(msg => ({ role: msg.role, content: msg.content }));
 
@@ -216,6 +219,10 @@ Use the finish_without_proposal tool ONLY AS A LAST RESORT if the request is fun
 
         if (operationName === 'apply_video_dsl') {
           return { type: operationName, target, ...payload, dsl: typeof payload.dsl === 'string' ? payload.dsl : JSON.stringify(payload.dsl) };
+        }
+        
+        if (payload.designBlueprint && typeof payload.designBlueprint !== 'string') {
+          payload.designBlueprint = JSON.stringify(payload.designBlueprint);
         }
 
         return { type: operationName, target, ...payload };

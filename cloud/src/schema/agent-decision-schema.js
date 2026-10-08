@@ -69,11 +69,18 @@ const PROPOSE_MUSIC_DUCKING_TOOL = operationTool(
 
 const PROPOSE_CAPTIONS_TOOL = operationTool(
   'propose_add_captions',
-  'Enable captions. You MUST provide the segmented captions (cues) by intelligently grouping the transcript words into semantically intact sentences or phrases. Ensure you provide exact startMs and endMs matching the transcript timing.',
-  ['style', 'reason', 'cues'], {
+  'Enable captions. You MUST provide the segmented captions (cues) by intelligently grouping the transcript words into semantically intact sentences or phrases. Provide a designBlueprint to customize the typography and layout (e.g., text color, font size, background shapes).',
+  ['designBlueprint', 'reason', 'cues'], {
   ...targetRangeProperties,
   speakerId: { type: 'string' },
-  style: { type: 'string', enum: ['bold-bottom'] },
+  designBlueprint: { 
+    type: 'object',
+    properties: {
+      layout: { type: 'object', properties: { posX: { type: 'number' }, posY: { type: 'number' }, scale: { type: 'number' }, rotation: { type: 'number' } } },
+      textStyle: { type: 'object', properties: { color: { type: 'string' }, fontSize: { type: 'number' } } },
+      backgroundShapes: { type: 'array', items: { type: 'object' } }
+    }
+  },
   cues: {
     type: 'array',
     items: {
@@ -106,11 +113,18 @@ const PROPOSE_ASPECT_RATIO_TOOL = operationTool(
 
 const PROPOSE_ADD_TEXT_OVERLAY_TOOL = operationTool(
   'propose_add_text_overlay',
-  'Add a simple text overlay. Use this for basic titles, subtitles, or labels. For complex animations or custom rendering, use propose_apply_video_dsl instead.',
-  ['sourceId', 'startMs', 'endMs', 'text', 'style', 'reason'], {
+  'Add a simple text overlay. Use this for basic titles, subtitles, or labels. Provide a designBlueprint to customize the typography and layout.',
+  ['sourceId', 'startMs', 'endMs', 'text', 'designBlueprint', 'reason'], {
   ...targetRangeProperties,
   text: { type: 'string' },
-  style: { type: 'string', enum: ['standard', 'comic', 'neon', 'elegant', 'typewriter'] },
+  designBlueprint: { 
+    type: 'object',
+    properties: {
+      layout: { type: 'object', properties: { posX: { type: 'number' }, posY: { type: 'number' }, scale: { type: 'number' }, rotation: { type: 'number' } } },
+      textStyle: { type: 'object', properties: { color: { type: 'string' }, fontSize: { type: 'number' } } },
+      backgroundShapes: { type: 'array', items: { type: 'object' } }
+    }
+  }
 });
 
 const PROPOSE_ADD_SECTION_TRANSITION_TOOL = operationTool(

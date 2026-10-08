@@ -27,7 +27,7 @@ public enum EditOperation: Codable, Equatable {
     case setAspectRatio(id: String, enabled: Bool, ratio: AspectRatio)
     case addTextOverlay(id: String, enabled: Bool, text: String, target: OperationTarget?, designBlueprint: String)
     case addMotionPreset(id: String, enabled: Bool, range: TimeRange?, preset: String, intensity: Float)
-    case addCaptions(id: String, enabled: Bool, cues: [CaptionCue], target: OperationTarget?, speakerId: String?, style: String)
+    case addCaptions(id: String, enabled: Bool, cues: [CaptionCue], target: OperationTarget?, speakerId: String?, designBlueprint: String)
     case addSectionTransition(id: String, enabled: Bool, target: OperationTarget?, preset: String, customBlueprint: String)
     case addBgm(id: String, enabled: Bool, target: OperationTarget?, prompt: String, reason: String, url: String)
     case addBgmEffect(id: String, enabled: Bool, target: OperationTarget?, prompt: String, reason: String, url: String)
@@ -99,7 +99,7 @@ public enum EditOperation: Codable, Equatable {
                 cues: try container.decodeIfPresent([CaptionCue].self, forKey: .cues) ?? [],
                 target: try container.decodeIfPresent(OperationTarget.self, forKey: .target),
                 speakerId: try container.decodeIfPresent(String.self, forKey: .speakerId),
-                style: try container.decodeIfPresent(String.self, forKey: .style) ?? "bold-bottom"
+                designBlueprint: try container.decodeIfPresent(String.self, forKey: .designBlueprint) ?? "{}"
             )
         case "add_section_transition":
             self = .addSectionTransition(
@@ -191,14 +191,14 @@ public enum EditOperation: Codable, Equatable {
             try container.encodeIfPresent(range, forKey: .range)
             try container.encode(preset, forKey: .preset)
             try container.encode(intensity, forKey: .intensity)
-        case .addCaptions(let id, let enabled, let cues, let target, let speakerId, let style):
+        case .addCaptions(let id, let enabled, let cues, let target, let speakerId, let designBlueprint):
             try container.encode("add_captions", forKey: .type)
             try container.encode(id, forKey: .id)
             try container.encode(enabled, forKey: .enabled)
             try container.encode(cues, forKey: .cues)
             try container.encodeIfPresent(target, forKey: .target)
             try container.encodeIfPresent(speakerId, forKey: .speakerId)
-            try container.encode(style, forKey: .style)
+            try container.encode(designBlueprint, forKey: .designBlueprint)
         case .addSectionTransition(let id, let enabled, let target, let preset, let customBlueprint):
             try container.encode("add_section_transition", forKey: .type)
             try container.encode(id, forKey: .id)

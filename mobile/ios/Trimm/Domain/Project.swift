@@ -162,11 +162,7 @@ public struct MobileProject: Codable, Equatable {
         if let providedExport = export {
             self.export = providedExport
         } else {
-            let rotation = source.rotation
-            let isPortrait = rotation == 90 || rotation == 270
-            let w = isPortrait ? source.height : source.width
-            let h = isPortrait ? source.width : source.height
-            self.export = ExportSettings(width: w > 0 ? w : 1920, height: h > 0 ? h : 1080)
+            self.export = ExportSettings(width: source.width > 0 ? source.width : 1920, height: source.height > 0 ? source.height : 1080)
         }
         
         self.revision = revision

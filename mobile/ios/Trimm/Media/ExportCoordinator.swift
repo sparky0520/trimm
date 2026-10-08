@@ -136,7 +136,7 @@ public class ExportCoordinator {
                     videoWidth: project.export.width,
                     videoHeight: project.export.height
                 ))
-            } else if case let .addCaptions(_, enabled, cues, target, speakerId, style) = op, enabled {
+            } else if case let .addCaptions(_, enabled, cues, target, speakerId, designBlueprint) = op, enabled {
                 let offset = sourceOffsets[target?.sourceId ?? ""] ?? 0
                 for cue in cues {
                     if let sid = speakerId, let wordSid = cue.words?.first?.speakerId, sid != wordSid { continue }
@@ -150,7 +150,7 @@ public class ExportCoordinator {
                     if outEnd > outStart {
                         textOverlays.append(TextGraphicOverlay(
                             text: cue.text,
-                            blueprintJson: "{\"style\": \"\(style)\"}",
+                            blueprintJson: designBlueprint,
                             startMs: outStart,
                             endMs: outEnd,
                             videoWidth: project.export.width,
