@@ -200,7 +200,7 @@ const PROPOSE_APPLY_VIDEO_DSL_TOOL = Object.freeze({
   description: `Generate a Universal Video JSON DSL document to edit the video. Use this as your "God Tool" to apply advanced motion graphics, complex spatial animations, custom styling, compositing, blend modes, and mathematical effects (like colorMatrix) that go beyond the basic predefined tools. 
 Recipes:
 - Vintage Film / Warmth: Use a colorMatrix to boost reds and yellows. Reduce contrast slightly. "effects": [{"type": "colorMatrix", "matrix": [1.2, 0.1, 0, 0, 0,  0, 0.9, 0, 0, 0,  0, 0, 0.8, 0, 0,  0, 0, 0, 1, 0]}]
-- VHS Glitch: Duplicate the target media layer 3 times perfectly overlapping. On layer 1, apply a colorMatrix isolating Red. On layer 2, isolate Green. On layer 3, isolate Blue. Set all three layers blendMode to screen. Apply rapid spatial keyframes (jittering x by +/- 5 pixels) to the Red and Blue layers.`,
+- Black and White: Mix RGB channels equally to remove color. "effects": [{"type": "colorMatrix", "matrix": [0.33, 0.33, 0.33, 0, 0,  0.33, 0.33, 0.33, 0, 0,  0.33, 0.33, 0.33, 0, 0,  0, 0, 0, 1, 0]}]`,
   parameters: {
     type: 'object',
     additionalProperties: false,
@@ -229,28 +229,30 @@ Recipes:
                 type: 'array', items: {
                   type: 'object', additionalProperties: false, required: ['id', 'type', 'startMs', 'durationMs'],
                   properties: {
-                    id: { type: 'string' }, type: { type: 'string' },
-                    source: { type: 'object', additionalProperties: false, required: ['url'], properties: { url: { type: 'string' }, mediaStartTimeMs: { type: 'integer' } } },
-                    startMs: { type: 'integer' }, durationMs: { type: 'integer' },
+                    id: { type: 'string', description: 'Unique identifier for the layer (e.g. "vhs_red").' },
+                    type: { type: 'string', enum: ['media', 'text', 'shape'], description: 'Type of layer. "media" is standard video.' },
+                    source: { type: 'object', additionalProperties: false, required: ['url'], properties: { url: { type: 'string', description: 'Source URL or fingerprint of the media.' }, mediaStartTimeMs: { type: 'integer', description: 'Offset into the source media to start playing from.' } } },
+                    startMs: { type: 'integer', description: 'Time on the global timeline when this layer appears.' },
+                    durationMs: { type: 'integer', description: 'How long this layer stays on the timeline.' },
                     spatial: {
-                      type: 'object', additionalProperties: false, required: ['keyframes'], properties: {
-                        anchor: { type: 'object', additionalProperties: false, required: ['x', 'y'], properties: { x: { type: 'number' }, y: { type: 'number' } } },
-                        keyframes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['timeMs'], properties: { timeMs: { type: 'integer' }, x: { type: 'number' }, y: { type: 'number' }, scale: { type: 'number' }, rotation: { type: 'number' }, easing: { type: 'string' } } } }
+                      type: 'object', additionalProperties: false, required: ['keyframes'], description: 'Controls movement, scaling, and rotation over time.', properties: {
+                        anchor: { type: 'object', additionalProperties: false, required: ['x', 'y'], properties: { x: { type: 'number', description: '0.0 to 1.0 (default 0.5 center)' }, y: { type: 'number', description: '0.0 to 1.0 (default 0.5 center)' } } },
+                        keyframes: { type: 'array', description: 'List of spatial keyframes. timeMs is relative to the layer startMs.', items: { type: 'object', additionalProperties: false, required: ['timeMs'], properties: { timeMs: { type: 'integer' }, x: { type: 'number', description: 'X offset in pixels.' }, y: { type: 'number', description: 'Y offset in pixels.' }, scale: { type: 'number', description: 'Multiplier (1.0 is default).' }, rotation: { type: 'number', description: 'Rotation in degrees.' }, easing: { type: 'string', enum: ['linear', 'ease-in', 'ease-out', 'ease-in-out'] } } } }
                       }
                     },
                     compositing: {
-                      type: 'object', additionalProperties: false, properties: {
-                        blendMode: { type: 'string' },
-                        opacity: { type: 'object', additionalProperties: false, required: ['keyframes'], properties: { keyframes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['timeMs', 'value'], properties: { timeMs: { type: 'integer' }, value: { type: 'number' }, easing: { type: 'string' } } } } } }
+                      type: 'object', additionalProperties: false, description: 'Controls blending and opacity.', properties: {
+                        blendMode: { type: 'string', enum: ['normal', 'multiply', 'screen', 'overlay'], description: 'Mathematical blend mode against layers below it.' },
+                        opacity: { type: 'object', additionalProperties: false, required: ['keyframes'], properties: { keyframes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['timeMs', 'value'], properties: { timeMs: { type: 'integer' }, value: { type: 'number', description: 'Opacity from 0.0 to 1.0.' }, easing: { type: 'string', enum: ['linear', 'ease-in', 'ease-out', 'ease-in-out'] } } } } } }
                       }
                     },
                     audio: {
-                      type: 'object', additionalProperties: false, properties: {
-                        volume: { type: 'object', additionalProperties: false, required: ['keyframes'], properties: { keyframes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['timeMs', 'value'], properties: { timeMs: { type: 'integer' }, value: { type: 'number' }, easing: { type: 'string' } } } } } }
+                      type: 'object', additionalProperties: false, description: 'Controls audio volume over time.', properties: {
+                        volume: { type: 'object', additionalProperties: false, required: ['keyframes'], properties: { keyframes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['timeMs', 'value'], properties: { timeMs: { type: 'integer' }, value: { type: 'number', description: 'Volume multiplier (1.0 is normal, 0.0 is mute).' }, easing: { type: 'string', enum: ['linear', 'ease-in', 'ease-out', 'ease-in-out'] } } } } } }
                       }
                     },
                     effects: {
-                      type: 'array', items: { type: 'object', additionalProperties: false, required: ['type'], properties: { type: { type: 'string' }, matrix: { type: 'array', items: { type: 'number' } } } }
+                      type: 'array', description: 'Mathematical filters applied to the layer.', items: { type: 'object', additionalProperties: false, required: ['type', 'matrix'], properties: { type: { type: 'string', enum: ['colorMatrix'] }, matrix: { type: 'array', description: 'MUST be exactly 20 numbers representing the 4x5 color matrix.', items: { type: 'number' }, minItems: 20, maxItems: 20 } } }
                     }
                   }
                 }

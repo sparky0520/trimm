@@ -134,7 +134,7 @@ Use the finish_without_proposal tool ONLY AS A LAST RESORT if the request is fun
 -> call propose_add_text_overlay(text: "BAM!", style: "comic", startMs: 4000, endMs: 6000)
 
 3. User: "Make it look like a vintage VHS tape from the 90s."
--> call propose_apply_video_dsl(dsl: {"project": {"dimensions": {"width": 1080, "height": 1920}, "fps": 30, "durationMs": 10000}, "timeline": {"layers": [{"id": "vhs_base", "type": "media", "startMs": 0, "durationMs": 10000, "effects": [{"type": "colorMatrix", "matrix": [1.2,0,0,0,0, 0,0.9,0,0,0, 0,0,0.8,0,0, 0,0,0,1,0]}]}]}})`;
+-> call propose_apply_video_dsl(dsl: {"project": {"dimensions": {"width": 1080, "height": 1920}, "fps": 30, "durationMs": 10000}, "timeline": {"layers": [{"id": "vhs_r", "type": "media", "startMs": 0, "durationMs": 10000, "effects": [{"type": "colorMatrix", "matrix": [1,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,1,0]}], "spatial": {"keyframes": [{"timeMs": 0, "x": -5, "y": 0}, {"timeMs": 100, "x": 5, "y": 0}]}}, {"id": "vhs_g", "type": "media", "startMs": 0, "durationMs": 10000, "compositing": {"blendMode": "screen"}, "effects": [{"type": "colorMatrix", "matrix": [0,0,0,0,0, 0,1,0,0,0, 0,0,0,0,0, 0,0,0,1,0]}]}, {"id": "vhs_b", "type": "media", "startMs": 0, "durationMs": 10000, "compositing": {"blendMode": "screen"}, "effects": [{"type": "colorMatrix", "matrix": [0,0,0,0,0, 0,0,0,0,0, 0,0,1,0,0, 0,0,0,1,0]}], "spatial": {"keyframes": [{"timeMs": 0, "x": 5, "y": 0}, {"timeMs": 150, "x": -5, "y": 0}]}}]}})`;
 
     const contents = history.map(msg => ({ role: msg.role, content: msg.content }));
 
