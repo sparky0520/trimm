@@ -94,9 +94,6 @@ struct SidebarView: View {
                 }
             }
             .listStyle(.plain)
-            .refreshable {
-                await viewModel.loadPastChats()
-            }
             .padding(.horizontal, 16)
             
             Divider()
@@ -316,6 +313,13 @@ struct ContentView: View {
                     .frame(width: UIScreen.main.bounds.width * 0.75)
                     .background(Color(UIColor.systemBackground))
                     .transition(.move(edge: .leading))
+                    .gesture(
+                        DragGesture().onEnded { value in
+                            if value.translation.width < -50 {
+                                withAnimation { isDrawerOpen = false }
+                            }
+                        }
+                    )
                     .ignoresSafeArea(.all, edges: .bottom)
                     .zIndex(1)
             }

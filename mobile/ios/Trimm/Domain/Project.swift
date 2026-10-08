@@ -179,7 +179,7 @@ public struct MobileProject: Codable, Equatable {
         var processedNext = next
         for (index, op) in processedNext.enumerated() {
             if case let .addCaptions(id, enabled, cues, target, speakerId, style) = op, cues.isEmpty {
-                let generatedCues = CaptionSegmenter.segment(words: analysis.words)
+                let generatedCues = EditEngines.CaptionSegmenter.segment(words: analysis.words)
                 processedNext[index] = .addCaptions(id: id, enabled: enabled, cues: generatedCues, target: target, speakerId: speakerId, style: style)
             }
         }
