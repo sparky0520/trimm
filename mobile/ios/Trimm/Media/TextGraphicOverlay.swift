@@ -59,13 +59,18 @@ class TextGraphicOverlay: @unchecked Sendable {
     }
 
     private func generateImage() -> CIImage? {
-        let width = CGFloat(1000)
-        let height = width * CGFloat(videoHeight) / CGFloat(videoWidth)
+        let width = CGFloat(videoWidth)
+        let height = CGFloat(videoHeight)
         let size = CGSize(width: width, height: height)
 
         UIGraphicsBeginImageContextWithOptions(size, false, 1.0)
         guard let context = UIGraphicsGetCurrentContext() else { return nil }
 
+        var posX: CGFloat = 0
+        var posY: CGFloat = 0
+        var configScale: CGFloat = 1.0
+        var rotation: CGFloat = 0
+        
         let cx = width / 2.0
         let cy = height / 2.0
 
@@ -77,28 +82,40 @@ class TextGraphicOverlay: @unchecked Sendable {
                 posY = layout["posY"] as? CGFloat ?? 0
                 configScale = layout["scale"] as? CGFloat ?? 1
                 rotation = layout["rotation"] as? CGFloat ?? 0
+            } else {
+                posY = -0.35 // 35% down from center (near bottom)
             }
+            
+            let translationX = posX * width / 2
+            let translationY = -(posY * height / 2) // CoreGraphics Y goes down
+            
+            context.translateBy(x: cx + translationX, y: cy + translationY)
+            context.scaleBy(x: configScale, y: configScale)
+            context.rotate(by: rotation)
+            
+            // Map AI's 1000px coordinate system values to the actual video width
+            let scaleFactor = width / 1000.0
 
             if let shapes = blueprint["backgroundShapes"] as? [[String: Any]] {
                 for shape in shapes {
                     let type = shape["type"] as? String ?? ""
                     let fillColor = parseColor(shape["color"] as? String, defaultColor: .clear)
                     let strokeColor = parseColor(shape["strokeColor"] as? String, defaultColor: .clear)
-                    let strokeWidth = shape["strokeWidth"] as? CGFloat ?? 0
+                    let strokeWidth = (shape["strokeWidth"] as? CGFloat ?? 0) * scaleFactor
 
                     context.saveGState()
 
                     if type == "starburst" {
                         let points = shape["points"] as? Int ?? 16
-                        let innerRadius = shape["innerRadius"] as? CGFloat ?? 200.0
-                        let outerRadius = shape["outerRadius"] as? CGFloat ?? 400.0
+                        let innerRadius = (shape["innerRadius"] as? CGFloat ?? 200.0) * scaleFactor
+                        let outerRadius = (shape["outerRadius"] as? CGFloat ?? 400.0) * scaleFactor
 
                         context.beginPath()
                         for p in 0..<(points * 2) {
                             let radius = (p % 2 == 0) ? outerRadius : innerRadius
                             let angle = CGFloat(p) * .pi / CGFloat(points)
-                            let px = cx + radius * cos(angle)
-                            let py = cy + radius * sin(angle)
+                            let px = radius * cos(angle)
+                            let py = radius * sin(angle)
                             if p == 0 {
                                 context.move(to: CGPoint(x: px, y: py))
                             } else {
@@ -107,10 +124,10 @@ class TextGraphicOverlay: @unchecked Sendable {
                         }
                         context.closePath()
                     } else if type == "rectangle" {
-                        let rw = shape["width"] as? CGFloat ?? 400
-                        let rh = shape["height"] as? CGFloat ?? 200
-                        let r = CGRect(x: cx - rw/2, y: cy - rh/2, width: rw, height: rh)
-                        let cornerRadius = shape["cornerRadius"] as? CGFloat ?? 0
+                        let rw = (shape["width"] as? CGFloat ?? 400) * scaleFactor
+                        let rh = (shape["height"] as? CGFloat ?? 200) * scaleFactor
+                        let r = CGRect(x: -rw/2, y: -rh/2, width: rw, height: rh)
+                        let cornerRadius = (shape["cornerRadius"] as? CGFloat ?? 0) * scaleFactor
                         let path = UIBezierPath(roundedRect: r, cornerRadius: cornerRadius)
                         context.addPath(path.cgPath)
                     }
@@ -130,14 +147,14 @@ class TextGraphicOverlay: @unchecked Sendable {
             
             let textStyle = blueprint["textStyle"] as? [String: Any] ?? [:]
             let textColor = parseColor(textStyle["color"] as? String, defaultColor: .white)
-            let fontSize = textStyle["fontSize"] as? CGFloat ?? 120.0
+            let rawFontSize = textStyle["fontSize"] as? CGFloat ?? 100.0 // Default size expected by AI
+            let fontSize = rawFontSize * scaleFactor
             
             let paragraphStyle = NSMutableParagraphStyle()
             paragraphStyle.alignment = .center
             
             let font = UIFont.systemFont(ofSize: fontSize, weight: .bold)
             
-            // Add text stroke for better visibility
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: font,
                 .foregroundColor: textColor,
@@ -146,14 +163,11 @@ class TextGraphicOverlay: @unchecked Sendable {
                 .paragraphStyle: paragraphStyle
             ]
             
-            let textSize = text.boundingRect(with: CGSize(width: width - 40, height: .greatestFiniteMagnitude), options: .usesLineFragmentOrigin, attributes: attributes, context: nil).size
+            // Allow wrapping with 40px padding
+            let maxTextWidth = width - 40
+            let textSize = text.boundingRect(with: CGSize(width: maxTextWidth, height: .greatestFiniteMagnitude), options: .usesLineFragmentOrigin, attributes: attributes, context: nil).size
             
-            // If no layout is provided, default to centering near the bottom
-            if blueprint["layout"] == nil {
-                posY = -0.35 // 35% down from center (near bottom)
-            }
-            
-            let textRect = CGRect(x: cx - textSize.width/2, y: cy - textSize.height/2, width: textSize.width, height: textSize.height)
+            let textRect = CGRect(x: -textSize.width/2, y: -textSize.height/2, width: textSize.width, height: textSize.height)
             
             text.draw(in: textRect, withAttributes: attributes)
         }
@@ -162,14 +176,7 @@ class TextGraphicOverlay: @unchecked Sendable {
         UIGraphicsEndImageContext()
 
         if let cgImage = cgImage {
-            // Apply layout transformations (Scale and translate)
-            var transform = CGAffineTransform(translationX: (posX * width / 2), y: -(posY * height / 2))
-            transform = transform.scaledBy(x: configScale, y: configScale)
-            
-            let videoScale = CGFloat(videoWidth) / width
-            transform = transform.concatenating(CGAffineTransform(scaleX: videoScale, y: videoScale))
-            
-            return CIImage(cgImage: cgImage).transformed(by: transform)
+            return CIImage(cgImage: cgImage)
         }
         
         return nil

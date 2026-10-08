@@ -71,6 +71,9 @@ public class ExportCoordinator {
         
         let audioMixParam = AVMutableAudioMixInputParameters(track: audioTrack)
         
+        var globalTrackTransform: CGAffineTransform = .identity
+        var capturedTransform = false
+        
         for source in project.orderedSources {
             let sourceStart = timelineStart
             let sourceEnd = sourceStart + source.durationMs
@@ -81,6 +84,12 @@ public class ExportCoordinator {
             
             guard let assetVideoTrack = try? await asset.loadTracks(withMediaType: .video).first else { continue }
             let assetAudioTrack = try? await asset.loadTracks(withMediaType: .audio).first
+            
+            if !capturedTransform, let transform = try? await assetVideoTrack.load(.preferredTransform) {
+                globalTrackTransform = transform
+                videoTrack.preferredTransform = transform
+                capturedTransform = true
+            }
             
             for range in retained {
                 let start = max(range.startMs, sourceStart)
@@ -163,6 +172,11 @@ public class ExportCoordinator {
         
         let videoComposition = AVMutableVideoComposition(asset: composition) { request in
             var image = request.sourceImage
+            
+            let rotatedExtent = image.extent.applying(globalTrackTransform)
+            let transformToOrigin = globalTrackTransform.concatenating(CGAffineTransform(translationX: -rotatedExtent.origin.x, y: -rotatedExtent.origin.y))
+            image = image.transformed(by: transformToOrigin)
+            
             let timeMs = Int64(request.compositionTime.seconds * 1000)
             
             // 1. Color Grading

@@ -57,8 +57,9 @@ public class VideoProcessor {
         }
         
         let sourceVideoTrack = try await asset.loadTracks(withMediaType: .video).first
+        let trackTransform = try await sourceVideoTrack?.load(.preferredTransform) ?? .identity
         if let sourceVideo = sourceVideoTrack {
-            videoTrack.preferredTransform = try await sourceVideo.load(.preferredTransform)
+            videoTrack.preferredTransform = trackTransform
         }
         let sourceAudioTrack = try await asset.loadTracks(withMediaType: .audio).first
         
@@ -256,6 +257,12 @@ public class VideoProcessor {
         if colorCubeFilter != nil || !textOverlays.isEmpty {
             videoComposition = AVMutableVideoComposition(asset: composition) { request in
                 var image = request.sourceImage
+                
+                // Apply the track's preferred transform to correctly rotate/scale the source frame
+                let rotatedExtent = image.extent.applying(trackTransform)
+                let transformToOrigin = trackTransform.concatenating(CGAffineTransform(translationX: -rotatedExtent.origin.x, y: -rotatedExtent.origin.y))
+                image = image.transformed(by: transformToOrigin)
+                
                 let timeMs = Int64(request.compositionTime.seconds * 1000)
                 
                 if let colorFilter = colorCubeFilter {
