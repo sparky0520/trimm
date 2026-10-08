@@ -201,7 +201,7 @@ Use the finish_without_proposal tool ONLY AS A LAST RESORT if the request is fun
     };
   };
 
-  return { generateTextOverlayConfig, generateTransitionConfig, chatCompletion };
+  return { chatCompletion };
 }
 
 export { createOpenAIDecisionProvider };

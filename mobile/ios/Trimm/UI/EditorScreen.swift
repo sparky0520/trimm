@@ -160,9 +160,9 @@ public struct EditorScreen: View {
         }
         .sheet(isPresented: $showAssetsModal) {
             NavigationView {
-                List(viewModel.state.sources, id: \.id) { source in
+                List(viewModel.state.sources, id: \.uri) { source in
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(source.id).font(.headline)
+                        Text(source.uri).font(.headline)
                         Text("Duration: \(source.durationMs)ms").font(.subheadline).foregroundColor(.gray)
                         Text("Has Audio: \(source.hasAudio ? "Yes" : "No")").font(.caption).foregroundColor(.gray)
                     }
