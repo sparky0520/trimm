@@ -45,7 +45,7 @@ public class LocalVisualAnalyzer: EvidenceAnalyzer {
     
     public func analyze(context: AnalyzerContext) async throws -> [AnyEvidenceObservation] {
         let source = context.source
-        guard let url = URL(string: source.uri) else {
+        guard let url = source.resolvedUrl else {
             throw NSError(domain: "LocalVisualAnalyzer", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid source URI"])
         }
         

@@ -22,7 +22,8 @@ public class LocalSoundAnalyzer: EvidenceAnalyzer {
     }
     
     public func analyze(context: AnalyzerContext) async throws -> [AnyEvidenceObservation] {
-        let pcm = try await decoder.decode(sourceUri: context.source.uri)
+        let uri = context.source.resolvedUrl?.absoluteString ?? context.source.uri
+        let pcm = try await decoder.decode(sourceUri: uri)
         precondition(pcm.sampleRate > 0 && pcm.channelCount > 0)
         if pcm.samples.isEmpty {
             throw NSError(domain: "LocalSoundAnalyzer", code: 1, userInfo: [NSLocalizedDescriptionKey: "The audio track decoded no PCM samples."])

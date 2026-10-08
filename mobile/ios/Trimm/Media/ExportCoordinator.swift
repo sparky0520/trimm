@@ -76,7 +76,7 @@ public class ExportCoordinator {
             let sourceEnd = sourceStart + source.durationMs
             timelineStart = sourceEnd
             
-            guard let url = URL(string: source.uri) else { continue }
+            guard let url = source.resolvedUrl else { continue }
             let asset = AVURLAsset(url: url)
             
             guard let assetVideoTrack = try? await asset.loadTracks(withMediaType: .video).first else { continue }

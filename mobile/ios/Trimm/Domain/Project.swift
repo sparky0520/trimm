@@ -27,6 +27,20 @@ public struct SourceMedia: Codable, Equatable {
     public let height: Int
     public let rotation: Int
     public let hasAudio: Bool
+    
+    public var resolvedUrl: URL? {
+        guard let url = URL(string: uri) else { return nil }
+        if url.isFileURL {
+            let filename = url.lastPathComponent
+            if let documentDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                let possibleUrl = documentDirectory.appendingPathComponent(filename)
+                if FileManager.default.fileExists(atPath: possibleUrl.path) {
+                    return possibleUrl
+                }
+            }
+        }
+        return url
+    }
 }
 
 public enum Platform: String, Codable { case youtube = "YOUTUBE", instagram = "INSTAGRAM", tiktok = "TIKTOK", linkedin = "LINKEDIN" }
@@ -131,7 +145,7 @@ public struct MobileProject: Codable, Equatable {
     public let export: ExportSettings
     public let revision: Int64
     
-    public init(schemaVersion: Int = 1, id: String = UUID().uuidString, title: String, source: SourceMedia, sources: [SourceMedia] = [], proxyUri: String? = nil, preferences: WizardPreferences = WizardPreferences(), analysis: Analysis = Analysis(), evidenceGraphs: [EvidenceGraphReference] = [], operations: [EditOperation] = [], undo: [ProjectSnapshot] = [], redo: [ProjectSnapshot] = [], export: ExportSettings = ExportSettings(), revision: Int64 = 0) {
+    public init(schemaVersion: Int = 1, id: String = UUID().uuidString, title: String, source: SourceMedia, sources: [SourceMedia] = [], proxyUri: String? = nil, preferences: WizardPreferences = WizardPreferences(), analysis: Analysis = Analysis(), evidenceGraphs: [EvidenceGraphReference] = [], operations: [EditOperation] = [], undo: [ProjectSnapshot] = [], redo: [ProjectSnapshot] = [], export: ExportSettings? = nil, revision: Int64 = 0) {
         self.schemaVersion = schemaVersion
         self.id = id
         self.title = title
@@ -144,7 +158,17 @@ public struct MobileProject: Codable, Equatable {
         self.operations = operations
         self.undo = undo
         self.redo = redo
-        self.export = export
+        
+        if let providedExport = export {
+            self.export = providedExport
+        } else {
+            let rotation = source.rotation
+            let isPortrait = rotation == 90 || rotation == 270
+            let w = isPortrait ? source.height : source.width
+            let h = isPortrait ? source.width : source.height
+            self.export = ExportSettings(width: w > 0 ? w : 1920, height: h > 0 ? h : 1080)
+        }
+        
         self.revision = revision
     }
     

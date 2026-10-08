@@ -80,7 +80,7 @@ public class ChatRepository {
         urlRequest.httpBody = body
         
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 10
+        config.timeoutIntervalForRequest = 120
         let session = URLSession(configuration: config)
         
         let (bytes, response) = try await session.bytes(for: urlRequest)

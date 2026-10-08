@@ -7,7 +7,7 @@ public class VideoProcessor {
     private init() {}
     
     public func createPreviewComposition(project: MobileProject) async throws -> AVPlayerItem {
-        guard let url = URL(string: project.source.uri) else {
+        guard let url = project.source.resolvedUrl else {
             throw NSError(domain: "VideoProcessor", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid source URI"])
         }
         
@@ -262,6 +262,14 @@ public class VideoProcessor {
                     colorFilter.setValue(image, forKey: kCIInputImageKey)
                     if let out = colorFilter.outputImage { image = out }
                 }
+                
+                let dx = max(0, (request.renderSize.width - image.extent.width) / 2.0)
+                let dy = max(0, (request.renderSize.height - image.extent.height) / 2.0)
+                let transform = CGAffineTransform(translationX: dx - image.extent.origin.x, y: dy - image.extent.origin.y)
+                image = image.transformed(by: transform)
+                
+                let bg = CIImage(color: .black).cropped(to: CGRect(origin: .zero, size: request.renderSize))
+                image = image.composited(over: bg)
                 
                 for overlay in textOverlays {
                     if let overlayImage = overlay.getImage(presentationTimeUs: timeMs * 1000) {

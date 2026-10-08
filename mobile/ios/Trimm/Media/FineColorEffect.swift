@@ -98,7 +98,13 @@ class FineColorEffect {
     private static let lutSize = 17
     
     static func createColorCube(operations: [EditOperation]) -> CIFilter? {
-        if operations.isEmpty { return nil }
+        let hasColorGrade = operations.contains { op in
+            if case let .setColorGrade(_, enabled, grade, _, _, _) = op, enabled, grade != nil {
+                return true
+            }
+            return false
+        }
+        if !hasColorGrade { return nil }
         
         let settings = FineColorMath.settings(from: operations)
         

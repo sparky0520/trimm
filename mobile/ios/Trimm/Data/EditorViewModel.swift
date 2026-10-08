@@ -82,8 +82,29 @@ public class EditorViewModel {
     public func importSources(urls: [URL]) async {
         state.isProcessing = true
         var newSources: [SourceMedia] = []
+        
+        let fileManager = FileManager.default
+        guard let documentDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            state.isProcessing = false
+            return
+        }
+        
         for url in urls {
-            let asset = AVURLAsset(url: url)
+            var finalUrl = url
+            if url.isFileURL {
+                let filename = UUID().uuidString + "-" + url.lastPathComponent
+                let destURL = documentDirectory.appendingPathComponent(filename)
+                do {
+                    let startedAccess = url.startAccessingSecurityScopedResource()
+                    try fileManager.copyItem(at: url, to: destURL)
+                    if startedAccess { url.stopAccessingSecurityScopedResource() }
+                    finalUrl = destURL
+                } catch {
+                    print("Failed to copy file to documents: \(error)")
+                }
+            }
+            
+            let asset = AVURLAsset(url: finalUrl)
             do {
                 let duration = try await asset.load(.duration)
                 let durationMs = Int64(duration.seconds * 1000)
@@ -112,7 +133,7 @@ public class EditorViewModel {
                 }
                 
                 newSources.append(SourceMedia(
-                    uri: url.absoluteString,
+                    uri: finalUrl.absoluteString,
                     fingerprint: UUID().uuidString,
                     durationMs: durationMs,
                     width: width,
@@ -155,9 +176,10 @@ public class EditorViewModel {
         
         
         Task {
+            await MainActor.run { state.isProcessing = true }
             await refreshPlayer(project: project)
             
-            if let url = URL(string: firstSource.uri) {
+            if let url = firstSource.resolvedUrl {
                 do {
                     let words = try await TranscriptionService.shared.transcribe(url: url)
                     await MainActor.run {
@@ -169,7 +191,13 @@ public class EditorViewModel {
                                 lowConfidenceFumbles: currentProject.analysis.lowConfidenceFumbles,
                                 takeGroups: currentProject.analysis.takeGroups,
                                 warnings: currentProject.analysis.warnings,
-                                completedAtEpochMs: Int64(Date().timeIntervalSince1970 * 1000)
+                                completedAtEpochMs: Int64(Date().timeIntervalSince1970 * 1000),
+                                activeTurnId: currentProject.analysis.activeTurnId,
+                                activeCheckpointId: currentProject.analysis.activeCheckpointId,
+                                editorialPlan: currentProject.analysis.editorialPlan,
+                                pendingProposal: currentProject.analysis.pendingProposal,
+                                chatHistory: currentProject.analysis.chatHistory,
+                                settledConstraints: currentProject.analysis.settledConstraints
                             )
                             
                             let newTitle: String
@@ -200,13 +228,19 @@ public class EditorViewModel {
                     }
                     
                     if let currentProject = await MainActor.run(resultType: MobileProject?.self, body: { self.state.project }) {
-                        try? await ChatRepository.shared.syncProject(project: currentProject)
+                        do {
+                            try await ChatRepository.shared.syncProject(project: currentProject)
+                        } catch {
+                            await MainActor.run { self.state.errorMessage = "Sync failed: \(error.localizedDescription)" }
+                        }
                         await loadPastChats()
                     }
                 } catch {
                     print("Transcription failed: \(error)")
+                    await MainActor.run { self.state.errorMessage = "Transcription failed: \(error.localizedDescription)" }
                 }
             }
+            await MainActor.run { state.isProcessing = false }
         }
     }
     
@@ -289,7 +323,11 @@ public class EditorViewModel {
                         self.state.messages.append(ChatMessage(text: replyText, isUser: false))
                         
                         Task {
-                            try? await ChatRepository.shared.syncProject(project: updatedProject)
+                            do {
+                                try await ChatRepository.shared.syncProject(project: updatedProject)
+                            } catch {
+                                await MainActor.run { self.state.errorMessage = "Sync failed: \(error.localizedDescription)" }
+                            }
                             await self.loadPastChats()
                         }
                     }
