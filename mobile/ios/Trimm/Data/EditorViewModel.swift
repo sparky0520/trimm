@@ -155,18 +155,6 @@ public class EditorViewModel {
             return
         }
         
-        // Auto-detect intent based on source media aspect ratio
-        if firstSource.width < firstSource.height {
-            state.preferences.aspectRatio = .portrait
-            state.preferences.platform = .tiktok
-        } else if firstSource.width == firstSource.height {
-            state.preferences.aspectRatio = .square
-            state.preferences.platform = .instagram
-        } else {
-            state.preferences.aspectRatio = .landscape
-            state.preferences.platform = .youtube
-        }
-        
         let project = MobileProject(
             schemaVersion: 1,
             id: UUID().uuidString,
@@ -179,7 +167,7 @@ public class EditorViewModel {
             evidenceGraphs: [],
             operations: [],
             undo: [],
-            export: nil,
+            export: ExportSettings(),
             revision: 1
         )
         

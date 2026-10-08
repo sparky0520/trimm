@@ -71,9 +71,6 @@ public class ExportCoordinator {
         
         let audioMixParam = AVMutableAudioMixInputParameters(track: audioTrack)
         
-        var globalTrackTransform: CGAffineTransform = .identity
-        var capturedTransform = false
-        
         for source in project.orderedSources {
             let sourceStart = timelineStart
             let sourceEnd = sourceStart + source.durationMs
@@ -85,10 +82,8 @@ public class ExportCoordinator {
             guard let assetVideoTrack = try? await asset.loadTracks(withMediaType: .video).first else { continue }
             let assetAudioTrack = try? await asset.loadTracks(withMediaType: .audio).first
             
-            if !capturedTransform, let transform = try? await assetVideoTrack.load(.preferredTransform) {
-                globalTrackTransform = transform
+            if videoTrack.preferredTransform == .identity, let transform = try? await assetVideoTrack.load(.preferredTransform) {
                 videoTrack.preferredTransform = transform
-                capturedTransform = true
             }
             
             for range in retained {
@@ -172,11 +167,6 @@ public class ExportCoordinator {
         
         let videoComposition = AVMutableVideoComposition(asset: composition) { request in
             var image = request.sourceImage
-            
-            let rotatedExtent = image.extent.applying(globalTrackTransform)
-            let transformToOrigin = globalTrackTransform.concatenating(CGAffineTransform(translationX: -rotatedExtent.origin.x, y: -rotatedExtent.origin.y))
-            image = image.transformed(by: transformToOrigin)
-            
             let timeMs = Int64(request.compositionTime.seconds * 1000)
             
             // 1. Color Grading
@@ -185,16 +175,19 @@ public class ExportCoordinator {
                 if let out = colorFilter.outputImage { image = out }
             }
             
-            let widthRatio = request.renderSize.width / image.extent.width
-            let heightRatio = request.renderSize.height / image.extent.height
-            let scale = max(widthRatio, heightRatio)
+            // Aspect-fill the video frame into the target render size
+            let scaleX = request.renderSize.width / image.extent.width
+            let scaleY = request.renderSize.height / image.extent.height
+            let scale = max(scaleX, scaleY)
             
-            let scaledImage = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            let tx = (request.renderSize.width - image.extent.width * scale) / 2.0
+            let ty = (request.renderSize.height - image.extent.height * scale) / 2.0
             
-            let dx = (request.renderSize.width - scaledImage.extent.width) / 2.0
-            let dy = (request.renderSize.height - scaledImage.extent.height) / 2.0
-            let transform = CGAffineTransform(translationX: dx - scaledImage.extent.origin.x, y: dy - scaledImage.extent.origin.y)
-            image = scaledImage.transformed(by: transform)
+            let transform = CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY)
+                .concatenating(CGAffineTransform(scaleX: scale, y: scale))
+                .concatenating(CGAffineTransform(translationX: tx, y: ty))
+            
+            image = image.transformed(by: transform)
             
             let bg = CIImage(color: .black).cropped(to: CGRect(origin: .zero, size: request.renderSize))
             image = image.composited(over: bg)
