@@ -94,6 +94,9 @@ struct SidebarView: View {
                 }
             }
             .listStyle(.plain)
+            .refreshable {
+                await viewModel.loadPastChats()
+            }
             .padding(.horizontal, 16)
             
             Divider()
