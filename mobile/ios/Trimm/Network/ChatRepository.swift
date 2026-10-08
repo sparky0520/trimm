@@ -42,6 +42,7 @@ public class ChatRepository {
         let url = baseURL.appendingPathComponent(endpoint)
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = method
+        urlRequest.timeoutInterval = 120 // Allow long-running agent requests
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
         let session = try await supabase.auth.session
@@ -64,26 +65,73 @@ public class ChatRepository {
         return data
     }
     
-    public func executeAgentTask(request: AgentRunRequest) async throws -> AgentExecuteResponse {
+    public func executeAgentTask(request: AgentRunRequest, onStatus: ((String) -> Void)? = nil) async throws -> AgentExecuteResponse {
         let encoder = JSONEncoder()
         let body = try encoder.encode(request)
         
-        return try await withThrowingTaskGroup(of: AgentExecuteResponse.self) { group in
-            group.addTask {
-                let data = try await self.makeRequest(endpoint: "chat/completion", method: "POST", body: body)
-                let decoder = JSONDecoder()
-                return try decoder.decode(AgentExecuteResponse.self, from: data)
-            }
-            
-            group.addTask {
-                try await Task.sleep(nanoseconds: 10_000_000_000)
-                throw NSError(domain: "TimeoutError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Request timed out after 10 seconds."])
-            }
-            
-            let result = try await group.next()!
-            group.cancelAll()
-            return result
+        let url = baseURL.appendingPathComponent("chat/completion")
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let sessionData = try await supabase.auth.session
+        let token = sessionData.accessToken
+        urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        urlRequest.httpBody = body
+        
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 10
+        let session = URLSession(configuration: config)
+        
+        let (bytes, response) = try await session.bytes(for: urlRequest)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
         }
+        
+        if httpResponse.statusCode == 401 {
+            let refreshedSession = try await supabase.auth.refreshSession()
+            urlRequest.setValue("Bearer \(refreshedSession.accessToken)", forHTTPHeaderField: "Authorization")
+            let (retryBytes, retryResponse) = try await session.bytes(for: urlRequest)
+            guard let retryHttpResponse = retryResponse as? HTTPURLResponse, (200...299).contains(retryHttpResponse.statusCode) else {
+                throw URLError(.badServerResponse)
+            }
+            return try await parseAgentStream(bytes: retryBytes, onStatus: onStatus)
+        }
+        
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        
+        return try await parseAgentStream(bytes: bytes, onStatus: onStatus)
+    }
+    
+    private func parseAgentStream(bytes: URLSession.AsyncBytes, onStatus: ((String) -> Void)?) async throws -> AgentExecuteResponse {
+        var currentEvent = ""
+        let decoder = JSONDecoder()
+        
+        for try await line in bytes.lines {
+            if line.hasPrefix("event: ") {
+                currentEvent = String(line.dropFirst("event: ".count))
+            } else if line.hasPrefix("data: ") {
+                let dataString = String(line.dropFirst("data: ".count))
+                guard let data = dataString.data(using: .utf8) else { continue }
+                
+                if currentEvent == "status" {
+                    if let statusDict = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+                       let status = statusDict["status"] {
+                        onStatus?(status)
+                    }
+                } else if currentEvent == "done" {
+                    return try decoder.decode(AgentExecuteResponse.self, from: data)
+                } else if currentEvent == "error" {
+                    if let errDict = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+                       let errMsg = errDict["error"] {
+                        throw NSError(domain: "Agent", code: -1, userInfo: [NSLocalizedDescriptionKey: errMsg])
+                    }
+                }
+            }
+        }
+        throw NSError(domain: "Agent", code: -1, userInfo: [NSLocalizedDescriptionKey: "Stream ended without a done event"])
     }
     
     public func getProjects() async throws -> [ChatSummary] {

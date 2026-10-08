@@ -160,7 +160,14 @@ public struct MobileProject: Codable, Equatable {
         return ProjectSnapshot(operations: operations, sources: orderedSources, analysis: analysis)
     }
     
-    public func applyEditInstructions(next: [EditOperation], removedOperations: [String] = [], activeTurnId: String? = nil) -> MobileProject {
+    public func applyEditInstructions(next: [EditOperation], removedOperations: [String] = [], activeTurnId: String? = nil, request: String? = nil, response: String? = nil) -> MobileProject {
+        var newHistory = analysis.chatHistory
+        if let req = request, let res = response {
+            let turn = EditorialConversationTurn(request: req, response: res, evidenceIds: [])
+            newHistory.append(turn)
+            if newHistory.count > 100 { newHistory = Array(newHistory.suffix(100)) }
+        }
+        
         let newAnalysis = Analysis(
             words: analysis.words,
             captions: analysis.captions,
@@ -173,7 +180,7 @@ public struct MobileProject: Codable, Equatable {
             activeCheckpointId: analysis.activeCheckpointId,
             editorialPlan: analysis.editorialPlan,
             pendingProposal: analysis.pendingProposal,
-            chatHistory: analysis.chatHistory,
+            chatHistory: newHistory,
             settledConstraints: analysis.settledConstraints
         )
         var processedNext = next

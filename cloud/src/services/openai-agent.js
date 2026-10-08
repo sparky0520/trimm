@@ -17,7 +17,7 @@ function createOpenAIDecisionProvider({
 
   async function generate({
     systemPolicy, contents, temperature, purpose = 'planning',
-    responseFormat = null, tools = true
+    responseFormat = null, tools = true, onStatus
   }) {
     if (!apiKey) throw Object.assign(new Error('API key is not configured'), { status: 503, code: 'provider_unconfigured' });
 
@@ -40,36 +40,58 @@ function createOpenAIDecisionProvider({
       messages,
       ...(responseFormat ? { response_format: responseFormat } : {}),
       ...(Array.isArray(toolsArray) && toolsArray.length > 0 ? { tools: toolsArray.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })) } : {}),
+      stream: true,
     };
 
-    let response;
+    let stream;
     try {
-      response = await openai.chat.completions.create(requestPayload, { maxRetries: 4 });
+      stream = await openai.chat.completions.create(requestPayload, { maxRetries: 4 });
     } catch (err) {
       console.error(`[DEBUG] OpenAI API Error:`, err);
       throw err;
     }
 
-    const choice = response.choices[0];
-    const message = choice.message;
-    const functionCalls = message.tool_calls || [];
+    let textContent = '';
+    let toolCalls = [];
+    let finishReason = null;
+    let statusSent = false;
+    
+    for await (const chunk of stream) {
+        const choice = chunk.choices[0];
+        if (!choice) continue;
+        if (choice.delta.content) textContent += choice.delta.content;
+        if (choice.delta.tool_calls) {
+            if (!statusSent && onStatus) {
+                onStatus('editing');
+                statusSent = true;
+            }
+            for (const tc of choice.delta.tool_calls) {
+                if (!toolCalls[tc.index]) {
+                    toolCalls[tc.index] = { id: tc.id, type: 'function', function: { name: tc.function?.name || '', arguments: '' } };
+                }
+                if (tc.function?.name) toolCalls[tc.index].function.name = tc.function.name;
+                if (tc.function?.arguments) toolCalls[tc.index].function.arguments += tc.function.arguments;
+            }
+        }
+        if (choice.finish_reason) finishReason = choice.finish_reason;
+    }
 
-    if (!message.content && functionCalls.length === 0) {
+    if (!textContent && toolCalls.length === 0) {
       throw Object.assign(new Error('Model returned no decision.'), { status: 502, code: 'empty_provider_response' });
     }
 
     return {
-      rawText: message.content || null,
-      toolCalls: functionCalls.map(tc => ({ name: tc.function.name, args: JSON.parse(tc.function.arguments), id: tc.id })),
-      history: [...messages, message],
-      finishReason: choice.finish_reason || null,
-      usage: openaiUsage(response, { purpose, model }),
+      rawText: textContent || null,
+      toolCalls: toolCalls.map(tc => ({ name: tc.function.name, args: JSON.parse(tc.function.arguments || '{}'), id: tc.id })),
+      history: [...messages, { role: 'assistant', content: textContent, tool_calls: toolCalls }],
+      finishReason: finishReason,
+      usage: null,
     };
   }
 
 
 
-  const chatCompletion = async ({ history = [], sources = [], transcript = [], existingOperations = [] }) => {
+  const chatCompletion = async ({ history = [], sources = [], transcript = [], existingOperations = [] }, onStatus) => {
     
     // Pre-process transcript for LLM visibility
     const preprocessedTranscript = [];
@@ -143,7 +165,8 @@ Use the finish_without_proposal tool ONLY AS A LAST RESORT if the request is fun
       contents,
       temperature: 0.2, // Slightly higher than 0.1 for conversational fluidity
       purpose: 'execution',
-      tools: true
+      tools: true,
+      onStatus
     });
 
     const failure = response.toolCalls.find(tc => tc.name === 'finish_without_proposal');

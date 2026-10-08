@@ -49,7 +49,12 @@ public class EditorViewModel {
             let project = try await ChatRepository.shared.getProject(id: id)
             self.state.project = project
             self.state.sources = project.sources
-            self.state.messages = [] // Alternatively load from project.analysis.chatHistory if available
+            self.state.messages = project.analysis.chatHistory.flatMap { turn in
+                [
+                    ChatMessage(text: turn.request, isUser: true),
+                    ChatMessage(text: turn.response, isUser: false)
+                ]
+            }
             await refreshPlayer(project: project)
         } catch {
             print("Failed to load project: \(error)")
@@ -226,7 +231,7 @@ public class EditorViewModel {
         
         state.isProcessing = true
         state.messages.append(ChatMessage(text: request, isUser: true))
-        state.jobMessage = "Continuing the conversation…"
+        state.jobMessage = "Thinking…"
         state.messages.append(ChatMessage(text: state.jobMessage!, isUser: false))
         
         Task {
@@ -245,7 +250,7 @@ public class EditorViewModel {
             }
             
             let currentHistory = self.state.messages
-                .filter { $0.text != "Continuing the conversation…" }
+                .filter { $0.text != "Thinking…" }
                 .map { AgentChatMessage(role: $0.isUser ? "user" : "assistant", content: $0.text) }
             
             let agentRequest = AgentRunRequest(
@@ -263,13 +268,24 @@ public class EditorViewModel {
             )
             
             do {
-                let response = try await ChatRepository.shared.executeAgentTask(request: agentRequest)
+                let response = try await ChatRepository.shared.executeAgentTask(request: agentRequest) { status in
+                    Task { @MainActor in
+                        if status == "editing" {
+                            self.state.jobMessage = "Editing…"
+                            if let lastIndex = self.state.messages.lastIndex(where: { $0.text == "Thinking…" }) {
+                                self.state.messages.remove(at: lastIndex)
+                                self.state.messages.append(ChatMessage(text: "Editing…", isUser: false))
+                            }
+                        }
+                    }
+                }
                 await MainActor.run {
                     if response.type == "edit_program", let operations = response.operations {
-                        let updatedProject = project.applyEditInstructions(next: operations, removedOperations: response.removedOperations ?? [])
-                        self.state.project = updatedProject
                         let replyText = response.summary ?? "Revised proposal ready to review"
+                        let updatedProject = project.applyEditInstructions(next: operations, removedOperations: response.removedOperations ?? [], request: request, response: replyText)
+                        self.state.project = updatedProject
                         self.state.jobMessage = replyText
+                        self.state.messages.removeAll { $0.text == "Thinking…" || $0.text == "Editing…" }
                         self.state.messages.append(ChatMessage(text: replyText, isUser: false))
                         
                         Task {
@@ -287,6 +303,7 @@ public class EditorViewModel {
             } catch {
                 await MainActor.run {
                     self.state.jobMessage = "Failed: \(error.localizedDescription)"
+                    self.state.messages.removeAll { $0.text == "Thinking…" || $0.text == "Editing…" }
                     self.state.messages.append(ChatMessage(text: "Error: \(error.localizedDescription)", isUser: false))
                     self.state.isProcessing = false
                 }

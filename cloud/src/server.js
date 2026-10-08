@@ -184,14 +184,28 @@ const server = http.createServer(async (request, response) => {
   if (request.method === 'POST' && requestUrl.pathname === '/v1/chat/completion') {
     try {
       const payload = await collect(request, 5 * 1024 * 1024);
-      return json(response, 200, await agentDecisionProvider.chatCompletion(payload));
+      response.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+      });
+      const finalRes = await agentDecisionProvider.chatCompletion(payload, (status) => {
+          response.write(`event: status\ndata: ${JSON.stringify({status})}\n\n`);
+      });
+      response.write(`event: done\ndata: ${JSON.stringify(finalRes)}\n\n`);
+      return response.end();
     } catch (error) {
       console.error('[chat-completion] request failed', { message: error?.message, status: error?.status, code: error?.code });
-      return json(response, Number.isInteger(error?.status) ? error.status : 500, {
-        error: error?.message || 'Failed to generate chat completion.',
-        code: error?.code || 'chat_completion_failed',
-        requestId,
-      });
+      if (!response.headersSent) {
+          return json(response, Number.isInteger(error?.status) ? error.status : 500, {
+            error: error?.message || 'Failed to generate chat completion.',
+            code: error?.code || 'chat_completion_failed',
+            requestId: correlationId(request),
+          });
+      } else {
+          response.write(`event: error\ndata: ${JSON.stringify({ error: error?.message || 'Failed' })}\n\n`);
+          return response.end();
+      }
     }
   }
 
