@@ -167,7 +167,7 @@ public class EditorViewModel {
             evidenceGraphs: [],
             operations: [],
             undo: [],
-            export: ExportSettings(),
+            export: nil,
             revision: 1
         )
         

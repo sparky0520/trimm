@@ -270,10 +270,16 @@ public class VideoProcessor {
                     if let out = colorFilter.outputImage { image = out }
                 }
                 
-                let dx = max(0, (request.renderSize.width - image.extent.width) / 2.0)
-                let dy = max(0, (request.renderSize.height - image.extent.height) / 2.0)
-                let transform = CGAffineTransform(translationX: dx - image.extent.origin.x, y: dy - image.extent.origin.y)
-                image = image.transformed(by: transform)
+                let widthRatio = request.renderSize.width / image.extent.width
+                let heightRatio = request.renderSize.height / image.extent.height
+                let scale = max(widthRatio, heightRatio)
+                
+                let scaledImage = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+                
+                let dx = (request.renderSize.width - scaledImage.extent.width) / 2.0
+                let dy = (request.renderSize.height - scaledImage.extent.height) / 2.0
+                let transform = CGAffineTransform(translationX: dx - scaledImage.extent.origin.x, y: dy - scaledImage.extent.origin.y)
+                image = scaledImage.transformed(by: transform)
                 
                 let bg = CIImage(color: .black).cropped(to: CGRect(origin: .zero, size: request.renderSize))
                 image = image.composited(over: bg)

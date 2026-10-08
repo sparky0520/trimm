@@ -162,7 +162,14 @@ public struct MobileProject: Codable, Equatable {
         if let providedExport = export {
             self.export = providedExport
         } else {
-            self.export = ExportSettings(width: source.width > 0 ? source.width : 1920, height: source.height > 0 ? source.height : 1080)
+            switch preferences.aspectRatio {
+            case .portrait:
+                self.export = ExportSettings(width: 1080, height: 1920)
+            case .square:
+                self.export = ExportSettings(width: 1080, height: 1080)
+            case .landscape:
+                self.export = ExportSettings(width: 1920, height: 1080)
+            }
         }
         
         self.revision = revision
