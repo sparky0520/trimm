@@ -16,7 +16,7 @@ public struct TranscriptWord: Codable, Equatable {
 public struct CaptionCue: Codable, Equatable {
     public let text: String
     public let range: TimeRange
-    public let words: [TranscriptWord]
+    public let words: [TranscriptWord]?
 }
 
 public struct SourceMedia: Codable, Equatable {
@@ -160,7 +160,7 @@ public struct MobileProject: Codable, Equatable {
         return ProjectSnapshot(operations: operations, sources: orderedSources, analysis: analysis)
     }
     
-    public func applyEditInstructions(next: [EditOperation], activeTurnId: String? = nil) -> MobileProject {
+    public func applyEditInstructions(next: [EditOperation], removedOperations: [String] = [], activeTurnId: String? = nil) -> MobileProject {
         let newAnalysis = Analysis(
             words: analysis.words,
             captions: analysis.captions,
@@ -176,6 +176,14 @@ public struct MobileProject: Codable, Equatable {
             chatHistory: analysis.chatHistory,
             settledConstraints: analysis.settledConstraints
         )
+        var processedNext = next
+        for (index, op) in processedNext.enumerated() {
+            if case let .addCaptions(id, enabled, cues, target, speakerId, style) = op, cues.isEmpty {
+                let generatedCues = CaptionSegmenter.segment(words: analysis.words)
+                processedNext[index] = .addCaptions(id: id, enabled: enabled, cues: generatedCues, target: target, speakerId: speakerId, style: style)
+            }
+        }
+        
         let newUndo = Array((undo + [snapshot()]).suffix(30))
         return MobileProject(
             schemaVersion: schemaVersion,
@@ -187,7 +195,7 @@ public struct MobileProject: Codable, Equatable {
             preferences: preferences,
             analysis: newAnalysis,
             evidenceGraphs: evidenceGraphs,
-            operations: next,
+            operations: self.operations.filter { !removedOperations.contains($0.id) } + processedNext,
             undo: newUndo,
             redo: [],
             export: export,

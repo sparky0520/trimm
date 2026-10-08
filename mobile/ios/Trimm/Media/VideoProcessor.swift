@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+@preconcurrency import CoreImage
 
 public class VideoProcessor {
     public static let shared = VideoProcessor()
@@ -212,12 +213,76 @@ public class VideoProcessor {
         
         audioMix.inputParameters = inputParameters
         
+        let colorCubeFilter = FineColorEffect.createColorCube(operations: project.operations)
+        var textOverlays: [TextGraphicOverlay] = []
+        for op in project.operations {
+            if case let .addTextOverlay(_, enabled, text, target, designBlueprint) = op, enabled {
+                let offset: Int64 = 0 // Multi-source preview source offsets could be calculated if needed, assuming 0 for simplicity if single source
+                let start = offset + (target?.startMs ?? 0)
+                let end = offset + (target?.endMs ?? durationMs)
+                textOverlays.append(TextGraphicOverlay(
+                    text: text,
+                    blueprintJson: designBlueprint,
+                    startMs: sourceToOutput(sourceMs: start),
+                    endMs: sourceToOutput(sourceMs: end),
+                    videoWidth: project.export.width,
+                    videoHeight: project.export.height
+                ))
+            } else if case let .addCaptions(_, enabled, cues, target, speakerId, style) = op, enabled {
+                let offset: Int64 = 0
+                for cue in cues {
+                    if let sid = speakerId, let wordSid = cue.words?.first?.speakerId, sid != wordSid { continue }
+                    let start = offset + cue.range.startMs
+                    let end = offset + cue.range.endMs
+                    
+                    let outStart = sourceToOutput(sourceMs: start)
+                    let outEnd = sourceToOutput(sourceMs: end)
+                    
+                    if outEnd > outStart {
+                        textOverlays.append(TextGraphicOverlay(
+                            text: cue.text,
+                            blueprintJson: "{\"style\": \"\(style)\"}",
+                            startMs: outStart,
+                            endMs: outEnd,
+                            videoWidth: project.export.width,
+                            videoHeight: project.export.height
+                        ))
+                    }
+                }
+            }
+        }
+        
+        var videoComposition: AVMutableVideoComposition? = nil
+        if colorCubeFilter != nil || !textOverlays.isEmpty {
+            videoComposition = AVMutableVideoComposition(asset: composition) { request in
+                var image = request.sourceImage
+                let timeMs = Int64(request.compositionTime.seconds * 1000)
+                
+                if let colorFilter = colorCubeFilter {
+                    colorFilter.setValue(image, forKey: kCIInputImageKey)
+                    if let out = colorFilter.outputImage { image = out }
+                }
+                
+                for overlay in textOverlays {
+                    if let overlayImage = overlay.getImage(presentationTimeUs: timeMs * 1000) {
+                        image = overlayImage.composited(over: image)
+                    }
+                }
+                
+                request.finish(with: image, context: nil)
+            }
+            videoComposition?.frameDuration = CMTime(value: 1, timescale: 30)
+            videoComposition?.renderSize = CGSize(width: project.export.width, height: project.export.height)
+        }
+        
         nonisolated(unsafe) let safeComposition = composition
         nonisolated(unsafe) let safeAudioMix = audioMix
+        nonisolated(unsafe) let safeVideoComposition = videoComposition
         
         return await MainActor.run {
             let item = AVPlayerItem(asset: safeComposition)
             item.audioMix = safeAudioMix
+            item.videoComposition = safeVideoComposition
             return item
         }
     }

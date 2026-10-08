@@ -107,6 +107,20 @@ public class ExportCoordinator {
             }
         }
         
+        func sourceToOutput(sourceMs: Int64) -> Int64 {
+            var outputMs: Int64 = 0
+            for range in retained {
+                if sourceMs < range.startMs {
+                    return outputMs
+                } else if sourceMs < range.endMs {
+                    return outputMs + (sourceMs - range.startMs)
+                } else {
+                    outputMs += (range.endMs - range.startMs)
+                }
+            }
+            return outputMs
+        }
+        
         let colorCubeFilter = FineColorEffect.createColorCube(operations: project.operations)
         var textOverlays: [TextGraphicOverlay] = []
         for op in project.operations {
@@ -117,11 +131,33 @@ public class ExportCoordinator {
                 textOverlays.append(TextGraphicOverlay(
                     text: text,
                     blueprintJson: designBlueprint,
-                    startMs: start,
-                    endMs: end,
+                    startMs: sourceToOutput(sourceMs: start),
+                    endMs: sourceToOutput(sourceMs: end),
                     videoWidth: project.export.width,
                     videoHeight: project.export.height
                 ))
+            } else if case let .addCaptions(_, enabled, cues, target, speakerId, style) = op, enabled {
+                let offset = sourceOffsets[target?.sourceId ?? ""] ?? 0
+                for cue in cues {
+                    if let sid = speakerId, let wordSid = cue.words?.first?.speakerId, sid != wordSid { continue }
+                    
+                    let start = offset + cue.range.startMs
+                    let end = offset + cue.range.endMs
+                    
+                    let outStart = sourceToOutput(sourceMs: start)
+                    let outEnd = sourceToOutput(sourceMs: end)
+                    
+                    if outEnd > outStart {
+                        textOverlays.append(TextGraphicOverlay(
+                            text: cue.text,
+                            blueprintJson: "{\"style\": \"\(style)\"}",
+                            startMs: outStart,
+                            endMs: outEnd,
+                            videoWidth: project.export.width,
+                            videoHeight: project.export.height
+                        ))
+                    }
+                }
             }
         }
         

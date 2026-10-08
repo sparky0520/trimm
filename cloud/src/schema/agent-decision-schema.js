@@ -69,11 +69,29 @@ const PROPOSE_MUSIC_DUCKING_TOOL = operationTool(
 
 const PROPOSE_CAPTIONS_TOOL = operationTool(
   'propose_add_captions',
-  'Enable captions. You can optionally specify a source interval or a specific speakerId. The timing and text will be automatically extracted from the transcript.',
-  ['style', 'reason'], {
+  'Enable captions. You MUST provide the segmented captions (cues) by intelligently grouping the transcript words into semantically intact sentences or phrases. Ensure you provide exact startMs and endMs matching the transcript timing.',
+  ['style', 'reason', 'cues'], {
   ...targetRangeProperties,
   speakerId: { type: 'string' },
   style: { type: 'string', enum: ['bold-bottom'] },
+  cues: {
+    type: 'array',
+    items: {
+      type: 'object',
+      required: ['text', 'range'],
+      properties: {
+        text: { type: 'string' },
+        range: {
+          type: 'object',
+          required: ['startMs', 'endMs'],
+          properties: {
+            startMs: { type: 'integer' },
+            endMs: { type: 'integer' }
+          }
+        }
+      }
+    }
+  }
 },
 );
 

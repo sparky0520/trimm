@@ -13,7 +13,9 @@ private struct ProjectsResponse: Codable {
 public struct AgentExecuteResponse: Codable, Equatable {
     public let type: String
     public let operations: [EditOperation]?
+    public let removedOperations: [String]?
     public let questions: [ClarificationQuestion]?
+    public let summary: String?
 }
 
 public class ChatRepository {
@@ -65,10 +67,23 @@ public class ChatRepository {
     public func executeAgentTask(request: AgentRunRequest) async throws -> AgentExecuteResponse {
         let encoder = JSONEncoder()
         let body = try encoder.encode(request)
-        let data = try await makeRequest(endpoint: "chat/completion", method: "POST", body: body)
         
-        let decoder = JSONDecoder()
-        return try decoder.decode(AgentExecuteResponse.self, from: data)
+        return try await withThrowingTaskGroup(of: AgentExecuteResponse.self) { group in
+            group.addTask {
+                let data = try await self.makeRequest(endpoint: "chat/completion", method: "POST", body: body)
+                let decoder = JSONDecoder()
+                return try decoder.decode(AgentExecuteResponse.self, from: data)
+            }
+            
+            group.addTask {
+                try await Task.sleep(nanoseconds: 10_000_000_000)
+                throw NSError(domain: "TimeoutError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Request timed out after 10 seconds."])
+            }
+            
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
     }
     
     public func getProjects() async throws -> [ChatSummary] {

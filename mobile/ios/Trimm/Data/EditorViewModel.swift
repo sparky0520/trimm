@@ -10,10 +10,7 @@ public class EditorViewModel {
     private var exportSession: AVAssetExportSession?
     
     public init() {
-        // Load past chats on init
-        Task {
-            await loadPastChats()
-        }
+        // Initialization without fetching to avoid AuthError.sessionMissing
     }
     
     @MainActor
@@ -78,6 +75,7 @@ public class EditorViewModel {
     
     @MainActor
     public func importSources(urls: [URL]) async {
+        state.isProcessing = true
         var newSources: [SourceMedia] = []
         for url in urls {
             let asset = AVURLAsset(url: url)
@@ -122,6 +120,7 @@ public class EditorViewModel {
             }
         }
         self.state.sources = newSources
+        state.isProcessing = false
     }
     
     public func initializeProject() {
@@ -149,10 +148,6 @@ public class EditorViewModel {
         self.state.project = project
         self.state.messages = []
         
-        Task {
-            try? await ChatRepository.shared.syncProject(project: project)
-            await loadPastChats()
-        }
         
         Task {
             await refreshPlayer(project: project)
@@ -172,10 +167,18 @@ public class EditorViewModel {
                                 completedAtEpochMs: Int64(Date().timeIntervalSince1970 * 1000)
                             )
                             
+                            let newTitle: String
+                            if words.isEmpty {
+                                newTitle = "Untitled Chat"
+                            } else {
+                                let prefix = words.prefix(4).map { $0.text }.joined(separator: " ")
+                                newTitle = prefix.isEmpty ? "Untitled Chat" : prefix
+                            }
+                            
                             let updatedProject = MobileProject(
                                 schemaVersion: currentProject.schemaVersion,
                                 id: currentProject.id,
-                                title: currentProject.title,
+                                title: newTitle,
                                 source: currentProject.source,
                                 sources: currentProject.sources,
                                 proxyUri: currentProject.proxyUri,
@@ -189,6 +192,11 @@ public class EditorViewModel {
                             )
                             self.state.project = updatedProject
                         }
+                    }
+                    
+                    if let currentProject = await MainActor.run(resultType: MobileProject?.self, body: { self.state.project }) {
+                        try? await ChatRepository.shared.syncProject(project: currentProject)
+                        await loadPastChats()
                     }
                 } catch {
                     print("Transcription failed: \(error)")
@@ -236,6 +244,10 @@ public class EditorViewModel {
                 )
             }
             
+            let currentHistory = self.state.messages
+                .filter { $0.text != "Continuing the conversation…" }
+                .map { AgentChatMessage(role: $0.isUser ? "user" : "assistant", content: $0.text) }
+            
             let agentRequest = AgentRunRequest(
                 projectId: project.id,
                 deviceSessionId: UUID().uuidString,
@@ -243,6 +255,7 @@ public class EditorViewModel {
                 intent: request,
                 sources: agentSources,
                 transcript: transcriptWords,
+                history: currentHistory,
                 evidenceJobIds: [],
                 existingOperations: project.operations,
                 uploadInitialVideoContext: false,
@@ -253,10 +266,11 @@ public class EditorViewModel {
                 let response = try await ChatRepository.shared.executeAgentTask(request: agentRequest)
                 await MainActor.run {
                     if response.type == "edit_program", let operations = response.operations {
-                        let updatedProject = project.applyEditInstructions(next: operations)
+                        let updatedProject = project.applyEditInstructions(next: operations, removedOperations: response.removedOperations ?? [])
                         self.state.project = updatedProject
-                        self.state.jobMessage = "Revised proposal ready to review"
-                        self.state.messages.append(ChatMessage(text: "Revised proposal ready to review", isUser: false))
+                        let replyText = response.summary ?? "Revised proposal ready to review"
+                        self.state.jobMessage = replyText
+                        self.state.messages.append(ChatMessage(text: replyText, isUser: false))
                         
                         Task {
                             try? await ChatRepository.shared.syncProject(project: updatedProject)
@@ -272,7 +286,8 @@ public class EditorViewModel {
                 
             } catch {
                 await MainActor.run {
-                    self.state.jobMessage = "Failed to revise"
+                    self.state.jobMessage = "Failed: \(error.localizedDescription)"
+                    self.state.messages.append(ChatMessage(text: "Error: \(error.localizedDescription)", isUser: false))
                     self.state.isProcessing = false
                 }
             }

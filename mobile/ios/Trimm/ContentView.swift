@@ -246,6 +246,11 @@ struct ContentView: View {
                                 ProgressView().padding()
                             }
                         } else {
+                            if viewModel.state.isProcessing {
+                                ProgressView("Importing media...")
+                                    .padding()
+                                    .foregroundColor(.muted)
+                            }
                             PhotosPicker(selection: $selectedItem, matching: .videos) {
                                 Text("Select clips to edit")
                                     .font(.system(size: 16, weight: .semibold))
@@ -256,6 +261,7 @@ struct ContentView: View {
                                     .cornerRadius(10)
                                     .padding(.horizontal, 40)
                             }
+                            .disabled(viewModel.state.isProcessing)
                             .onChange(of: selectedItem) { _, newValue in
                                 if let newValue = newValue {
                                     Task {
@@ -321,7 +327,11 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .task {
             for await authEvent in supabase.auth.authStateChanges {
+                let wasAuthenticated = isAuthenticated
                 isAuthenticated = authEvent.session != nil
+                if !wasAuthenticated && isAuthenticated {
+                    Task { await viewModel.loadPastChats() }
+                }
             }
         }
     } // body
