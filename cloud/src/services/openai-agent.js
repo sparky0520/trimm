@@ -154,7 +154,7 @@ Available Visual Effects (use these as the effectName in effect nodes):
 Special Natively-Calculated Properties (USE THESE instead of calculating things manually):
 - autoEnhance: true (CompositionSettings): Dynamically analyzes and boosts dialogue volume/compression on the device.
 - autoDuck: true (AudioNode): Automatically fades out the main video track volume when the background audio plays.
-- transition: "crossfade" (VideoNode): Applies a 500ms smooth crossfade/fade between the clips natively.
+- transition (VideoNode): Applies a 500ms smooth native transition between clips. Supported values: "crossfade", "dip_to_black", "dip_to_white", "wipe", "slide".
 
 Transcript Data (use this to detect dead space, silences, and timings):
 ${JSON.stringify(preprocessedTranscript)}

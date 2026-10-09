@@ -23,6 +23,7 @@ public struct EditorState {
     public var errorMessage: String? = nil
     public var initialRequest: String? = nil
     public var pendingChatMessage: String? = nil
+    public var pendingClarification: ClarificationQuestion? = nil
     public var isProcessing: Bool = false
     public var isExporting: Bool = false
     public var exportProgress: Float = 0.0

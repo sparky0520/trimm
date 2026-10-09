@@ -49,6 +49,30 @@ public struct EditorScreen: View {
                         ForEach(viewModel.state.messages) { msg in
                             ChatBubble(message: msg.text, isUser: msg.isUser)
                         }
+                        if let clarification = viewModel.state.pendingClarification {
+                            VStack(alignment: .leading, spacing: 8) {
+                                ForEach(clarification.options, id: \.id) { option in
+                                    Button(action: {
+                                        viewModel.state.pendingClarification = nil
+                                        viewModel.reviseStory(request: option.label)
+                                    }) {
+                                        HStack {
+                                            Text(option.label)
+                                                .font(.headline)
+                                            Spacer()
+                                            if option.id == clarification.recommendedOptionId {
+                                                Image(systemName: "star.fill").foregroundColor(.yellow)
+                                            }
+                                        }
+                                        .padding()
+                                        .background(Color.workspace)
+                                        .cornerRadius(8)
+                                        .foregroundColor(.cream)
+                                    }
+                                }
+                            }
+                            .padding(.top, 8)
+                        }
                         
                         if viewModel.state.isProcessing {
                             HStack {
@@ -89,9 +113,10 @@ public struct EditorScreen: View {
                     .background(Color.workspace)
                     .foregroundColor(.creamRaised)
                     .cornerRadius(20)
-                    .disabled(viewModel.state.isProcessing)
+                    .disabled(viewModel.state.isProcessing || (viewModel.state.pendingClarification != nil && viewModel.state.pendingClarification?.allowWriteIn != true))
                 
                 Button(action: {
+                    viewModel.state.pendingClarification = nil
                     viewModel.reviseStory(request: prompt)
                     prompt = ""
                 }) {
@@ -99,7 +124,7 @@ public struct EditorScreen: View {
                         .font(.title)
                         .foregroundColor(prompt.isEmpty ? .muted : .coral)
                 }
-                .disabled(prompt.isEmpty || viewModel.state.isProcessing)
+                .disabled(prompt.isEmpty || viewModel.state.isProcessing || (viewModel.state.pendingClarification != nil && viewModel.state.pendingClarification?.allowWriteIn != true))
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)

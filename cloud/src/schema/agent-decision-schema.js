@@ -92,6 +92,7 @@ const ASK_USER_QUESTION_TOOL = Object.freeze({
           properties: {
             id: { type: 'string' },
             prompt: { type: 'string' },
+            allowWriteIn: { type: 'boolean', description: 'If true, provides a text input for the user to write their own custom response if none of the options fit.' },
             options: {
               type: 'array', items: {
                 type: 'object', additionalProperties: false, required: ['id', 'label', 'description'],

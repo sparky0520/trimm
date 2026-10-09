@@ -487,18 +487,51 @@ public class VideoProcessor {
                 
                 image = image.transformed(by: transform)
                 var opacity: CGFloat = 1.0
+                var bgColor = CIColor.black
+                var translationX: CGFloat = 0.0
+                var cropRatio: CGFloat = 1.0
+                
                 for v in videoNodes where timeMs >= v.startMs && timeMs <= v.endMs {
-                    if v.transition == "crossfade" {
+                    if let transition = v.transition {
                         let fadeMs: Int64 = 500
+                        var progress: CGFloat = 1.0
+                        
                         if timeMs < v.startMs + fadeMs {
-                            opacity = CGFloat(timeMs - v.startMs) / CGFloat(fadeMs)
+                            progress = CGFloat(timeMs - v.startMs) / CGFloat(fadeMs)
                         } else if timeMs > v.endMs - fadeMs {
-                            opacity = CGFloat(v.endMs - timeMs) / CGFloat(fadeMs)
+                            progress = CGFloat(v.endMs - timeMs) / CGFloat(fadeMs)
+                        }
+                        
+                        if progress < 1.0 {
+                            switch transition {
+                            case "crossfade", "dip_to_black":
+                                opacity = progress
+                            case "dip_to_white":
+                                opacity = progress
+                                bgColor = .white
+                            case "wipe":
+                                cropRatio = progress
+                            case "slide":
+                                translationX = (timeMs < v.startMs + fadeMs) ? request.renderSize.width * (1.0 - progress) : -request.renderSize.width * (1.0 - progress)
+                            default:
+                                break
+                            }
                         }
                     }
                 }
                 
-                let bg = CIImage(color: .black).cropped(to: CGRect(origin: .zero, size: request.renderSize))
+                if translationX != 0 {
+                    image = image.transformed(by: CGAffineTransform(translationX: translationX, y: 0))
+                }
+                
+                if cropRatio < 1.0 {
+                    let cropWidth = request.renderSize.width * cropRatio
+                    let cropX = (request.renderSize.width - cropWidth) / 2.0
+                    let cropRect = CGRect(x: cropX, y: 0, width: cropWidth, height: request.renderSize.height)
+                    image = image.cropped(to: cropRect)
+                }
+                
+                let bg = CIImage(color: bgColor).cropped(to: CGRect(origin: .zero, size: request.renderSize))
                 if opacity < 1.0 {
                     let alphaFilter = CIFilter(name: "CIColorMatrix")
                     alphaFilter?.setValue(image, forKey: kCIInputImageKey)

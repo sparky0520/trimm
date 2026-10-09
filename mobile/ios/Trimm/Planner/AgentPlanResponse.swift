@@ -17,12 +17,14 @@ public struct ClarificationQuestion: Codable, Equatable {
     public let prompt: String
     public let options: [ClarificationOption]
     public let recommendedOptionId: String
+    public let allowWriteIn: Bool?
     
-    public init(id: String, prompt: String, options: [ClarificationOption], recommendedOptionId: String = "") {
+    public init(id: String, prompt: String, options: [ClarificationOption], recommendedOptionId: String = "", allowWriteIn: Bool? = nil) {
         self.id = id
         self.prompt = prompt
         self.options = options
         self.recommendedOptionId = recommendedOptionId
+        self.allowWriteIn = allowWriteIn
     }
 }
 

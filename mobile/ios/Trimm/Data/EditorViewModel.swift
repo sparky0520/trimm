@@ -406,6 +406,12 @@ public class EditorViewModel {
                             }
                             await self.loadPastChats()
                         }
+                    } else if response.type == "clarification" {
+                        self.state.messages.removeAll { $0.text == "Thinking…" || $0.text == "Editing…" }
+                        if let questions = response.questions, let firstQ = questions.first {
+                            self.state.pendingClarification = firstQ
+                            self.state.messages.append(ChatMessage(text: firstQ.prompt, isUser: false))
+                        }
                     }
                     self.state.isProcessing = false
                 }
