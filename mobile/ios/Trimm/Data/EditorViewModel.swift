@@ -259,6 +259,9 @@ public class EditorViewModel {
             }
         } catch {
             print("Failed to create preview composition: \(error)")
+            await MainActor.run {
+                self.state.errorMessage = "Failed to load video: \(error.localizedDescription)"
+            }
         }
     }
     

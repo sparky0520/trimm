@@ -11,6 +11,10 @@ public class VideoProcessor {
             throw NSError(domain: "VideoProcessor", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid source URI"])
         }
         
+        if url.isFileURL && !FileManager.default.fileExists(atPath: url.path) {
+            throw NSError(domain: "VideoProcessor", code: 404, userInfo: [NSLocalizedDescriptionKey: "Source video file is missing. If you reinstalled the app or changed devices, please start a new project."])
+        }
+        
         let asset = AVURLAsset(url: url)
         
         // Load duration

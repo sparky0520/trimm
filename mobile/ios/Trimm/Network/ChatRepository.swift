@@ -134,26 +134,57 @@ public class ChatRepository {
         throw NSError(domain: "Agent", code: -1, userInfo: [NSLocalizedDescriptionKey: "Stream ended without a done event"])
     }
     
+    private var projectsDirectory: URL {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let dir = docs.appendingPathComponent("Projects", isDirectory: true)
+        if !FileManager.default.fileExists(atPath: dir.path) {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        return dir
+    }
+    
     public func getProjects() async throws -> [ChatSummary] {
-        let data = try await makeRequest(endpoint: "projects", method: "GET")
+        let dir = projectsDirectory
+        let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.creationDateKey])
+        var summaries: [(ChatSummary, Date)] = []
         let decoder = JSONDecoder()
-        let response = try decoder.decode(ProjectsResponse.self, from: data)
-        return response.projects
+        
+        for file in files where file.pathExtension == "json" {
+            if let data = try? Data(contentsOf: file),
+               let project = try? decoder.decode(MobileProject.self, from: data) {
+                let attrs = try? FileManager.default.attributesOfItem(atPath: file.path)
+                let creationDate = attrs?[.creationDate] as? Date ?? Date.distantPast
+                summaries.append((ChatSummary(id: project.id, title: project.title), creationDate))
+            }
+        }
+        
+        return summaries.sorted { $0.1 > $1.1 }.map { $0.0 }
     }
     
     public func getProject(id: String) async throws -> MobileProject {
-        let data = try await makeRequest(endpoint: "projects/\(id)", method: "GET")
+        let file = projectsDirectory.appendingPathComponent("\(id).json")
+        let data = try Data(contentsOf: file)
         let decoder = JSONDecoder()
         return try decoder.decode(MobileProject.self, from: data)
     }
     
     public func syncProject(project: MobileProject) async throws {
+        let file = projectsDirectory.appendingPathComponent("\(project.id).json")
         let encoder = JSONEncoder()
-        let body = try encoder.encode(project)
-        _ = try await makeRequest(endpoint: "projects/sync", method: "POST", body: body)
+        encoder.outputFormatting = .prettyPrinted
+        let data = try encoder.encode(project)
+        try data.write(to: file, options: .atomic)
     }
     
     public func deleteProject(id: String) async throws {
-        _ = try await makeRequest(endpoint: "projects/\(id)", method: "DELETE")
+        if let project = try? await getProject(id: id) {
+            for source in project.sources {
+                if let url = source.resolvedUrl, url.isFileURL {
+                    try? FileManager.default.removeItem(at: url)
+                }
+            }
+        }
+        let file = projectsDirectory.appendingPathComponent("\(id).json")
+        try? FileManager.default.removeItem(at: file)
     }
 }

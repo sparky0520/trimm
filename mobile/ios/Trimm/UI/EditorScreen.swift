@@ -13,6 +13,13 @@ public struct EditorScreen: View {
         self.viewModel = viewModel
     }
     
+    private var showError: Binding<Bool> {
+        Binding(
+            get: { viewModel.state.errorMessage != nil },
+            set: { if !$0 { viewModel.state.errorMessage = nil } }
+        )
+    }
+    
     public var body: some View {
         ZStack {
             VStack(spacing: 0) {
@@ -176,6 +183,13 @@ public struct EditorScreen: View {
                     }
                 }
             }
+        }
+        .alert(isPresented: showError) {
+            Alert(
+                title: Text("Error"),
+                message: Text(viewModel.state.errorMessage ?? "An unknown error occurred."),
+                dismissButton: .default(Text("OK"))
+            )
         }
     }
 }
