@@ -106,6 +106,8 @@ class TextGraphicOverlay: @unchecked Sendable {
             // --- Compute Text Size First for Flexible Backgrounds ---
             let textStyle = blueprint["textStyle"] as? [String: Any] ?? [:]
             let textColor = parseColor(textStyle["color"] as? String, defaultColor: .white)
+            let strokeColor = parseColor(textStyle["strokeColor"] as? String, defaultColor: .black)
+            let strokeWidth = (textStyle["strokeWidth"] as? CGFloat ?? 0.0) * scaleFactor
             let rawFontSize = textStyle["fontSize"] as? CGFloat ?? 100.0 // Default size expected by AI
             let fontSize = rawFontSize * scaleFactor
             
@@ -119,16 +121,37 @@ class TextGraphicOverlay: @unchecked Sendable {
             shadow.shadowOffset = .zero
             shadow.shadowBlurRadius = 4.0
             
-            let attributes: [NSAttributedString.Key: Any] = [
+            var attributes: [NSAttributedString.Key: Any] = [
                 .font: font,
                 .foregroundColor: textColor,
                 .shadow: shadow,
                 .paragraphStyle: paragraphStyle
             ]
             
+            if strokeWidth > 0 {
+                attributes[.strokeColor] = strokeColor
+                attributes[.strokeWidth] = -strokeWidth // Negative means stroke and fill
+            }
+            
+            let attributedText: NSAttributedString
+            if let segments = blueprint["segments"] as? [[String: Any]] {
+                let mutableAttrStr = NSMutableAttributedString()
+                for seg in segments {
+                    var segAttrs = attributes
+                    if let colorHex = seg["color"] as? String {
+                        segAttrs[.foregroundColor] = parseColor(colorHex, defaultColor: textColor)
+                    }
+                    let segText = seg["text"] as? String ?? ""
+                    mutableAttrStr.append(NSAttributedString(string: segText, attributes: segAttrs))
+                }
+                attributedText = mutableAttrStr
+            } else {
+                attributedText = NSAttributedString(string: text, attributes: attributes)
+            }
+            
             // Allow wrapping with 40px padding
             let maxTextWidth = width - 40
-            let textSize = text.boundingRect(with: CGSize(width: maxTextWidth, height: .greatestFiniteMagnitude), options: .usesLineFragmentOrigin, attributes: attributes, context: nil).size
+            let textSize = attributedText.boundingRect(with: CGSize(width: maxTextWidth, height: .greatestFiniteMagnitude), options: .usesLineFragmentOrigin, context: nil).size
             
             // --- Draw Background Shapes ---
             if let shapes = blueprint["backgroundShapes"] as? [[String: Any]] {
@@ -188,7 +211,7 @@ class TextGraphicOverlay: @unchecked Sendable {
             let textRect = CGRect(x: -textSize.width/2, y: -textSize.height/2, width: textSize.width, height: textSize.height)
             
             context.setLineJoin(.round)
-            text.draw(in: textRect, withAttributes: attributes)
+            attributedText.draw(in: textRect)
         }
 
         let cgImage = UIGraphicsGetImageFromCurrentImageContext()?.cgImage

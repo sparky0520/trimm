@@ -51,7 +51,20 @@ const APPLY_SCHEMA_PATCH_TOOL = Object.freeze({
                     fontSize: { type: 'number' },
                     posY: { type: 'number' },
                     posX: { type: 'number' },
-                    scale: { type: 'number' }
+                    scale: { type: 'number' },
+                    strokeColor: { type: 'string' },
+                    strokeWidth: { type: 'number' }
+                  }
+                },
+                segments: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    required: ['text'],
+                    properties: {
+                      text: { type: 'string' },
+                      color: { type: 'string' }
+                    }
                   }
                 },
                 effectName: { type: 'string' },

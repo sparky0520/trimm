@@ -439,19 +439,33 @@ public struct VideoNode: Codable, Equatable {
     }
 }
 
+public struct TextSegment: Codable, Equatable {
+    public var text: String
+    public var color: String?
+    
+    public init(text: String, color: String? = nil) {
+        self.text = text
+        self.color = color
+    }
+}
+
 public struct TextNodeStyle: Codable, Equatable {
     public var color: String?
     public var fontSize: CGFloat?
     public var posY: CGFloat?
     public var posX: CGFloat?
     public var scale: CGFloat?
+    public var strokeColor: String?
+    public var strokeWidth: CGFloat?
     
-    public init(color: String? = nil, fontSize: CGFloat? = nil, posY: CGFloat? = nil, posX: CGFloat? = nil, scale: CGFloat? = nil) {
+    public init(color: String? = nil, fontSize: CGFloat? = nil, posY: CGFloat? = nil, posX: CGFloat? = nil, scale: CGFloat? = nil, strokeColor: String? = nil, strokeWidth: CGFloat? = nil) {
         self.color = color
         self.fontSize = fontSize
         self.posY = posY
         self.posX = posX
         self.scale = scale
+        self.strokeColor = strokeColor
+        self.strokeWidth = strokeWidth
     }
 }
 
@@ -462,13 +476,15 @@ public struct TextNode: Codable, Equatable {
     public var startMs: Int64
     public var endMs: Int64
     public var style: TextNodeStyle?
+    public var segments: [TextSegment]?
 
-    public init(id: String, text: String, startMs: Int64, endMs: Int64, style: TextNodeStyle? = nil) {
+    public init(id: String, text: String, startMs: Int64, endMs: Int64, style: TextNodeStyle? = nil, segments: [TextSegment]? = nil) {
         self.id = id
         self.text = text
         self.startMs = startMs
         self.endMs = endMs
         self.style = style
+        self.segments = segments
     }
 }
 

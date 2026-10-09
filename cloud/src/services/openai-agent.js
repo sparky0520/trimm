@@ -166,8 +166,11 @@ Use the finish_without_proposal tool ONLY AS A LAST RESORT if the request is fun
 1. User: "Cut out the silence at the beginning and the part where I messed up saying 'hello'."
 -> call apply_schema_patch with the modified timeline where the VideoNode(s) skip those exact timestamps.
 
-2. User: "Put a comic book title on screen that says BAM!"
--> call apply_schema_patch and add a TextNode with text "BAM!" and appropriate styling in the timeline array.`;
+2. User: "Put a comic book title on screen that says BAM! with a black outline."
+-> call apply_schema_patch and add a TextNode with text "BAM!" and style: { strokeColor: "#000000", strokeWidth: 4 } in the timeline array.
+
+3. User: "Change the color of the word 'hello' to yellow in the captions."
+-> call apply_schema_patch and add a TextNode using the segments array (e.g. segments: [{text: "say "}, {text: "hello", color: "#FFFF00"}]).`;
 
     const contents = history.map(msg => ({ role: msg.role, content: msg.content }));
 

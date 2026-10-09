@@ -358,19 +358,27 @@ public class VideoProcessor {
             case .text(let t):
                 var blueprint = [String: Any]()
                 var layout = [String: Any]()
+                var textStyle = [String: Any]()
                 if let style = t.style {
-                    if let color = style.color { blueprint["textStyle"] = ["color": color] }
+                    if let color = style.color { textStyle["color"] = color }
+                    if let fontSize = style.fontSize { textStyle["fontSize"] = fontSize }
+                    if let strokeColor = style.strokeColor { textStyle["strokeColor"] = strokeColor }
+                    if let strokeWidth = style.strokeWidth { textStyle["strokeWidth"] = strokeWidth }
+                    
                     if let posX = style.posX { layout["posX"] = posX }
                     if let posY = style.posY { layout["posY"] = posY }
                     if let scale = style.scale { layout["scale"] = scale }
-                    if let fontSize = style.fontSize {
-                        var textStyle = blueprint["textStyle"] as? [String: Any] ?? [:]
-                        textStyle["fontSize"] = fontSize
-                        blueprint["textStyle"] = textStyle
-                    }
                 }
-                if !layout.isEmpty {
-                    blueprint["layout"] = layout
+                if !textStyle.isEmpty { blueprint["textStyle"] = textStyle }
+                if !layout.isEmpty { blueprint["layout"] = layout }
+                if let segments = t.segments {
+                    var segmentDicts = [[String: Any]]()
+                    for seg in segments {
+                        var segDict: [String: Any] = ["text": seg.text]
+                        if let c = seg.color { segDict["color"] = c }
+                        segmentDicts.append(segDict)
+                    }
+                    blueprint["segments"] = segmentDicts
                 }
                 
                 let jsonString = (try? String(data: JSONSerialization.data(withJSONObject: blueprint), encoding: .utf8)) ?? "{}"
