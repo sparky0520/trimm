@@ -69,7 +69,7 @@ const PROPOSE_MUSIC_DUCKING_TOOL = operationTool(
 
 const PROPOSE_CAPTIONS_TOOL = operationTool(
   'propose_add_captions',
-  'Enable captions. You MUST provide the segmented captions (cues) by intelligently grouping the transcript words into semantically intact sentences or phrases. Provide a designBlueprint to customize the typography and layout (e.g., text color, font size, background shapes).',
+  'Enable captions. You MUST provide the segmented captions (cues) by intelligently grouping the transcript words into semantically intact sentences or phrases. Group words in maximum one sentence long groups. Provide a designBlueprint to customize the typography and layout (e.g., text color, font size, background shapes).',
   ['designBlueprint', 'reason', 'cues'], {
   ...targetRangeProperties,
   speakerId: { type: 'string' },

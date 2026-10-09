@@ -54,6 +54,13 @@ class TextGraphicOverlay: @unchecked Sendable {
                 blue: CGFloat(rgb & 0x0000FF) / 255.0,
                 alpha: 1.0
             )
+        } else if hexSanitized.count == 8 {
+            return UIColor(
+                red: CGFloat((rgb & 0xFF000000) >> 24) / 255.0,
+                green: CGFloat((rgb & 0x00FF0000) >> 16) / 255.0,
+                blue: CGFloat((rgb & 0x0000FF00) >> 8) / 255.0,
+                alpha: CGFloat(rgb & 0x000000FF) / 255.0
+            )
         }
         return defaultColor
     }
@@ -107,11 +114,15 @@ class TextGraphicOverlay: @unchecked Sendable {
             
             let font = UIFont.systemFont(ofSize: fontSize, weight: .bold)
             
+            let shadow = NSShadow()
+            shadow.shadowColor = UIColor.black
+            shadow.shadowOffset = .zero
+            shadow.shadowBlurRadius = 4.0
+            
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: font,
                 .foregroundColor: textColor,
-                .strokeColor: UIColor.black,
-                .strokeWidth: -3.0,
+                .shadow: shadow,
                 .paragraphStyle: paragraphStyle
             ]
             

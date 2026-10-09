@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import Photos
 
 @MainActor
 public class ExportWorker: ObservableObject {
@@ -56,6 +57,15 @@ public class ExportWorker: ObservableObject {
             if session.status == .completed {
                 self.progress = 1.0
                 self.exportURL = outputURL
+                
+                do {
+                    try await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+                    try await PHPhotoLibrary.shared().performChanges {
+                        PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: outputURL)
+                    }
+                } catch {
+                    print("Failed to save to Camera Roll: \(error)")
+                }
             } else {
                 throw session.error ?? ExportError.exportFailed(nil)
             }
