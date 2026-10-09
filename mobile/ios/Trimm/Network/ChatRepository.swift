@@ -188,5 +188,9 @@ public class ChatRepository {
         }
         let file = projectsDirectory.appendingPathComponent("\(id).json")
         try? FileManager.default.removeItem(at: file)
+        
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let schemaFile = docs.appendingPathComponent("\(id)_composition.json")
+        try? FileManager.default.removeItem(at: schemaFile)
     }
 }

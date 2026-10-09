@@ -56,6 +56,17 @@ public class EditorViewModel {
                     ChatMessage(text: turn.response, isUser: false)
                 ]
             }
+            
+            if let docDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                let fileUrl = docDir.appendingPathComponent("\(id)_composition.json")
+                if let data = try? Data(contentsOf: fileUrl) {
+                    let decoder = JSONDecoder()
+                    if let schema = try? decoder.decode(CompositionSchema.self, from: data) {
+                        self.state.compositionSchema = schema
+                    }
+                }
+            }
+            
             await refreshPlayer(project: project)
         } catch {
             print("Failed to load project: \(error)")
@@ -274,7 +285,7 @@ public class EditorViewModel {
                             self.state.compositionSchema = schema
                             
                             if let docDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-                                let fileUrl = docDir.appendingPathComponent("composition.json")
+                                let fileUrl = docDir.appendingPathComponent("\(updatedProject.id)_composition.json")
                                 let encoder = JSONEncoder()
                                 encoder.outputFormatting = .prettyPrinted
                                 if let data = try? encoder.encode(schema) {
@@ -383,7 +394,7 @@ public class EditorViewModel {
                             
                             // Save schema locally
                             if let docDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-                                let fileUrl = docDir.appendingPathComponent("composition.json")
+                                let fileUrl = docDir.appendingPathComponent("\(project.id)_composition.json")
                                 let encoder = JSONEncoder()
                                 encoder.outputFormatting = .prettyPrinted
                                 if let data = try? encoder.encode(updatedSchema) {

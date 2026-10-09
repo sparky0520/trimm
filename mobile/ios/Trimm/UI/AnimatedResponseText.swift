@@ -2,18 +2,15 @@ import SwiftUI
 
 public struct AnimatedResponseText: View {
     let text: String
-    let typewriterSpeed: TimeInterval = 0.02
     
-    @State private var displayedText: String = ""
     @State private var opacity: Double = 0.0
-    @State private var timer: Timer? = nil
     
     public init(text: String) {
         self.text = text
     }
     
     public var body: some View {
-        Text(displayedText)
+        Text(text)
             .font(.system(size: 15))
             .padding(12)
             .background(Color.workspace)
@@ -24,35 +21,17 @@ public struct AnimatedResponseText: View {
             .onAppear {
                 startAnimation()
             }
-            .onChange(of: text) { _, newText in
+            .onChange(of: text) { _, _ in
                 // If text changes, restart animation
                 startAnimation()
-            }
-            .onDisappear {
-                timer?.invalidate()
             }
     }
     
     private func startAnimation() {
-        timer?.invalidate()
-        displayedText = ""
+        opacity = 0.0
         
-        // Fade in quickly
-        withAnimation(.easeIn(duration: 0.3)) {
+        withAnimation(.easeIn(duration: 0.5)) {
             opacity = 1.0
-        }
-        
-        // Typewriter effect
-        let characters = Array(text)
-        var currentIndex = 0
-        
-        timer = Timer.scheduledTimer(withTimeInterval: typewriterSpeed, repeats: true) { t in
-            if currentIndex < characters.count {
-                displayedText.append(characters[currentIndex])
-                currentIndex += 1
-            } else {
-                t.invalidate()
-            }
         }
     }
 }
