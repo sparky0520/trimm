@@ -83,11 +83,56 @@ public struct ExportSettings: Codable, Equatable {
     public let codec: String
     public let bitrate: Int
     
-    public init(width: Int = 1920, height: Int = 1080, codec: String = "video/avc", bitrate: Int = 16_000_000) {
+    public init(width: Int, height: Int, codec: String = "video/avc", bitrate: Int = 16_000_000) {
         self.width = width
         self.height = height
         self.codec = codec
         self.bitrate = bitrate
+    }
+    
+    public static func resolveDimensions(source: SourceMedia, operations: [EditOperation], current: ExportSettings? = nil) -> ExportSettings {
+        let effectiveWidth = source.width
+        let effectiveHeight = source.height
+        
+        let shortSide = min(effectiveWidth, effectiveHeight)
+        let longSide = max(effectiveWidth, effectiveHeight)
+        
+        let ratio = Float(effectiveWidth) / Float(effectiveHeight)
+        var targetRatio: AspectRatio
+        if ratio >= 0.9 && ratio <= 1.1 {
+            targetRatio = .square
+        } else if effectiveWidth > effectiveHeight {
+            targetRatio = .landscape
+        } else {
+            targetRatio = .portrait
+        }
+        
+        for op in operations {
+            if case let .setAspectRatio(_, enabled, ratio) = op, enabled {
+                targetRatio = ratio
+            }
+        }
+        
+        let outW: Int
+        let outH: Int
+        switch targetRatio {
+        case .portrait:
+            outW = shortSide
+            outH = longSide
+        case .square:
+            outW = shortSide
+            outH = shortSide
+        case .landscape:
+            outW = longSide
+            outH = shortSide
+        }
+        
+        return ExportSettings(
+            width: outW,
+            height: outH,
+            codec: current?.codec ?? "video/avc",
+            bitrate: current?.bitrate ?? 16_000_000
+        )
     }
 }
 
@@ -162,14 +207,7 @@ public struct MobileProject: Codable, Equatable {
         if let providedExport = export {
             self.export = providedExport
         } else {
-            switch preferences.aspectRatio {
-            case .portrait:
-                self.export = ExportSettings(width: 1080, height: 1920)
-            case .square:
-                self.export = ExportSettings(width: 1080, height: 1080)
-            case .landscape:
-                self.export = ExportSettings(width: 1920, height: 1080)
-            }
+            self.export = ExportSettings.resolveDimensions(source: source, operations: operations)
         }
         
         self.revision = revision
@@ -218,6 +256,9 @@ public struct MobileProject: Codable, Equatable {
             }
         }
         
+        let finalOperations = self.operations.filter { !removedOperations.contains($0.id) } + processedNext
+        let newExport = ExportSettings.resolveDimensions(source: source, operations: finalOperations, current: export)
+        
         let newUndo = Array((undo + [snapshot()]).suffix(30))
         return MobileProject(
             schemaVersion: schemaVersion,
@@ -229,10 +270,10 @@ public struct MobileProject: Codable, Equatable {
             preferences: preferences,
             analysis: newAnalysis,
             evidenceGraphs: evidenceGraphs,
-            operations: self.operations.filter { !removedOperations.contains($0.id) } + processedNext,
+            operations: finalOperations,
             undo: newUndo,
             redo: [],
-            export: export,
+            export: newExport,
             revision: revision + 1
         )
     }
@@ -242,6 +283,8 @@ public struct MobileProject: Codable, Equatable {
         let restoredSources = lastSnapshot.sources.isEmpty ? orderedSources : lastSnapshot.sources
         let newUndo = undo.dropLast()
         let newRedo = Array((redo + [snapshot()]).suffix(30))
+        
+        let newExport = ExportSettings.resolveDimensions(source: restoredSources.first ?? source, operations: lastSnapshot.operations, current: export)
         
         return MobileProject(
             schemaVersion: schemaVersion,
@@ -255,8 +298,8 @@ public struct MobileProject: Codable, Equatable {
             evidenceGraphs: evidenceGraphs,
             operations: lastSnapshot.operations,
             undo: Array(newUndo),
-            redo: newRedo,
-            export: export,
+            redo: Array(newRedo),
+            export: newExport,
             revision: revision + 1
         )
     }
@@ -266,6 +309,8 @@ public struct MobileProject: Codable, Equatable {
         let restoredSources = nextSnapshot.sources.isEmpty ? orderedSources : nextSnapshot.sources
         let newRedo = redo.dropLast()
         let newUndo = Array((undo + [snapshot()]).suffix(30))
+        
+        let newExport = ExportSettings.resolveDimensions(source: restoredSources.first ?? source, operations: nextSnapshot.operations, current: export)
         
         return MobileProject(
             schemaVersion: schemaVersion,
@@ -280,7 +325,7 @@ public struct MobileProject: Codable, Equatable {
             operations: nextSnapshot.operations,
             undo: newUndo,
             redo: Array(newRedo),
-            export: export,
+            export: newExport,
             revision: revision + 1
         )
     }

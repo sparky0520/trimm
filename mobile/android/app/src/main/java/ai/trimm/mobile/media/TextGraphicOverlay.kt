@@ -27,8 +27,8 @@ class TextGraphicOverlay(
     private val blueprintJson: String,
     private val startMs: Long,
     private val endMs: Long,
-    private val videoWidth: Int = 1080,
-    private val videoHeight: Int = 1920
+    private val videoWidth: Int,
+    private val videoHeight: Int
 ) : BitmapOverlay() {
 
     private val cachedBitmap: Bitmap by lazy { generateBitmap() }

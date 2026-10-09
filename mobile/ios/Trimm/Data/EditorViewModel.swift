@@ -112,23 +112,25 @@ public class EditorViewModel {
                 let audioTracks = try await asset.loadTracks(withMediaType: .audio)
                 let hasAudio = audioTracks.count > 0
                 
-                var width = 1920
-                var height = 1080
+                var width = 0
+                var height = 0
                 var rotation = 0
                 if let videoTrack = videoTracks.first {
                     let size = try await videoTrack.load(.naturalSize)
                     let transform = try await videoTrack.load(.preferredTransform)
                     
-                    // Determine if the video is portrait based on transform
-                    let isPortrait = transform.a == 0 && transform.d == 0
+                    let radians = atan2(transform.b, transform.a)
+                    var degrees = Int(radians * 180 / .pi)
+                    if degrees < 0 { degrees += 360 }
+                    rotation = degrees
+                    
+                    let isPortrait = abs(degrees) == 90 || abs(degrees) == 270
                     if isPortrait {
                         width = Int(size.height)
                         height = Int(size.width)
-                        rotation = 90 // Defaulting to 90 for portrait, but can be extracted precisely from transform
                     } else {
                         width = Int(size.width)
                         height = Int(size.height)
-                        rotation = 0
                     }
                 }
                 
@@ -167,7 +169,6 @@ public class EditorViewModel {
             evidenceGraphs: [],
             operations: [],
             undo: [],
-            export: ExportSettings(),
             revision: 1
         )
         

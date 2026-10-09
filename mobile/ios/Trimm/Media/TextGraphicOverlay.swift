@@ -19,7 +19,7 @@ class TextGraphicOverlay: @unchecked Sendable {
     private var configScale: CGFloat = 1
     private var rotation: CGFloat = 0
 
-    init(text: String, blueprintJson: String, startMs: Int64, endMs: Int64, videoWidth: Int = 1080, videoHeight: Int = 1920) {
+    init(text: String, blueprintJson: String, startMs: Int64, endMs: Int64, videoWidth: Int, videoHeight: Int) {
         self.text = text
         self.blueprintJson = blueprintJson
         self.startMs = startMs
@@ -93,9 +93,33 @@ class TextGraphicOverlay: @unchecked Sendable {
             context.scaleBy(x: configScale, y: configScale)
             context.rotate(by: rotation)
             
-            // Map AI's 1000px coordinate system values to the actual video width
-            let scaleFactor = width / 1000.0
+            // Map AI's 1000px coordinate system values to the actual video size using the shortest dimension
+            let scaleFactor = min(width, height) / 1000.0
 
+            // --- Compute Text Size First for Flexible Backgrounds ---
+            let textStyle = blueprint["textStyle"] as? [String: Any] ?? [:]
+            let textColor = parseColor(textStyle["color"] as? String, defaultColor: .white)
+            let rawFontSize = textStyle["fontSize"] as? CGFloat ?? 100.0 // Default size expected by AI
+            let fontSize = rawFontSize * scaleFactor
+            
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.alignment = .center
+            
+            let font = UIFont.systemFont(ofSize: fontSize, weight: .bold)
+            
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: textColor,
+                .strokeColor: UIColor.black,
+                .strokeWidth: -3.0,
+                .paragraphStyle: paragraphStyle
+            ]
+            
+            // Allow wrapping with 40px padding
+            let maxTextWidth = width - 40
+            let textSize = text.boundingRect(with: CGSize(width: maxTextWidth, height: .greatestFiniteMagnitude), options: .usesLineFragmentOrigin, attributes: attributes, context: nil).size
+            
+            // --- Draw Background Shapes ---
             if let shapes = blueprint["backgroundShapes"] as? [[String: Any]] {
                 for shape in shapes {
                     let type = shape["type"] as? String ?? ""
@@ -124,8 +148,12 @@ class TextGraphicOverlay: @unchecked Sendable {
                         }
                         context.closePath()
                     } else if type == "rectangle" {
-                        let rw = (shape["width"] as? CGFloat ?? 400) * scaleFactor
-                        let rh = (shape["height"] as? CGFloat ?? 200) * scaleFactor
+                        let requestedW = (shape["width"] as? CGFloat ?? 400) * scaleFactor
+                        let requestedH = (shape["height"] as? CGFloat ?? 200) * scaleFactor
+                        let paddingX = 60.0 * scaleFactor
+                        let paddingY = 30.0 * scaleFactor
+                        let rw = max(requestedW, textSize.width + paddingX)
+                        let rh = max(requestedH, textSize.height + paddingY)
                         let r = CGRect(x: -rw/2, y: -rh/2, width: rw, height: rh)
                         let cornerRadius = (shape["cornerRadius"] as? CGFloat ?? 0) * scaleFactor
                         let path = UIBezierPath(roundedRect: r, cornerRadius: cornerRadius)
@@ -145,30 +173,10 @@ class TextGraphicOverlay: @unchecked Sendable {
                 }
             }
             
-            let textStyle = blueprint["textStyle"] as? [String: Any] ?? [:]
-            let textColor = parseColor(textStyle["color"] as? String, defaultColor: .white)
-            let rawFontSize = textStyle["fontSize"] as? CGFloat ?? 100.0 // Default size expected by AI
-            let fontSize = rawFontSize * scaleFactor
-            
-            let paragraphStyle = NSMutableParagraphStyle()
-            paragraphStyle.alignment = .center
-            
-            let font = UIFont.systemFont(ofSize: fontSize, weight: .bold)
-            
-            let attributes: [NSAttributedString.Key: Any] = [
-                .font: font,
-                .foregroundColor: textColor,
-                .strokeColor: UIColor.black,
-                .strokeWidth: -3.0,
-                .paragraphStyle: paragraphStyle
-            ]
-            
-            // Allow wrapping with 40px padding
-            let maxTextWidth = width - 40
-            let textSize = text.boundingRect(with: CGSize(width: maxTextWidth, height: .greatestFiniteMagnitude), options: .usesLineFragmentOrigin, attributes: attributes, context: nil).size
-            
+            // --- Draw Text ---
             let textRect = CGRect(x: -textSize.width/2, y: -textSize.height/2, width: textSize.width, height: textSize.height)
             
+            context.setLineJoin(.round)
             text.draw(in: textRect, withAttributes: attributes)
         }
 

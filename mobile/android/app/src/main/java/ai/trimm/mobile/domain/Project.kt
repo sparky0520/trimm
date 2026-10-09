@@ -267,7 +267,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val revisionAfter: Long,
     val createdAtEpochMs: Long = System.currentTimeMillis()
 )
-@Serializable data class ExportSettings(val width: Int = 1920, val height: Int = 1080, val codec: String = "video/avc", val bitrate: Int = 16_000_000)
+@Serializable data class ExportSettings(val width: Int, val height: Int, val codec: String = "video/avc", val bitrate: Int = 16_000_000)
 @Serializable data class ProjectSnapshot(
     val operations: List<EditInstruction>,
     val sources: List<SourceMedia> = emptyList(),
@@ -287,7 +287,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val operations: List<EditInstruction> = emptyList(),
     val undo: List<ProjectSnapshot> = emptyList(),
     val redo: List<ProjectSnapshot> = emptyList(),
-    val export: ExportSettings = ExportSettings(),
+    val export: ExportSettings = ExportSettings(1920, 1080),
     val revision: Long = 0,
     val appliedProgramIds: List<String> = emptyList()
 ) {
