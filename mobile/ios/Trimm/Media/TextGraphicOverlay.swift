@@ -211,7 +211,22 @@ class TextGraphicOverlay: @unchecked Sendable {
             let textRect = CGRect(x: -textSize.width/2, y: -textSize.height/2, width: textSize.width, height: textSize.height)
             
             context.setLineJoin(.round)
-            attributedText.draw(in: textRect)
+            
+            if strokeWidth > 0 {
+                // Draw stroke layer first
+                attributedText.draw(in: textRect)
+                
+                // Draw fill layer on top to cover overlapping strokes
+                let fillText = NSMutableAttributedString(attributedString: attributedText)
+                let fullRange = NSRange(location: 0, length: fillText.length)
+                fillText.removeAttribute(.strokeWidth, range: fullRange)
+                fillText.removeAttribute(.strokeColor, range: fullRange)
+                fillText.removeAttribute(.shadow, range: fullRange)
+                
+                fillText.draw(in: textRect)
+            } else {
+                attributedText.draw(in: textRect)
+            }
         }
 
         let cgImage = UIGraphicsGetImageFromCurrentImageContext()?.cgImage
