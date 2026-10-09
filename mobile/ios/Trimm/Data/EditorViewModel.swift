@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import AVFoundation
+import Photos
 
 @Observable
 @MainActor
@@ -390,17 +391,36 @@ public class EditorViewModel {
                 progressTask.cancel()
                 self.exportSession = nil
                 
-                await MainActor.run {
-                    if session.status == .completed {
-                        // Save to Photos or share sheet implementation deferred
-                        print("Export completed at: \(outputURL)")
-                        self.state.jobMessage = "Export complete!"
-                    } else if session.status == .cancelled {
-                        self.state.jobMessage = "Export cancelled."
-                    } else {
-                        self.state.errorMessage = "Export failed: \(session.error?.localizedDescription ?? "Unknown error")"
+                let sessionStatus = session.status
+                let sessionError = session.error
+                
+                if sessionStatus == .completed {
+                    do {
+                        try await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+                        try await PHPhotoLibrary.shared().performChanges {
+                            PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: outputURL)
+                        }
+                        await MainActor.run {
+                            print("Export completed and saved to Camera Roll: \(outputURL)")
+                            self.state.jobMessage = "Export complete! Saved to Camera Roll."
+                            self.state.isExporting = false
+                        }
+                    } catch {
+                        await MainActor.run {
+                            print("Failed to save to Camera Roll: \(error)")
+                            self.state.jobMessage = "Export complete, but failed to save to Photos."
+                            self.state.isExporting = false
+                        }
                     }
-                    self.state.isExporting = false
+                } else {
+                    await MainActor.run {
+                        if sessionStatus == .cancelled {
+                            self.state.jobMessage = "Export cancelled."
+                        } else {
+                            self.state.errorMessage = "Export failed: \(sessionError?.localizedDescription ?? "Unknown error")"
+                        }
+                        self.state.isExporting = false
+                    }
                 }
                 
             } catch {
