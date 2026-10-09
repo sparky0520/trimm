@@ -226,6 +226,61 @@ public class EditorViewModel {
                                 revision: currentProject.revision
                             )
                             self.state.project = updatedProject
+                            
+                            // Initialize CompositionSchema
+                            let transcripts = words.map { TranscriptWordNode(word: $0.text, startMs: $0.range.startMs, endMs: $0.range.endMs) }
+                            
+                            var silences: [TimeRangeNode] = []
+                            var lastEnd: Int64 = 0
+                            for word in words {
+                                if word.range.startMs - lastEnd > 500 {
+                                    silences.append(TimeRangeNode(startMs: lastEnd, endMs: word.range.startMs))
+                                }
+                                lastEnd = word.range.endMs
+                            }
+                            let durationMs = firstSource.durationMs
+                            if durationMs - lastEnd > 500 {
+                                silences.append(TimeRangeNode(startMs: lastEnd, endMs: durationMs))
+                            }
+                            
+                            let metadata = CompositionMetadata(transcripts: transcripts, silences: silences)
+                            var timeline: [TimelineNode] = []
+                            timeline.append(.video(VideoNode(id: UUID().uuidString, src: firstSource.uri, startMs: 0, endMs: durationMs, sourceStartMs: 0)))
+                            
+                            var currentCaptionText = ""
+                            var currentCaptionStart: Int64 = 0
+                            var currentCaptionEnd: Int64 = 0
+                            var wordCount = 0
+                            
+                            for i in 0..<words.count {
+                                let word = words[i]
+                                if wordCount == 0 {
+                                    currentCaptionStart = word.range.startMs
+                                }
+                                currentCaptionText += (wordCount == 0 ? "" : " ") + word.text
+                                currentCaptionEnd = word.range.endMs
+                                wordCount += 1
+                                
+                                let isPause = (i < words.count - 1) && (words[i+1].range.startMs - currentCaptionEnd > 400)
+                                if wordCount >= 4 || isPause || i == words.count - 1 {
+                                    let textNode = TextNode(id: UUID().uuidString, text: currentCaptionText, startMs: currentCaptionStart, endMs: currentCaptionEnd, style: TextNodeStyle(color: "#FFFFFF", fontSize: 100, posY: -0.35))
+                                    timeline.append(.text(textNode))
+                                    currentCaptionText = ""
+                                    wordCount = 0
+                                }
+                            }
+                            
+                            let schema = CompositionSchema(settings: CompositionSettings(), metadata: metadata, timeline: timeline)
+                            self.state.compositionSchema = schema
+                            
+                            if let docDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                                let fileUrl = docDir.appendingPathComponent("composition.json")
+                                let encoder = JSONEncoder()
+                                encoder.outputFormatting = .prettyPrinted
+                                if let data = try? encoder.encode(schema) {
+                                    try? data.write(to: fileUrl)
+                                }
+                            }
                         }
                     }
                     
@@ -248,7 +303,7 @@ public class EditorViewModel {
     
     private func refreshPlayer(project: MobileProject) async {
         do {
-            let item = try await VideoProcessor.shared.createPreviewComposition(project: project)
+            let item = try await VideoProcessor.shared.createPreviewComposition(project: project, schema: self.state.compositionSchema)
             await MainActor.run {
                 if let p = self.player {
                     p.replaceCurrentItem(with: item)
@@ -302,6 +357,7 @@ public class EditorViewModel {
                 history: currentHistory,
                 evidenceJobIds: [],
                 existingOperations: project.operations,
+                schema: self.state.compositionSchema,
                 uploadInitialVideoContext: false,
                 budgets: AgentBudgets()
             )
@@ -319,9 +375,24 @@ public class EditorViewModel {
                     }
                 }
                 await MainActor.run {
-                    if response.type == "edit_program", let operations = response.operations {
+                    if response.type == "edit_program" || response.type == "schema_patch" {
                         let replyText = response.summary ?? "Revised proposal ready to review"
-                        let updatedProject = project.applyEditInstructions(next: operations, removedOperations: response.removedOperations ?? [], request: request, response: replyText)
+                        
+                        if let updatedSchema = response.schema {
+                            self.state.compositionSchema = updatedSchema
+                            
+                            // Save schema locally
+                            if let docDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                                let fileUrl = docDir.appendingPathComponent("composition.json")
+                                let encoder = JSONEncoder()
+                                encoder.outputFormatting = .prettyPrinted
+                                if let data = try? encoder.encode(updatedSchema) {
+                                    try? data.write(to: fileUrl)
+                                }
+                            }
+                        }
+                        
+                        let updatedProject = project.applyEditInstructions(next: response.operations ?? [], removedOperations: response.removedOperations ?? [], request: request, response: replyText)
                         self.state.project = updatedProject
                         self.state.jobMessage = replyText
                         self.state.messages.removeAll { $0.text == "Thinking…" || $0.text == "Editing…" }
@@ -362,7 +433,7 @@ public class EditorViewModel {
         
         Task {
             do {
-                let (composition, videoComp, audioMix) = try await ExportCoordinator.shared.buildComposition(project: project)
+                let (composition, videoComp, audioMix) = try await ExportCoordinator.shared.buildComposition(project: project, schema: state.compositionSchema)
                 
                 let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("exported_\(UUID().uuidString).mp4")
                 if FileManager.default.fileExists(atPath: outputURL.path) {

@@ -16,6 +16,7 @@ public struct AgentExecuteResponse: Codable, Equatable {
     public let removedOperations: [String]?
     public let questions: [ClarificationQuestion]?
     public let summary: String?
+    public let schema: CompositionSchema?
 }
 
 public class ChatRepository {

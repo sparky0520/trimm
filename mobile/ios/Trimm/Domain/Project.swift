@@ -330,3 +330,180 @@ public struct MobileProject: Codable, Equatable {
         )
     }
 }
+import Foundation
+
+public struct CompositionSchema: Codable, Equatable {
+    public var settings: CompositionSettings
+    public var metadata: CompositionMetadata
+    public var timeline: [TimelineNode]
+
+    public init(settings: CompositionSettings, metadata: CompositionMetadata, timeline: [TimelineNode]) {
+        self.settings = settings
+        self.metadata = metadata
+        self.timeline = timeline
+    }
+}
+
+public struct CompositionSettings: Codable, Equatable {
+    public var aspectRatio: String
+    public var backgroundColor: String
+    public var autoEnhance: Bool
+
+    public init(aspectRatio: String = "16:9", backgroundColor: String = "#000000", autoEnhance: Bool = false) {
+        self.aspectRatio = aspectRatio
+        self.backgroundColor = backgroundColor
+        self.autoEnhance = autoEnhance
+    }
+}
+
+public struct CompositionMetadata: Codable, Equatable {
+    public let transcripts: [TranscriptWordNode]
+    public let silences: [TimeRangeNode]
+    
+    public init(transcripts: [TranscriptWordNode], silences: [TimeRangeNode]) {
+        self.transcripts = transcripts
+        self.silences = silences
+    }
+}
+
+public struct TranscriptWordNode: Codable, Equatable {
+    public let word: String
+    public let startMs: Int64
+    public let endMs: Int64
+}
+
+public struct TimeRangeNode: Codable, Equatable {
+    public let startMs: Int64
+    public let endMs: Int64
+}
+
+// Nodes
+public enum TimelineNode: Codable, Equatable {
+    case video(VideoNode)
+    case text(TextNode)
+    case effect(EffectNode)
+    case audio(AudioNode)
+    
+    private enum CodingKeys: String, CodingKey {
+        case type
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try container.decode(String.self, forKey: .type)
+        
+        switch type {
+        case "video":
+            self = .video(try VideoNode(from: decoder))
+        case "text":
+            self = .text(try TextNode(from: decoder))
+        case "effect":
+            self = .effect(try EffectNode(from: decoder))
+        case "audio":
+            self = .audio(try AudioNode(from: decoder))
+        default:
+            throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Unknown node type: \(type)")
+        }
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        switch self {
+        case .video(let node):
+            try node.encode(to: encoder)
+        case .text(let node):
+            try node.encode(to: encoder)
+        case .effect(let node):
+            try node.encode(to: encoder)
+        case .audio(let node):
+            try node.encode(to: encoder)
+        }
+    }
+}
+
+public struct VideoNode: Codable, Equatable {
+    public let type: String = "video"
+    public var id: String
+    public var src: String
+    public var startMs: Int64
+    public var endMs: Int64
+    public var sourceStartMs: Int64
+    public var transition: String?
+
+    public init(id: String, src: String, startMs: Int64, endMs: Int64, sourceStartMs: Int64, transition: String? = nil) {
+        self.id = id
+        self.src = src
+        self.startMs = startMs
+        self.endMs = endMs
+        self.sourceStartMs = sourceStartMs
+        self.transition = transition
+    }
+}
+
+public struct TextNodeStyle: Codable, Equatable {
+    public var color: String?
+    public var fontSize: CGFloat?
+    public var posY: CGFloat?
+    public var posX: CGFloat?
+    public var scale: CGFloat?
+    
+    public init(color: String? = nil, fontSize: CGFloat? = nil, posY: CGFloat? = nil, posX: CGFloat? = nil, scale: CGFloat? = nil) {
+        self.color = color
+        self.fontSize = fontSize
+        self.posY = posY
+        self.posX = posX
+        self.scale = scale
+    }
+}
+
+public struct TextNode: Codable, Equatable {
+    public let type: String = "text"
+    public var id: String
+    public var text: String
+    public var startMs: Int64
+    public var endMs: Int64
+    public var style: TextNodeStyle?
+
+    public init(id: String, text: String, startMs: Int64, endMs: Int64, style: TextNodeStyle? = nil) {
+        self.id = id
+        self.text = text
+        self.startMs = startMs
+        self.endMs = endMs
+        self.style = style
+    }
+}
+
+public struct EffectNode: Codable, Equatable {
+    public let type: String = "effect"
+    public var id: String
+    public var effectName: String
+    public var startMs: Int64
+    public var endMs: Int64
+    public var intensity: Float?
+
+    public init(id: String, effectName: String, startMs: Int64, endMs: Int64, intensity: Float? = nil) {
+        self.id = id
+        self.effectName = effectName
+        self.startMs = startMs
+        self.endMs = endMs
+        self.intensity = intensity
+    }
+}
+
+public struct AudioNode: Codable, Equatable {
+    public let type: String = "audio"
+    public var id: String
+    public var src: String
+    public var startMs: Int64
+    public var endMs: Int64
+    public var autoDuck: Bool?
+    public var volume: Float?
+
+    public init(id: String, src: String, startMs: Int64, endMs: Int64, autoDuck: Bool? = nil, volume: Float? = nil) {
+        self.id = id
+        self.src = src
+        self.startMs = startMs
+        self.endMs = endMs
+        self.autoDuck = autoDuck
+        self.volume = volume
+    }
+}

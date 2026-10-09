@@ -68,13 +68,14 @@ public struct AgentRunRequest: Codable, Equatable {
     public let history: [AgentChatMessage]
     public let evidenceJobIds: [String]
     public let existingOperations: [EditOperation]
+    public let schema: CompositionSchema?
     public let uploadInitialVideoContext: Bool
     public let budgets: AgentBudgets
     public let mediaConsent: AgentMediaConsent
     public let supportedContractVersions: AgentContractVersions
     public let platform: String
     
-    public init(projectId: String, deviceSessionId: String, projectRevision: Int64, intent: String, sources: [AgentSourceInventory], transcript: [AgentTranscriptWord] = [], history: [AgentChatMessage] = [], evidenceJobIds: [String] = [], existingOperations: [EditOperation] = [], uploadInitialVideoContext: Bool = false, budgets: AgentBudgets = AgentBudgets(), mediaConsent: AgentMediaConsent = AgentMediaConsent(), supportedContractVersions: AgentContractVersions = AgentContractVersions(), platform: String = "ios") {
+    public init(projectId: String, deviceSessionId: String, projectRevision: Int64, intent: String, sources: [AgentSourceInventory], transcript: [AgentTranscriptWord] = [], history: [AgentChatMessage] = [], evidenceJobIds: [String] = [], existingOperations: [EditOperation] = [], schema: CompositionSchema? = nil, uploadInitialVideoContext: Bool = false, budgets: AgentBudgets = AgentBudgets(), mediaConsent: AgentMediaConsent = AgentMediaConsent(), supportedContractVersions: AgentContractVersions = AgentContractVersions(), platform: String = "ios") {
         self.projectId = projectId
         self.deviceSessionId = deviceSessionId
         self.projectRevision = projectRevision
@@ -84,6 +85,7 @@ public struct AgentRunRequest: Codable, Equatable {
         self.history = history
         self.evidenceJobIds = evidenceJobIds
         self.existingOperations = existingOperations
+        self.schema = schema
         self.uploadInitialVideoContext = uploadInitialVideoContext
         self.budgets = budgets
         self.mediaConsent = mediaConsent

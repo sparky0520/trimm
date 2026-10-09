@@ -91,7 +91,7 @@ function createOpenAIDecisionProvider({
 
 
 
-  const chatCompletion = async ({ history = [], sources = [], transcript = [], existingOperations = [] }, onStatus) => {
+  const chatCompletion = async ({ history = [], sources = [], transcript = [], schema = null }, onStatus) => {
     
     // Pre-process transcript for LLM visibility
     const preprocessedTranscript = [];
@@ -132,15 +132,29 @@ function createOpenAIDecisionProvider({
       lastEndMs = endMs;
     }
 
+    const promptSchema = schema ? { ...schema } : null;
+    if (promptSchema) delete promptSchema.metadata;
+
     const systemPolicy = `You are an AI video editor Agent.
 Your job is to execute the user's editing requests by proposing operations using the appropriate tool(s).
-You have access to the chat history, transcript, source media, and the current project state (existing operations).
+You have access to the chat history, transcript, source media, and the current project state.
 
 Available Sources:
 ${JSON.stringify(sources)}
 
-Existing Operations (current project state):
-${JSON.stringify(existingOperations)}
+Current Composition Schema (this is the timeline you must modify via apply_schema_patch):
+${JSON.stringify(promptSchema, null, 2)}
+
+Available Visual Effects (use these as the effectName in effect nodes):
+- black_and_white
+- vintage
+- pixelate (supports intensity 0.0 to 1.0)
+- zoom_blur (supports intensity 0.0 to 1.0)
+
+Special Natively-Calculated Properties (USE THESE instead of calculating things manually):
+- autoEnhance: true (CompositionSettings): Dynamically analyzes and boosts dialogue volume/compression on the device.
+- autoDuck: true (AudioNode): Automatically fades out the main video track volume when the background audio plays.
+- transition: "crossfade" (VideoNode): Applies a 500ms smooth crossfade/fade between the clips natively.
 
 Transcript Data (use this to detect dead space, silences, and timings):
 ${JSON.stringify(preprocessedTranscript)}
@@ -150,16 +164,10 @@ Use the finish_without_proposal tool ONLY AS A LAST RESORT if the request is fun
 # Tool Usage Examples (Few-Shot Prompts):
 
 1. User: "Cut out the silence at the beginning and the part where I messed up saying 'hello'."
--> call propose_remove_ranges(ranges: [{startMs: 0, endMs: 2500}, {startMs: 14000, endMs: 18000}])
+-> call apply_schema_patch with the modified timeline where the VideoNode(s) skip those exact timestamps.
 
-3. User: "Put a comic book title on screen that says BAM!"
--> call propose_add_text_overlay(text: "BAM!", designBlueprint: {"layout": {"posX": 0.0, "posY": 0.0, "scale": 1.2, "rotation": 0.1}, "textStyle": {"color": "#FFD700", "fontSize": 150}, "backgroundShapes": [{"type": "starburst", "color": "#FF0000", "innerRadius": 180, "outerRadius": 250, "points": 12}]}, startMs: 4000, endMs: 6000)
-
-4. User: "Make it look like a vintage VHS tape from the 90s."
--> call propose_apply_video_dsl(dsl: {"project": {"dimensions": {"width": 1080, "height": 1920}, "fps": 30, "durationMs": 10000}, "timeline": {"layers": [{"id": "vhs_r", "type": "media", "startMs": 0, "durationMs": 10000, "effects": [{"type": "colorMatrix", "matrix": [1,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 0,0,0,1,0]}], "spatial": {"keyframes": [{"timeMs": 0, "x": -5, "y": 0}, {"timeMs": 100, "x": 5, "y": 0}]}}, {"id": "vhs_g", "type": "media", "startMs": 0, "durationMs": 10000, "compositing": {"blendMode": "screen"}, "effects": [{"type": "colorMatrix", "matrix": [0,0,0,0,0, 0,1,0,0,0, 0,0,0,0,0, 0,0,0,1,0]}]}, {"id": "vhs_b", "type": "media", "startMs": 0, "durationMs": 10000, "compositing": {"blendMode": "screen"}, "effects": [{"type": "colorMatrix", "matrix": [0,0,0,0,0, 0,0,0,0,0, 0,0,1,0,0, 0,0,0,1,0]}], "spatial": {"keyframes": [{"timeMs": 0, "x": 5, "y": 0}, {"timeMs": 150, "x": -5, "y": 0}]}}]}})
-
-5. User: "Add captions."
--> call propose_add_captions(cues: [...], designBlueprint: {"layout": {"posX": 0.0, "posY": -0.35, "scale": 1.0, "rotation": 0.0}, "textStyle": {"color": "#FFFFFF", "fontSize": 100}, "backgroundShapes": [{"type": "rectangle", "width": 800, "height": 180, "color": "#000000", "cornerRadius": 20}]})`;
+2. User: "Put a comic book title on screen that says BAM!"
+-> call apply_schema_patch and add a TextNode with text "BAM!" and appropriate styling in the timeline array.`;
 
     const contents = history.map(msg => ({ role: msg.role, content: msg.content }));
 
@@ -187,6 +195,19 @@ Use the finish_without_proposal tool ONLY AS A LAST RESORT if the request is fun
     const clarification = response.toolCalls.find(tc => tc.name === 'ask_user_question');
     if (clarification) {
       return { type: "clarification", questions: clarification.args.questions };
+    }
+
+    const schemaPatch = response.toolCalls.find(tc => tc.name === 'apply_schema_patch');
+    if (schemaPatch) {
+      // Enforce immutability of metadata
+      if (schema && schema.metadata) {
+        schemaPatch.args.schema.metadata = schema.metadata;
+      }
+      return {
+        type: "schema_patch",
+        schema: schemaPatch.args.schema,
+        summary: schemaPatch.args.reason || response.rawText || "Proposed edit"
+      };
     }
 
     const validOperations = response.toolCalls.filter(tc => tc.name.startsWith('propose_') || !['ask_user_question', 'finalize_edit_program', 'finish_without_proposal', 'remove_draft_operation'].includes(tc.name));

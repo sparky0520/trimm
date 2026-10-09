@@ -6,7 +6,7 @@ public class VideoProcessor {
     public static let shared = VideoProcessor()
     private init() {}
     
-    public func createPreviewComposition(project: MobileProject) async throws -> AVPlayerItem {
+    public func createPreviewComposition(project: MobileProject, schema: CompositionSchema? = nil) async throws -> AVPlayerItem {
         guard let url = project.source.resolvedUrl else {
             throw NSError(domain: "VideoProcessor", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid source URI"])
         }
@@ -16,6 +16,16 @@ public class VideoProcessor {
         }
         
         let asset = AVURLAsset(url: url)
+        
+        if let schema = schema {
+            let (comp, videoComp, audioMix) = try await buildRawComposition(schema: schema, asset: asset, project: project)
+            return await MainActor.run {
+                let item = AVPlayerItem(asset: comp)
+                item.videoComposition = videoComp
+                item.audioMix = audioMix
+                return item
+            }
+        }
         
         // Load duration
         let duration = try await asset.load(.duration)
@@ -306,5 +316,202 @@ public class VideoProcessor {
             item.videoComposition = safeVideoComposition
             return item
         }
+    }
+    
+    public func buildRawComposition(schema: CompositionSchema, asset: AVURLAsset, project: MobileProject) async throws -> (AVMutableComposition, AVMutableVideoComposition?, AVMutableAudioMix?) {
+        let composition = AVMutableComposition()
+        guard let videoTrack = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid),
+              let audioTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else {
+            throw NSError(domain: "VideoProcessor", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to create composition tracks"])
+        }
+        
+        let sourceVideoTrack = try await asset.loadTracks(withMediaType: .video).first
+        if let sourceVideo = sourceVideoTrack {
+            videoTrack.preferredTransform = try await sourceVideo.load(.preferredTransform)
+        }
+        let sourceAudioTrack = try await asset.loadTracks(withMediaType: .audio).first
+        
+        var textOverlays: [TextGraphicOverlay] = []
+        var activeEffects: [EffectNode] = []
+        var audioNodes: [AudioNode] = []
+        var videoNodes: [VideoNode] = []
+        
+        for node in schema.timeline {
+            switch node {
+            case .video(let v):
+                let durationMs = v.endMs - v.startMs
+                if durationMs <= 0 { continue }
+                videoNodes.append(v)
+                
+                let start = CMTime(value: CMTimeValue(v.sourceStartMs), timescale: 1000)
+                let duration = CMTime(value: CMTimeValue(durationMs), timescale: 1000)
+                let timeRange = CMTimeRange(start: start, duration: duration)
+                let insertTime = CMTime(value: CMTimeValue(v.startMs), timescale: 1000)
+                
+                if let sourceVideo = sourceVideoTrack {
+                    try videoTrack.insertTimeRange(timeRange, of: sourceVideo, at: insertTime)
+                }
+                if let sourceAudio = sourceAudioTrack {
+                    try audioTrack.insertTimeRange(timeRange, of: sourceAudio, at: insertTime)
+                }
+                
+            case .text(let t):
+                var blueprint = [String: Any]()
+                var layout = [String: Any]()
+                if let style = t.style {
+                    if let color = style.color { blueprint["textStyle"] = ["color": color] }
+                    if let posX = style.posX { layout["posX"] = posX }
+                    if let posY = style.posY { layout["posY"] = posY }
+                    if let scale = style.scale { layout["scale"] = scale }
+                    if let fontSize = style.fontSize {
+                        var textStyle = blueprint["textStyle"] as? [String: Any] ?? [:]
+                        textStyle["fontSize"] = fontSize
+                        blueprint["textStyle"] = textStyle
+                    }
+                }
+                if !layout.isEmpty {
+                    blueprint["layout"] = layout
+                }
+                
+                let jsonString = (try? String(data: JSONSerialization.data(withJSONObject: blueprint), encoding: .utf8)) ?? "{}"
+                
+                textOverlays.append(TextGraphicOverlay(
+                    text: t.text,
+                    blueprintJson: jsonString,
+                    startMs: t.startMs,
+                    endMs: t.endMs,
+                    videoWidth: project.export.width,
+                    videoHeight: project.export.height
+                ))
+            case .effect(let e):
+                activeEffects.append(e)
+            case .audio(let a):
+                audioNodes.append(a)
+                // Add the extra audio track
+                if let bgAudioTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid),
+                   let bgUrl = URL(string: a.src), // In a real app this would map to bundled assets
+                   let bgAssetTrack = try? await AVURLAsset(url: bgUrl).loadTracks(withMediaType: .audio).first {
+                    let start = CMTime(value: 0, timescale: 1000)
+                    let duration = CMTime(value: CMTimeValue(a.endMs - a.startMs), timescale: 1000)
+                    let timeRange = CMTimeRange(start: start, duration: duration)
+                    let insertTime = CMTime(value: CMTimeValue(a.startMs), timescale: 1000)
+                    try? bgAudioTrack.insertTimeRange(timeRange, of: bgAssetTrack, at: insertTime)
+                }
+            }
+        }
+        
+        let audioMix = AVMutableAudioMix()
+        var inputParams = [AVMutableAudioMixInputParameters]()
+        
+        if let audioTrack = composition.tracks(withMediaType: .audio).first {
+            let param = AVMutableAudioMixInputParameters(track: audioTrack)
+            
+            // AutoEnhance: Basic normalization/boost
+            if schema.settings.autoEnhance == true {
+                // Boost main dialogue volume
+                param.setVolume(1.5, at: .zero)
+            } else {
+                param.setVolume(1.0, at: .zero)
+            }
+            
+            // AutoDuck: Lower main track volume when bg music plays
+            for a in audioNodes where a.autoDuck == true {
+                let duckStart = CMTime(value: CMTimeValue(a.startMs), timescale: 1000)
+                let duckEnd = CMTime(value: CMTimeValue(a.endMs), timescale: 1000)
+                let rampDuration = CMTime(value: 500, timescale: 1000) // 500ms fade
+                
+                param.setVolumeRamp(fromStartVolume: 1.0, toEndVolume: 0.1, timeRange: CMTimeRange(start: duckStart, duration: rampDuration))
+                param.setVolume(0.1, at: duckStart + rampDuration)
+                param.setVolumeRamp(fromStartVolume: 0.1, toEndVolume: 1.0, timeRange: CMTimeRange(start: duckEnd - rampDuration, duration: rampDuration))
+            }
+            
+            inputParams.append(param)
+        }
+        audioMix.inputParameters = inputParams
+        
+        var videoComposition: AVMutableVideoComposition? = nil
+        if !textOverlays.isEmpty || !activeEffects.isEmpty {
+            videoComposition = AVMutableVideoComposition(asset: composition) { request in
+                var image = request.sourceImage
+                let timeMs = Int64(request.compositionTime.seconds * 1000)
+                
+                // Apply visual effects
+                for effect in activeEffects where timeMs >= effect.startMs && timeMs <= effect.endMs {
+                    switch effect.effectName {
+                    case "black_and_white":
+                        let filter = CIFilter(name: "CIColorControls")
+                        filter?.setValue(image, forKey: kCIInputImageKey)
+                        filter?.setValue(0.0, forKey: kCIInputSaturationKey)
+                        if let out = filter?.outputImage { image = out }
+                    case "vintage":
+                        let filter = CIFilter(name: "CIPhotoEffectProcess")
+                        filter?.setValue(image, forKey: kCIInputImageKey)
+                        if let out = filter?.outputImage { image = out }
+                    case "pixelate":
+                        let filter = CIFilter(name: "CIPixellate")
+                        filter?.setValue(image, forKey: kCIInputImageKey)
+                        let scale = max(1, (effect.intensity ?? 0.5) * 50.0)
+                        filter?.setValue(scale, forKey: kCIInputScaleKey)
+                        if let out = filter?.outputImage { image = out }
+                    case "zoom_blur":
+                        let filter = CIFilter(name: "CIZoomBlur")
+                        filter?.setValue(image, forKey: kCIInputImageKey)
+                        let center = CIVector(x: image.extent.midX, y: image.extent.midY)
+                        filter?.setValue(center, forKey: kCIInputCenterKey)
+                        let amount = (effect.intensity ?? 0.5) * 20.0
+                        filter?.setValue(amount, forKey: kCIInputAmountKey)
+                        if let out = filter?.outputImage { image = out }
+                    default:
+                        break
+                    }
+                }
+                
+                let scaleX = request.renderSize.width / image.extent.width
+                let scaleY = request.renderSize.height / image.extent.height
+                let scale = max(scaleX, scaleY)
+                
+                let tx = (request.renderSize.width - image.extent.width * scale) / 2.0
+                let ty = (request.renderSize.height - image.extent.height * scale) / 2.0
+                
+                let transform = CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY)
+                    .concatenating(CGAffineTransform(scaleX: scale, y: scale))
+                    .concatenating(CGAffineTransform(translationX: tx, y: ty))
+                
+                image = image.transformed(by: transform)
+                var opacity: CGFloat = 1.0
+                for v in videoNodes where timeMs >= v.startMs && timeMs <= v.endMs {
+                    if v.transition == "crossfade" {
+                        let fadeMs: Int64 = 500
+                        if timeMs < v.startMs + fadeMs {
+                            opacity = CGFloat(timeMs - v.startMs) / CGFloat(fadeMs)
+                        } else if timeMs > v.endMs - fadeMs {
+                            opacity = CGFloat(v.endMs - timeMs) / CGFloat(fadeMs)
+                        }
+                    }
+                }
+                
+                let bg = CIImage(color: .black).cropped(to: CGRect(origin: .zero, size: request.renderSize))
+                if opacity < 1.0 {
+                    let alphaFilter = CIFilter(name: "CIColorMatrix")
+                    alphaFilter?.setValue(image, forKey: kCIInputImageKey)
+                    alphaFilter?.setValue(CIVector(x: 0, y: 0, z: 0, w: opacity), forKey: "inputAVector")
+                    if let out = alphaFilter?.outputImage { image = out }
+                }
+                
+                image = image.composited(over: bg)
+                
+                for overlay in textOverlays {
+                    if let overlayImage = overlay.getImage(presentationTimeUs: timeMs * 1000) {
+                        image = overlayImage.composited(over: image)
+                    }
+                }
+                
+                request.finish(with: image, context: nil)
+            }
+            videoComposition?.frameDuration = CMTime(value: 1, timescale: 30)
+            videoComposition?.renderSize = CGSize(width: project.export.width, height: project.export.height)
+        }
+        
+        return (composition, videoComposition, audioMix)
     }
 }

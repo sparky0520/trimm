@@ -15,6 +15,7 @@ public struct EditorState {
     public var sources: [SourceMedia] = []
     public var preferences: WizardPreferences = WizardPreferences()
     public var project: MobileProject? = nil
+    public var compositionSchema: CompositionSchema? = nil
     
     public var capabilityMessage: String? = nil
     public var previewUri: String? = nil

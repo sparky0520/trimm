@@ -14,7 +14,11 @@ public class ExportCoordinator {
     
     private init() {}
     
-    public func buildComposition(project: MobileProject) async throws -> (AVMutableComposition, AVMutableVideoComposition, AVMutableAudioMix) {
+    public func buildComposition(project: MobileProject, schema: CompositionSchema? = nil) async throws -> (AVMutableComposition, AVMutableVideoComposition?, AVMutableAudioMix?) {
+        if let schema = schema, let url = project.source.resolvedUrl {
+            let asset = AVURLAsset(url: url)
+            return try await VideoProcessor.shared.buildRawComposition(schema: schema, asset: asset, project: project)
+        }
         let composition = AVMutableComposition()
         let audioMix = AVMutableAudioMix()
         
@@ -211,7 +215,7 @@ public class ExportCoordinator {
         return (composition, videoComposition, audioMix)
     }
     
-    public func export(composition: AVMutableComposition, videoComposition: AVMutableVideoComposition, audioMix: AVMutableAudioMix, outputURL: URL) async throws {
+    public func export(composition: AVMutableComposition, videoComposition: AVMutableVideoComposition?, audioMix: AVMutableAudioMix?, outputURL: URL) async throws {
         if FileManager.default.fileExists(atPath: outputURL.path) {
             try FileManager.default.removeItem(at: outputURL)
         }
