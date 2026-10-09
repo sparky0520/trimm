@@ -8,7 +8,7 @@ class AudioGeneration {
     this.replicateApiToken = process.env.REPLICATE_API_TOKEN;
     this.elevenLabsApiToken = process.env.ELEVENLABS_API_TOKEN;
     this.s3Bucket = process.env.SFX_S3_BUCKET || 'trimm-sfx-cache';
-    
+
     // Mock local cache to simulate S3
     this.mockS3Cache = new Map();
   }
@@ -16,8 +16,8 @@ class AudioGeneration {
   async augmentPrompt(userPrompt, type) {
     const apiKey = process.env.MOONSHOT_API_KEY;
     const baseURL = process.env.MOONSHOT_BASE_URL || 'https://api.moonshot.ai/v1';
-    const model = process.env.MOONSHOT_MODEL || 'kimi-k3';
-    
+    const model = process.env.MOONSHOT_MODEL || 'kimi-k2.7-code';
+
     if (!apiKey) {
       console.log(`[AudioGeneration] No Moonshot API key found, skipping prompt augmentation.`);
       return userPrompt;
@@ -48,7 +48,7 @@ class AudioGeneration {
           temperature: 0.7
         })
       });
-      
+
       const data = await response.json();
       if (data.choices && data.choices.length > 0) {
         const augmented = data.choices[0].message.content.trim();
@@ -58,7 +58,7 @@ class AudioGeneration {
     } catch (error) {
       console.error(`[AudioGeneration] Prompt augmentation failed:`, error.message);
     }
-    
+
     return userPrompt;
   }
 
@@ -67,7 +67,7 @@ class AudioGeneration {
 
     let augmentedPrompt = await this.augmentPrompt(prompt, isEffect ? 'bgm_effect' : 'bgm');
     console.log(`[AudioGeneration] Generating BGM for prompt: "${augmentedPrompt}", duration: ${durationSecs}s`);
-    
+
     if (!this.replicateApiToken) {
       throw new Error('REPLICATE_API_TOKEN is not configured');
     }
@@ -102,31 +102,31 @@ class AudioGeneration {
     if (prediction.status === 'failed') throw new Error('Replicate generation failed');
 
     const audioUrl = prediction.output;
-    
+
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY;
-    
+
     if (supabaseUrl && supabaseKey) {
-       const cacheKey = `bgm/${chatId}/bgm_${Date.now()}.mp3`;
-       const publicUrl = `${supabaseUrl}/storage/v1/object/public/${this.s3Bucket}/${cacheKey}`;
-       
-        try {
-         const audioRes = await fetch(audioUrl);
-         const audioBuffer = await audioRes.arrayBuffer();
-         const supabase = createClient(supabaseUrl, supabaseKey);
-         const { error } = await supabase.storage.from(this.s3Bucket).upload(cacheKey, Buffer.from(audioBuffer), {
-           contentType: 'audio/mpeg'
-         });
-         
-         if (error) {
-           throw error;
-         }
-         return { url: publicUrl, prompt: augmentedPrompt, duration: durationSecs };
-       } catch (err) {
-         console.error(`[AudioGeneration] Failed to cache BGM in Supabase:`, err.message);
-       }
+      const cacheKey = `bgm/${chatId}/bgm_${Date.now()}.mp3`;
+      const publicUrl = `${supabaseUrl}/storage/v1/object/public/${this.s3Bucket}/${cacheKey}`;
+
+      try {
+        const audioRes = await fetch(audioUrl);
+        const audioBuffer = await audioRes.arrayBuffer();
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        const { error } = await supabase.storage.from(this.s3Bucket).upload(cacheKey, Buffer.from(audioBuffer), {
+          contentType: 'audio/mpeg'
+        });
+
+        if (error) {
+          throw error;
+        }
+        return { url: publicUrl, prompt: augmentedPrompt, duration: durationSecs };
+      } catch (err) {
+        console.error(`[AudioGeneration] Failed to cache BGM in Supabase:`, err.message);
+      }
     }
-    
+
     return {
       url: audioUrl,
       prompt: augmentedPrompt,
@@ -137,7 +137,7 @@ class AudioGeneration {
   async fetchSfx(prompt) {
     const augmentedPrompt = await this.augmentPrompt(prompt, 'sfx');
     console.log(`[AudioGeneration] Fetching SFX for prompt: "${augmentedPrompt}"`);
-    
+
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY;
     const cacheKey = `sfx/${augmentedPrompt.toLowerCase().replace(/[^a-z0-9]/g, '_')}.mp3`;
@@ -155,13 +155,13 @@ class AudioGeneration {
         console.error(`[AudioGeneration] Supabase cache check failed:`, err.message);
       }
     } else {
-       if (this.mockS3Cache.has(cacheKey)) {
-         return { url: this.mockS3Cache.get(cacheKey), source: 'mock_s3_cache' };
-       }
+      if (this.mockS3Cache.has(cacheKey)) {
+        return { url: this.mockS3Cache.get(cacheKey), source: 'mock_s3_cache' };
+      }
     }
 
     console.log(`[AudioGeneration] SFX Cache MISS for: ${augmentedPrompt}. Generating via AI...`);
-    
+
     if (!supabaseUrl || !supabaseKey) {
       console.warn('[AudioGeneration] Supabase keys missing. Will bypass upload and return Data URI.');
     }
@@ -193,22 +193,22 @@ class AudioGeneration {
       console.error(`[AudioGeneration] ElevenLabs request failed:`, err.message);
       throw err;
     }
-    
+
     // Save to Supabase Storage
     try {
       const supabase = createClient(supabaseUrl, supabaseKey);
       const { error } = await supabase.storage.from(this.s3Bucket).upload(cacheKey, Buffer.from(audioBuffer), {
         contentType: 'audio/mpeg'
       });
-      
+
       if (error) {
         throw error;
       }
-      
+
       return { url: publicUrl, source: 'ai_generation' };
     } catch (err) {
       console.warn(`[AudioGeneration] Failed to upload to Supabase, falling back to Data URI:`, err.message);
-      
+
       // Fallback: Return the audio as a Base64 Data URI
       const base64Audio = Buffer.from(audioBuffer).toString('base64');
       const dataUri = `data:audio/mpeg;base64,${base64Audio}`;
@@ -217,6 +217,6 @@ class AudioGeneration {
   }
 }
 
-export { 
+export {
   AudioGeneration
- };
+};

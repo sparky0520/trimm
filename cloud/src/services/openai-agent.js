@@ -7,7 +7,7 @@ import OpenAI from 'openai';
 function createOpenAIDecisionProvider({
   apiKey = process.env.LLM_API_KEY,
   baseURL = process.env.LLM_OPENAI_BASE_URL || 'https://api.moonshot.ai/v1',
-  model = process.env.MODEL || 'kimi-k3',
+  model = process.env.MODEL || 'kimi-k2.7-code',
 } = {}) {
 
   const openai = new OpenAI({
@@ -34,7 +34,7 @@ function createOpenAIDecisionProvider({
     }
 
     const toolsArray = typeof tools === 'boolean' && tools ? getAgentTools() : tools;
-    
+
     const requestPayload = {
       model,
       messages,
@@ -55,25 +55,25 @@ function createOpenAIDecisionProvider({
     let toolCalls = [];
     let finishReason = null;
     let statusSent = false;
-    
+
     for await (const chunk of stream) {
-        const choice = chunk.choices[0];
-        if (!choice) continue;
-        if (choice.delta.content) textContent += choice.delta.content;
-        if (choice.delta.tool_calls) {
-            if (!statusSent && onStatus) {
-                onStatus('editing');
-                statusSent = true;
-            }
-            for (const tc of choice.delta.tool_calls) {
-                if (!toolCalls[tc.index]) {
-                    toolCalls[tc.index] = { id: tc.id, type: 'function', function: { name: tc.function?.name || '', arguments: '' } };
-                }
-                if (tc.function?.name) toolCalls[tc.index].function.name = tc.function.name;
-                if (tc.function?.arguments) toolCalls[tc.index].function.arguments += tc.function.arguments;
-            }
+      const choice = chunk.choices[0];
+      if (!choice) continue;
+      if (choice.delta.content) textContent += choice.delta.content;
+      if (choice.delta.tool_calls) {
+        if (!statusSent && onStatus) {
+          onStatus('editing');
+          statusSent = true;
         }
-        if (choice.finish_reason) finishReason = choice.finish_reason;
+        for (const tc of choice.delta.tool_calls) {
+          if (!toolCalls[tc.index]) {
+            toolCalls[tc.index] = { id: tc.id, type: 'function', function: { name: tc.function?.name || '', arguments: '' } };
+          }
+          if (tc.function?.name) toolCalls[tc.index].function.name = tc.function.name;
+          if (tc.function?.arguments) toolCalls[tc.index].function.arguments += tc.function.arguments;
+        }
+      }
+      if (choice.finish_reason) finishReason = choice.finish_reason;
     }
 
     if (!textContent && toolCalls.length === 0) {
@@ -92,7 +92,7 @@ function createOpenAIDecisionProvider({
 
 
   const chatCompletion = async ({ history = [], sources = [], transcript = [], schema = null }, onStatus) => {
-    
+
     // Pre-process transcript for LLM visibility
     const preprocessedTranscript = [];
     let lastSpeakerId = null;
@@ -101,7 +101,7 @@ function createOpenAIDecisionProvider({
     for (const word of transcript) {
       const startMs = word.startMs ?? word.range?.startMs ?? 0;
       const endMs = word.endMs ?? word.range?.endMs ?? startMs;
-      
+
       // 1. Inject speaker change events
       if (word.speakerId && word.speakerId !== lastSpeakerId) {
         preprocessedTranscript.push({
@@ -241,7 +241,7 @@ Use the finish_without_proposal tool ONLY AS A LAST RESORT if the request is fun
         if (operationName === 'apply_video_dsl') {
           return { type: operationName, target, ...payload, dsl: typeof payload.dsl === 'string' ? payload.dsl : JSON.stringify(payload.dsl) };
         }
-        
+
         if (payload.designBlueprint && typeof payload.designBlueprint !== 'string') {
           payload.designBlueprint = JSON.stringify(payload.designBlueprint);
         }

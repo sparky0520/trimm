@@ -19,7 +19,7 @@ import { AudioGeneration } from './services/audio-generation.js';
 const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.LLM_API_KEY;
 const baseURL = process.env.LLM_OPENAI_BASE_URL || 'https://api.moonshot.ai/v1';
-const model = process.env.MODEL || 'kimi-k3';
+const model = process.env.MODEL || 'kimi-k2.7-code';
 const MAX_BODY_BYTES = 512 * 1024;
 
 const transcriptionUploads = new TranscriptionUploads();
@@ -190,21 +190,21 @@ const server = http.createServer(async (request, response) => {
         'Connection': 'keep-alive'
       });
       const finalRes = await agentDecisionProvider.chatCompletion(payload, (status) => {
-          response.write(`event: status\ndata: ${JSON.stringify({status})}\n\n`);
+        response.write(`event: status\ndata: ${JSON.stringify({ status })}\n\n`);
       });
       response.write(`event: done\ndata: ${JSON.stringify(finalRes)}\n\n`);
       return response.end();
     } catch (error) {
       console.error('[chat-completion] request failed', { message: error?.message, status: error?.status, code: error?.code });
       if (!response.headersSent) {
-          return json(response, Number.isInteger(error?.status) ? error.status : 500, {
-            error: error?.message || 'Failed to generate chat completion.',
-            code: error?.code || 'chat_completion_failed',
-            requestId: correlationId(request),
-          });
+        return json(response, Number.isInteger(error?.status) ? error.status : 500, {
+          error: error?.message || 'Failed to generate chat completion.',
+          code: error?.code || 'chat_completion_failed',
+          requestId: correlationId(request),
+        });
       } else {
-          response.write(`event: error\ndata: ${JSON.stringify({ error: error?.message || 'Failed' })}\n\n`);
-          return response.end();
+        response.write(`event: error\ndata: ${JSON.stringify({ error: error?.message || 'Failed' })}\n\n`);
+        return response.end();
       }
     }
   }

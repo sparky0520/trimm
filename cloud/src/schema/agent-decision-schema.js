@@ -31,10 +31,35 @@ const APPLY_SCHEMA_PATCH_TOOL = Object.freeze({
           },
           timeline: {
             type: 'array',
-            description: 'The visual timeline of the video. Nodes are rendered bottom-to-top (video -> effect -> text).',
+            description: 'The visual timeline of the video. Nodes are rendered bottom-to-top (video -> effect -> text). All nodes MUST have type, id, startMs, endMs.',
             items: {
               type: 'object',
-              additionalProperties: true
+              required: ['type', 'id', 'startMs', 'endMs'],
+              properties: {
+                type: { type: 'string', enum: ['video', 'text', 'effect', 'audio'] },
+                id: { type: 'string' },
+                startMs: { type: 'integer' },
+                endMs: { type: 'integer' },
+                src: { type: 'string' },
+                sourceStartMs: { type: 'integer' },
+                transition: { type: 'string' },
+                text: { type: 'string' },
+                style: {
+                  type: 'object',
+                  properties: {
+                    color: { type: 'string' },
+                    fontSize: { type: 'number' },
+                    posY: { type: 'number' },
+                    posX: { type: 'number' },
+                    scale: { type: 'number' }
+                  }
+                },
+                effectName: { type: 'string' },
+                intensity: { type: 'number' },
+                autoDuck: { type: 'boolean' },
+                volume: { type: 'number' }
+              },
+              additionalProperties: false
             }
           }
         }

@@ -43,7 +43,7 @@ public class ChatRepository {
         let url = baseURL.appendingPathComponent(endpoint)
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = method
-        urlRequest.timeoutInterval = 120 // Allow long-running agent requests
+        urlRequest.timeoutInterval = .infinity // Allow long-running agent requests
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
         let session = try await supabase.auth.session
@@ -81,7 +81,8 @@ public class ChatRepository {
         urlRequest.httpBody = body
         
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 120
+        config.timeoutIntervalForRequest = .infinity
+        config.timeoutIntervalForResource = .infinity
         let session = URLSession(configuration: config)
         
         let (bytes, response) = try await session.bytes(for: urlRequest)
