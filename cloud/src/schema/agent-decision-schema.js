@@ -75,11 +75,10 @@ const ASK_USER_QUESTION_TOOL = Object.freeze({
     type: 'object', additionalProperties: false, required: ['questions'], properties: {
       questions: {
         type: 'array', items: {
-          type: 'object', additionalProperties: false, required: ['id', 'question', 'options', 'isMultiSelect'],
+          type: 'object', additionalProperties: false, required: ['id', 'prompt', 'options', 'recommendedOptionId'],
           properties: {
             id: { type: 'string' },
-            question: { type: 'string' },
-            isMultiSelect: { type: 'boolean' },
+            prompt: { type: 'string' },
             options: {
               type: 'array', items: {
                 type: 'object', additionalProperties: false, required: ['id', 'label', 'description'],
