@@ -106,14 +106,22 @@ public class EditorViewModel {
             if url.isFileURL {
                 let filename = UUID().uuidString + "-" + url.lastPathComponent
                 let destURL = documentDirectory.appendingPathComponent(filename)
+                let startedAccess = url.startAccessingSecurityScopedResource()
+                
+                // Move file instead of copying to avoid delay
                 do {
-                    let startedAccess = url.startAccessingSecurityScopedResource()
-                    try fileManager.copyItem(at: url, to: destURL)
-                    if startedAccess { url.stopAccessingSecurityScopedResource() }
+                    try await Task.detached {
+                        if fileManager.fileExists(atPath: destURL.path) {
+                            try fileManager.removeItem(at: destURL)
+                        }
+                        try fileManager.moveItem(at: url, to: destURL)
+                    }.value
                     finalUrl = destURL
                 } catch {
-                    print("Failed to copy file to documents: \(error)")
+                    print("Failed to move file to documents: \(error)")
                 }
+                
+                if startedAccess { url.stopAccessingSecurityScopedResource() }
             }
             
             let asset = AVURLAsset(url: finalUrl)
@@ -185,7 +193,7 @@ public class EditorViewModel {
         )
         
         self.state.project = project
-        self.state.messages = []
+        self.state.messages = [ChatMessage(text: "Extracting audio and transcribing video. This may take a few moments...", isUser: false)]
         
         
         Task {
@@ -212,6 +220,9 @@ public class EditorViewModel {
                                 chatHistory: currentProject.analysis.chatHistory,
                                 settledConstraints: currentProject.analysis.settledConstraints
                             )
+                            
+                            self.state.messages.removeAll { $0.text == "Extracting audio and transcribing video. This may take a few moments..." }
+                            self.state.messages.append(ChatMessage(text: "Transcription complete. What would you like to edit?", isUser: false))
                             
                             let newTitle: String
                             if words.isEmpty {
@@ -305,7 +316,10 @@ public class EditorViewModel {
                     }
                 } catch {
                     print("Transcription failed: \(error)")
-                    await MainActor.run { self.state.errorMessage = "Transcription failed: \(error.localizedDescription)" }
+                    await MainActor.run { 
+                        self.state.errorMessage = "Transcription failed: \(error.localizedDescription)"
+                        self.state.messages.removeAll { $0.text == "Extracting audio and transcribing video. This may take a few moments..." }
+                    }
                 }
             }
             await MainActor.run { state.isProcessing = false }
