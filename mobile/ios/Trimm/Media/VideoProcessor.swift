@@ -274,8 +274,9 @@ public class VideoProcessor {
                 
                 let extent = image.extent
                 if extent.isNull || extent.isInfinite || extent.width.isNaN || extent.height.isNaN || extent.width <= 0 || extent.height <= 0 {
-                    let error = NSError(domain: "VideoProcessor", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid source frame extent"])
-                    request.finish(with: error)
+                    let safeRect = CGRect(x: 0, y: 0, width: max(1.0, request.renderSize.width), height: max(1.0, request.renderSize.height))
+                    let bg = CIImage(color: .black).cropped(to: safeRect)
+                    request.finish(with: bg, context: nil)
                     return
                 }
                 
@@ -484,8 +485,9 @@ public class VideoProcessor {
                 
                 let extent = image.extent
                 if extent.isNull || extent.isInfinite || extent.width.isNaN || extent.height.isNaN || extent.width <= 0 || extent.height <= 0 {
-                    let error = NSError(domain: "VideoProcessor", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid source frame extent"])
-                    request.finish(with: error)
+                    let safeRect = CGRect(x: 0, y: 0, width: max(1.0, request.renderSize.width), height: max(1.0, request.renderSize.height))
+                    let bg = CIImage(color: .black).cropped(to: safeRect)
+                    request.finish(with: bg, context: nil)
                     return
                 }
                 
