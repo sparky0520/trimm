@@ -179,19 +179,27 @@ public class ExportCoordinator {
                 if let out = colorFilter.outputImage { image = out }
             }
             
+            let extent = image.extent
+            if extent.isNull || extent.isInfinite || extent.width.isNaN || extent.height.isNaN || extent.width <= 0 || extent.height <= 0 {
+                let error = NSError(domain: "ExportCoordinator", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid source frame extent"])
+                request.finish(with: error)
+                return
+            }
+            
             // Aspect-fill the video frame into the target render size
-            let scaleX = request.renderSize.width / image.extent.width
-            let scaleY = request.renderSize.height / image.extent.height
+            let scaleX = request.renderSize.width / extent.width
+            let scaleY = request.renderSize.height / extent.height
             let scale = max(scaleX, scaleY)
             
-            let tx = (request.renderSize.width - image.extent.width * scale) / 2.0
-            let ty = (request.renderSize.height - image.extent.height * scale) / 2.0
+            let tx = (request.renderSize.width - extent.width * scale) / 2.0
+            let ty = (request.renderSize.height - extent.height * scale) / 2.0
             
-            let transform = CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY)
-                .concatenating(CGAffineTransform(scaleX: scale, y: scale))
-                .concatenating(CGAffineTransform(translationX: tx, y: ty))
-            
-            image = image.transformed(by: transform)
+            if !tx.isNaN && !ty.isNaN && !scale.isNaN && !tx.isInfinite && !ty.isInfinite && !scale.isInfinite {
+                let transform = CGAffineTransform(translationX: -extent.minX, y: -extent.minY)
+                    .concatenating(CGAffineTransform(scaleX: scale, y: scale))
+                    .concatenating(CGAffineTransform(translationX: tx, y: ty))
+                image = image.transformed(by: transform)
+            }
             
             let bg = CIImage(color: .black).cropped(to: CGRect(origin: .zero, size: request.renderSize))
             image = image.composited(over: bg)

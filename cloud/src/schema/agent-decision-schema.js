@@ -38,22 +38,22 @@ const APPLY_SCHEMA_PATCH_TOOL = Object.freeze({
               properties: {
                 type: { type: 'string', enum: ['video', 'text', 'effect', 'audio'] },
                 id: { type: 'string' },
-                startMs: { type: 'integer' },
-                endMs: { type: 'integer' },
+                startMs: { type: 'integer', description: 'The absolute start time in milliseconds on the final exported video timeline. Increasing this moves the element later in the video.' },
+                endMs: { type: 'integer', description: 'The absolute end time in milliseconds on the final exported video timeline. Increasing this makes the element stay on screen longer.' },
                 src: { type: 'string' },
-                sourceStartMs: { type: 'integer' },
+                sourceStartMs: { type: 'integer', description: '(Video/Audio only) The start time in milliseconds relative to the original raw source media file. Increasing this number trims/skips the beginning of the raw clip so it starts playing from a later point.' },
                 transition: { type: 'string' },
                 text: { type: 'string' },
                 style: {
                   type: 'object',
                   properties: {
                     color: { type: 'string' },
-                    fontSize: { type: 'number' },
-                    posY: { type: 'number' },
-                    posX: { type: 'number' },
-                    scale: { type: 'number' },
+                    fontSize: { type: 'number', description: 'The font size for text elements. Increasing this makes the text visually larger. Default is usually around 40 to 60.' },
+                    posY: { type: 'number', description: 'The vertical position of the text. Increasing this number moves the text downwards. A value of 0 is typically centered.' },
+                    posX: { type: 'number', description: 'The horizontal position of the text. Increasing this number moves the text to the right. A value of 0 is typically centered.' },
+                    scale: { type: 'number', description: 'The scaling multiplier for text elements. 1.0 is normal size. Increasing this (e.g. to 2.0) doubles the size. Decreasing this (e.g. to 0.5) halves it.' },
                     strokeColor: { type: 'string' },
-                    strokeWidth: { type: 'number' }
+                    strokeWidth: { type: 'number', description: 'The thickness of the text outline/stroke. Increasing this makes the outline thicker and more pronounced. Typical values are 2 to 6.' }
                   }
                 },
                 segments: {
@@ -68,9 +68,9 @@ const APPLY_SCHEMA_PATCH_TOOL = Object.freeze({
                   }
                 },
                 effectName: { type: 'string' },
-                intensity: { type: 'number' },
+                intensity: { type: 'number', description: '(Effect only) The strength of the applied visual effect. Range is typically 0.0 to 1.0. Increasing this makes the effect more severe (e.g., more blurry, more pixelated).' },
                 autoDuck: { type: 'boolean' },
-                volume: { type: 'number' }
+                volume: { type: 'number', description: '(Audio only) The volume multiplier for the audio track. 1.0 is original volume. Increasing this (e.g. to 2.0) doubles the volume, decreasing it (e.g. to 0.5) halves the volume. 0.0 is muted.' }
               },
               additionalProperties: false
             }
