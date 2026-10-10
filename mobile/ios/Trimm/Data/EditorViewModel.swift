@@ -485,7 +485,7 @@ public class EditorViewModel {
                 // Track progress
                 let progressTask = Task { @MainActor in
                     while let s = self.exportSession {
-                        self.state.exportProgress = Double(s.progress)
+                        self.state.exportProgress = s.progress
                         if s.status == .completed || s.status == .failed || s.status == .cancelled { break }
                         try? await Task.sleep(nanoseconds: 100_000_000)
                     }
