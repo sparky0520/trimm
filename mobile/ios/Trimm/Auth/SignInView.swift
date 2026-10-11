@@ -108,14 +108,36 @@ struct SignInView: View {
                                 nonce: nonce
                             )
                         )
+                        
+                        if let fullName = appleIDCredential.fullName {
+                            var nameParts: [String] = []
+                            if let given = fullName.givenName, !given.isEmpty { nameParts.append(given) }
+                            if let family = fullName.familyName, !family.isEmpty { nameParts.append(family) }
+                            let fullNameString = nameParts.joined(separator: " ")
+                            
+                            if !fullNameString.isEmpty {
+                                try? await supabase.auth.update(
+                                    user: UserAttributes(
+                                        data: [
+                                            "full_name": .string(fullNameString),
+                                            "given_name": .string(fullName.givenName ?? ""),
+                                            "family_name": .string(fullName.familyName ?? "")
+                                        ]
+                                    )
+                                )
+                            }
+                        }
                     } catch {
                         errorMessage = error.localizedDescription
                         isLoading = false
                     }
+                    currentNonce = nil
                 }
             }
         case .failure(let error):
-            errorMessage = error.localizedDescription
+            if (error as? ASAuthorizationError)?.code != .canceled {
+                errorMessage = error.localizedDescription
+            }
         }
     }
     

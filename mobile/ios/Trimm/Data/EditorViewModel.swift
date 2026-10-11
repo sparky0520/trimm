@@ -354,6 +354,17 @@ public class EditorViewModel {
         state.messages.append(ChatMessage(text: state.jobMessage!, isUser: false))
         
         Task {
+            let isAuth = await ChatRepository.shared.isAuthenticated()
+            if !isAuth {
+                await MainActor.run {
+                    self.state.jobMessage = nil
+                    self.state.messages.removeAll { $0.text == "Thinking…" || $0.text == "Editing…" }
+                    self.state.messages.append(ChatMessage(text: "Please sign in to continue chat.", isUser: false))
+                    self.state.isProcessing = false
+                }
+                return
+            }
+            
             let agentSources = state.sources.map {
                 AgentSourceInventory(id: $0.uri, fingerprint: $0.fingerprint, durationMs: $0.durationMs, width: $0.width, height: $0.height, hasAudio: $0.hasAudio)
             }
@@ -369,7 +380,7 @@ public class EditorViewModel {
             }
             
             let currentHistory = self.state.messages
-                .filter { $0.text != "Thinking…" }
+                .filter { $0.text != "Thinking…" && $0.text != "Editing…" && $0.text != "Please sign in to continue chat." }
                 .map { AgentChatMessage(role: $0.isUser ? "user" : "assistant", content: $0.text) }
             
             let agentRequest = AgentRunRequest(
@@ -447,9 +458,14 @@ public class EditorViewModel {
                 
             } catch {
                 await MainActor.run {
-                    self.state.jobMessage = "Failed: \(error.localizedDescription)"
                     self.state.messages.removeAll { $0.text == "Thinking…" || $0.text == "Editing…" }
-                    self.state.messages.append(ChatMessage(text: "Error: \(error.localizedDescription)", isUser: false))
+                    if let repoError = error as? ChatRepositoryError, repoError == .unauthorized {
+                        self.state.jobMessage = nil
+                        self.state.messages.append(ChatMessage(text: "Please sign in to continue chat.", isUser: false))
+                    } else {
+                        self.state.jobMessage = "Failed: \(error.localizedDescription)"
+                        self.state.messages.append(ChatMessage(text: "Error: \(error.localizedDescription)", isUser: false))
+                    }
                     self.state.isProcessing = false
                 }
             }

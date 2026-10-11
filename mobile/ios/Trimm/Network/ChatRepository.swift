@@ -19,12 +19,30 @@ public struct AgentExecuteResponse: Codable, Equatable {
     public let schema: CompositionSchema?
 }
 
+public enum ChatRepositoryError: LocalizedError, Equatable {
+    case unauthorized
+    case badServerResponse
+    
+    public var errorDescription: String? {
+        switch self {
+        case .unauthorized:
+            return "Please sign in to continue chat."
+        case .badServerResponse:
+            return "Server returned an unexpected response."
+        }
+    }
+}
+
 public class ChatRepository {
     public static let shared = ChatRepository()
     
     private let baseURL = URL(string: "\(Secrets.backendURL)/v1")!
     
     private init() {}
+    
+    public func isAuthenticated() async -> Bool {
+        return (try? await supabase.auth.session) != nil
+    }
     
     private func fetchWithRetry(request: URLRequest) async throws -> (Data, URLResponse) {
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -75,7 +93,12 @@ public class ChatRepository {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let sessionData = try await supabase.auth.session
+        let sessionData: Session
+        do {
+            sessionData = try await supabase.auth.session
+        } catch {
+            throw ChatRepositoryError.unauthorized
+        }
         let token = sessionData.accessToken
         urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         urlRequest.httpBody = body
@@ -91,13 +114,20 @@ public class ChatRepository {
         }
         
         if httpResponse.statusCode == 401 {
-            let refreshedSession = try await supabase.auth.refreshSession()
-            urlRequest.setValue("Bearer \(refreshedSession.accessToken)", forHTTPHeaderField: "Authorization")
-            let (retryBytes, retryResponse) = try await session.bytes(for: urlRequest)
-            guard let retryHttpResponse = retryResponse as? HTTPURLResponse, (200...299).contains(retryHttpResponse.statusCode) else {
-                throw URLError(.badServerResponse)
+            do {
+                let refreshedSession = try await supabase.auth.refreshSession()
+                urlRequest.setValue("Bearer \(refreshedSession.accessToken)", forHTTPHeaderField: "Authorization")
+                let (retryBytes, retryResponse) = try await session.bytes(for: urlRequest)
+                guard let retryHttpResponse = retryResponse as? HTTPURLResponse, (200...299).contains(retryHttpResponse.statusCode) else {
+                    if let retryHttpResponse = retryResponse as? HTTPURLResponse, retryHttpResponse.statusCode == 401 {
+                        throw ChatRepositoryError.unauthorized
+                    }
+                    throw URLError(.badServerResponse)
+                }
+                return try await parseAgentStream(bytes: retryBytes, onStatus: onStatus)
+            } catch {
+                throw ChatRepositoryError.unauthorized
             }
-            return try await parseAgentStream(bytes: retryBytes, onStatus: onStatus)
         }
         
         guard (200...299).contains(httpResponse.statusCode) else {

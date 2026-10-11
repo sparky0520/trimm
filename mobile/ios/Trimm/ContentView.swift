@@ -172,6 +172,7 @@ struct ContentView: View {
     @State private var isLoggingIn = false
     @State private var errorMessage: String?
     @State private var isDrawerOpen = false
+    @State private var appleSignInNonce: String?
     
     var body: some View {
         ZStack(alignment: .leading) {
@@ -207,8 +208,8 @@ struct ContentView: View {
                                 SignInWithAppleButton(.signIn) { request in
                                     request.requestedScopes = [.fullName, .email]
                                     let rawNonce = randomNonceString()
+                                    appleSignInNonce = rawNonce
                                     request.nonce = sha256(rawNonce)
-                                    UserDefaults.standard.set(rawNonce, forKey: "apple_sign_in_nonce")
                                 } onCompletion: { result in
                                     handleAppleSignIn(result: result)
                                 }
@@ -339,25 +340,56 @@ struct ContentView: View {
     private func handleAppleSignIn(result: Result<ASAuthorization, Error>) {
         switch result {
         case .success(let authorization):
-            if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
-               let identityTokenData = appleIDCredential.identityToken,
-               let identityToken = String(data: identityTokenData, encoding: .utf8) {
-                let nonce = UserDefaults.standard.string(forKey: "apple_sign_in_nonce")
-                
-                Task {
-                    isLoggingIn = true
-                    do {
-                        try await supabase.auth.signInWithIdToken(
-                            credentials: .init(provider: .apple, idToken: identityToken, nonce: nonce)
-                        )
-                    } catch {
-                        errorMessage = error.localizedDescription
+            guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                  let identityTokenData = appleIDCredential.identityToken,
+                  let identityToken = String(data: identityTokenData, encoding: .utf8) else {
+                errorMessage = "Unable to fetch identity token from Apple."
+                return
+            }
+            
+            guard let nonce = appleSignInNonce else {
+                errorMessage = "Invalid state: A login nonce was not found."
+                return
+            }
+            
+            Task {
+                isLoggingIn = true
+                errorMessage = nil
+                do {
+                    try await supabase.auth.signInWithIdToken(
+                        credentials: .init(provider: .apple, idToken: identityToken, nonce: nonce)
+                    )
+                    
+                    // Apple only provides the user's full name on the initial sign-in.
+                    // Save it to Supabase user metadata if available:
+                    if let fullName = appleIDCredential.fullName {
+                        var nameParts: [String] = []
+                        if let given = fullName.givenName, !given.isEmpty { nameParts.append(given) }
+                        if let family = fullName.familyName, !family.isEmpty { nameParts.append(family) }
+                        let fullNameString = nameParts.joined(separator: " ")
+                        
+                        if !fullNameString.isEmpty {
+                            try? await supabase.auth.update(
+                                user: UserAttributes(
+                                    data: [
+                                        "full_name": .string(fullNameString),
+                                        "given_name": .string(fullName.givenName ?? ""),
+                                        "family_name": .string(fullName.familyName ?? "")
+                                    ]
+                                )
+                            )
+                        }
                     }
-                    isLoggingIn = false
+                } catch {
+                    errorMessage = error.localizedDescription
                 }
+                isLoggingIn = false
+                appleSignInNonce = nil
             }
         case .failure(let error):
-            errorMessage = error.localizedDescription
+            if (error as? ASAuthorizationError)?.code != .canceled {
+                errorMessage = error.localizedDescription
+            }
         }
     }
     
