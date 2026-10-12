@@ -15,7 +15,7 @@ public enum Secrets {
     
     // MARK: - RevenueCat
     /// Public Apple API key from RevenueCat Dashboard -> Project Settings -> API Keys (starts with 'appl_')
-    public static let revenueCatApiKey = "appl_YOUR_ACTUAL_KEY_HERE"
+    public static let revenueCatApiKey = "appl_grbBHskUOGaOiKrKyIOaHVUaEyr"
     
     // MARK: - In-App Purchase Product Identifiers (App Store Connect & RevenueCat)
     public static let creditPackage100 = "ai.ctrlb.credits.100"
