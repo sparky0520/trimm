@@ -17,6 +17,10 @@ struct TrimmApp: App {
         }
     }()
 
+    init() {
+        BillingManager.shared.configure()
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

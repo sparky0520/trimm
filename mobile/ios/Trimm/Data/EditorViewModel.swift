@@ -319,6 +319,9 @@ public class EditorViewModel {
                     await MainActor.run { 
                         self.state.errorMessage = "Transcription failed: \(error.localizedDescription)"
                         self.state.messages.removeAll { $0.text == "Extracting audio and transcribing video. This may take a few moments..." }
+                        if (error as NSError).code == 402 {
+                            self.state.messages.append(ChatMessage(text: "You need more credits to continue.", isUser: false))
+                        }
                     }
                 }
             }

@@ -15,6 +15,7 @@ import { fromEnvironment as authenticationFromEnvironment } from './middleware/a
 import { IdentityRateLimiter, auditEvent, correlationId, requireScope } from './middleware/authorization.js';
 import { createOpenAIDecisionProvider } from './services/openai-agent.js';
 import { AudioGeneration } from './services/audio-generation.js';
+import { billingService, CREDIT_COSTS } from './services/billing.js';
 
 const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.LLM_API_KEY;
@@ -36,6 +37,9 @@ function policyFor(request, pathname) {
   if (pathname.startsWith('/v1/transcribe')) return { scope: 'transcribe:create', action: request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'update' : 'create', resourceType: 'transcription' };
   if (pathname.startsWith('/v1/audio') || pathname === '/v1/chat/completion') {
     return { scope: 'plan:create', action: 'create', resourceType: 'plan' };
+  }
+  if (pathname.startsWith('/v1/billing')) {
+    return { scope: 'billing:read', action: 'read', resourceType: 'billing' };
   }
   return null;
 }
@@ -106,7 +110,9 @@ const server = http.createServer(async (request, response) => {
 
   let principal;
   const requestId = correlationId(request);
-  if (requestUrl.pathname.startsWith('/v1/')) {
+  const isWebhook = requestUrl.pathname === '/v1/billing/revenuecat-webhook';
+
+  if (requestUrl.pathname.startsWith('/v1/') && !isWebhook) {
     const policy = policyFor(request, requestUrl.pathname);
     try {
       principal = await authentication.authenticate(request);
@@ -123,9 +129,55 @@ const server = http.createServer(async (request, response) => {
     }
   }
 
+  if (request.method === 'POST' && requestUrl.pathname === '/v1/billing/revenuecat-webhook') {
+    try {
+      const payload = await collect(request, 1024 * 1024);
+      const result = await billingService.handleRevenueCatWebhook(request.headers, payload);
+      return json(response, 200, result);
+    } catch (error) {
+      console.error('[revenuecat-webhook] request failed', { message: error?.message, status: error?.status });
+      return json(response, Number.isInteger(error?.status) ? error.status : 500, {
+        error: error?.message || 'RevenueCat webhook failed',
+      });
+    }
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/v1/billing/credits') {
+    try {
+      const credits = await billingService.getCredits(principal.id);
+      return json(response, 200, credits);
+    } catch (error) {
+      console.error('[billing-credits] request failed', { message: error?.message, status: error?.status });
+      return json(response, Number.isInteger(error?.status) ? error.status : 500, {
+        error: error?.message || 'Failed to fetch credits',
+      });
+    }
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/v1/billing/history') {
+    try {
+      const history = await billingService.getHistory(principal.id);
+      return json(response, 200, { transactions: history });
+    } catch (error) {
+      console.error('[billing-history] request failed', { message: error?.message, status: error?.status });
+      return json(response, Number.isInteger(error?.status) ? error.status : 500, {
+        error: error?.message || 'Failed to fetch transaction history',
+      });
+    }
+  }
+
   const uploadMatch = requestUrl.pathname.match(/^\/v1\/transcribe\/uploads\/([0-9a-f-]{36})(\/complete)?$/i);
   if (request.method === 'POST' && requestUrl.pathname === '/v1/transcribe/uploads') {
     try {
+      const creditCheck = await billingService.checkCredits(principal.id, CREDIT_COSTS.TRANSCRIPTION);
+      if (!creditCheck.sufficient) {
+        return json(response, 402, {
+          error: 'You need more credits to continue.',
+          code: 'insufficient_credits',
+          balance: creditCheck.balance,
+          required: CREDIT_COSTS.TRANSCRIPTION,
+        });
+      }
       transcriptionUploads.cleanup();
       const upload = transcriptionUploads.create({ ...(await collect(request, 4096)), owner: principal.id });
       return json(response, 201, { id: upload.id, offset: upload.offset, chunkSize: 4 * 1024 * 1024 });
@@ -144,17 +196,37 @@ const server = http.createServer(async (request, response) => {
     catch (error) { return json(response, Number.isInteger(error?.status) ? error.status : 404, { error: error?.message }); }
   }
   if (uploadMatch && request.method === 'POST' && uploadMatch[2]) {
-    try { const upload = transcriptionUploads.complete(uploadMatch[1], principal.id); const result = await transcriptionCore.transcribe(upload.stream); return json(response, 200, result); }
-    catch (error) { console.error('[transcribe-upload] request failed', { message: error?.message, status: error?.status }); return json(response, Number.isInteger(error?.status) ? error.status : 502, { error: error?.message || 'Transcription failed', offset: error?.offset }); }
-    finally { transcriptionUploads.remove(uploadMatch[1]); }
+    try {
+      await billingService.deductCredits(principal.id, CREDIT_COSTS.TRANSCRIPTION, 'transcription', 'Audio transcription upload', requestId);
+      const upload = transcriptionUploads.complete(uploadMatch[1], principal.id);
+      const result = await transcriptionCore.transcribe(upload.stream);
+      return json(response, 200, result);
+    } catch (error) {
+      console.error('[transcribe-upload] request failed', { message: error?.message, status: error?.status });
+      return json(response, Number.isInteger(error?.status) ? error.status : 502, {
+        error: error?.message || 'Transcription failed',
+        code: error?.code,
+        balance: error?.balance,
+        required: error?.required,
+        offset: error?.offset
+      });
+    } finally {
+      transcriptionUploads.remove(uploadMatch[1]);
+    }
   }
   if (request.method === 'POST' && requestUrl.pathname === '/v1/transcribe') {
     try {
+      await billingService.deductCredits(principal.id, CREDIT_COSTS.TRANSCRIPTION, 'transcription', 'Audio transcription', requestId);
       transcriptionCore.validateUpload(request.headers);
       return json(response, 200, await transcriptionCore.transcribe(request));
     } catch (error) {
       console.error('[transcribe] request failed', { message: error?.message, status: error?.status });
-      return json(response, error?.status && Number.isInteger(error.status) ? error.status : 502, { error: error?.message || 'Transcription failed' });
+      return json(response, error?.status && Number.isInteger(error.status) ? error.status : 502, {
+        error: error?.message || 'Transcription failed',
+        code: error?.code,
+        balance: error?.balance,
+        required: error?.required
+      });
     }
   }
 
@@ -163,10 +235,16 @@ const server = http.createServer(async (request, response) => {
       const { prompt, durationSecs, beats, isEffect, chatId } = await collect(request);
       if (!chatId) throw Object.assign(new Error('chatId is strictly required to securely track and cleanup generated background music.'), { status: 400 });
       if (!prompt || !durationSecs) throw Object.assign(new Error('Missing prompt or durationSecs'), { status: 400 });
+      await billingService.deductCredits(principal.id, CREDIT_COSTS.BGM_GENERATION, 'bgm_generation', `AI Background Music (${durationSecs}s)`, requestId);
       return json(response, 200, await audioGeneration.generateBgm(prompt, durationSecs, isEffect, chatId));
     } catch (error) {
       console.error('[audio-generate-bgm] request failed', { message: error?.message });
-      return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message || 'BGM generation failed' });
+      return json(response, Number.isInteger(error?.status) ? error.status : 500, {
+        error: error?.message || 'BGM generation failed',
+        code: error?.code,
+        balance: error?.balance,
+        required: error?.required
+      });
     }
   }
 
@@ -174,16 +252,23 @@ const server = http.createServer(async (request, response) => {
     try {
       const { prompt } = await collect(request);
       if (!prompt) throw Object.assign(new Error('Missing prompt'), { status: 400 });
+      await billingService.deductCredits(principal.id, CREDIT_COSTS.SFX_FETCH, 'sfx_fetch', `Fetch SFX: ${prompt.slice(0, 30)}`, requestId);
       return json(response, 200, await audioGeneration.fetchSfx(prompt));
     } catch (error) {
       console.error('[audio-fetch-sfx] request failed', { message: error?.message });
-      return json(response, Number.isInteger(error?.status) ? error.status : 500, { error: error?.message || 'SFX fetch failed' });
+      return json(response, Number.isInteger(error?.status) ? error.status : 500, {
+        error: error?.message || 'SFX fetch failed',
+        code: error?.code,
+        balance: error?.balance,
+        required: error?.required
+      });
     }
   }
 
   if (request.method === 'POST' && requestUrl.pathname === '/v1/chat/completion') {
     try {
       const payload = await collect(request, 5 * 1024 * 1024);
+      await billingService.deductCredits(principal.id, CREDIT_COSTS.CHAT_COMPLETION, 'chat_completion', 'AI Chat completion', requestId);
       response.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
@@ -200,6 +285,8 @@ const server = http.createServer(async (request, response) => {
         return json(response, Number.isInteger(error?.status) ? error.status : 500, {
           error: error?.message || 'Failed to generate chat completion.',
           code: error?.code || 'chat_completion_failed',
+          balance: error?.balance,
+          required: error?.required,
           requestId: correlationId(request),
         });
       } else {

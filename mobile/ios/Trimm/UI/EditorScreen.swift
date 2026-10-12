@@ -134,7 +134,27 @@ public struct EditorScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                HStack(spacing: 16) {
+                HStack(spacing: 12) {
+                    Button(action: {
+                        BillingManager.shared.isStorePresented = true
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.yellow)
+                            Text("\(BillingManager.shared.balance)")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.cream)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.raised)
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule().stroke(Color.border.opacity(0.6), lineWidth: 1)
+                        )
+                    }
+
                     Button(action: {
                         showAssetsModal = true
                     }) {

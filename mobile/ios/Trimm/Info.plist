@@ -27,11 +27,13 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Trimm needs permission to save exported edited videos to your Camera Roll.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Trimm needs access to your photo library to import your video clips.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIRequiresFullScreen</key>
 	<true/>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>We need access to your photo library to save exported videos.</string>
 </dict>
 </plist>

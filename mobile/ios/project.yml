@@ -13,6 +13,9 @@ packages:
   GoogleSignIn:
     url: https://github.com/google/GoogleSignIn-iOS
     from: 7.1.0
+  RevenueCat:
+    url: https://github.com/RevenueCat/purchases-ios.git
+    from: 5.0.0
 targets:
   Trimm:
     type: application
@@ -24,6 +27,8 @@ targets:
       properties:
         UILaunchScreen: {}
         UIRequiresFullScreen: true
+        NSPhotoLibraryUsageDescription: "Trimm needs access to your photo library to import your video clips."
+        NSPhotoLibraryAddUsageDescription: "Trimm needs permission to save exported edited videos to your Camera Roll."
         CFBundleURLTypes:
           - CFBundleURLSchemes:
               - $(GOOGLE_REVERSED_CLIENT_ID)
@@ -40,3 +45,5 @@ targets:
         product: GoogleSignIn
       - package: GoogleSignIn
         product: GoogleSignInSwift
+      - package: RevenueCat
+        product: RevenueCat

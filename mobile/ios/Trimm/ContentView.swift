@@ -26,6 +26,7 @@ struct SidebarView: View {
     @State private var chatToDelete: String? = nil
     @State private var currentUser: User? = nil
     @State private var showSignOutConfirmation = false
+    @State private var billing = BillingManager.shared
     
     var body: some View {
         VStack(spacing: 0) {
@@ -95,6 +96,36 @@ struct SidebarView: View {
             }
             .listStyle(.plain)
             .padding(.horizontal, 16)
+            
+            if currentUser != nil {
+                Button(action: {
+                    billing.isStorePresented = true
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.yellow)
+                        Text("\(billing.balance) Credits")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.cream)
+                        Spacer()
+                        Text("Top up")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.darkText)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.cream)
+                            .clipShape(Capsule())
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Color.raised)
+                    .cornerRadius(10)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+            }
             
             Divider()
             
@@ -173,6 +204,7 @@ struct ContentView: View {
     @State private var errorMessage: String?
     @State private var isDrawerOpen = false
     @State private var appleSignInNonce: String?
+    @State private var billing = BillingManager.shared
     
     var body: some View {
         ZStack(alignment: .leading) {
@@ -300,6 +332,30 @@ struct ContentView: View {
                             .foregroundColor(.primary)
                     }
                 }
+                
+                if isAuthenticated {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(action: {
+                            billing.isStorePresented = true
+                        }) {
+                            HStack(spacing: 5) {
+                                Image(systemName: "bolt.fill")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(.yellow)
+                                Text("\(billing.balance)")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(.cream)
+                            }
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .background(Color.raised)
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule().stroke(Color.border.opacity(0.6), lineWidth: 1)
+                            )
+                        }
+                    }
+                }
             }
             } // NavigationStack
             
@@ -326,10 +382,14 @@ struct ContentView: View {
             }
         } // ZStack
         .preferredColorScheme(.dark)
+        .sheet(isPresented: $billing.isStorePresented) {
+            CreditStoreView()
+        }
         .task {
             for await authEvent in supabase.auth.authStateChanges {
                 let wasAuthenticated = isAuthenticated
                 isAuthenticated = authEvent.session != nil
+                await billing.updateUser(userId: authEvent.session?.user.id.uuidString)
                 if !wasAuthenticated && isAuthenticated {
                     Task { await viewModel.loadPastChats() }
                 }

@@ -21,12 +21,15 @@ public struct AgentExecuteResponse: Codable, Equatable {
 
 public enum ChatRepositoryError: LocalizedError, Equatable {
     case unauthorized
+    case insufficientCredits(balance: Int, required: Int)
     case badServerResponse
     
     public var errorDescription: String? {
         switch self {
         case .unauthorized:
             return "Please sign in to continue chat."
+        case .insufficientCredits:
+            return "You need more credits to continue."
         case .badServerResponse:
             return "Server returned an unexpected response."
         }
@@ -75,6 +78,14 @@ public class ChatRepository {
             throw URLError(.badServerResponse)
         }
         
+        if httpResponse.statusCode == 402 {
+            Task { @MainActor in
+                BillingManager.shared.isStorePresented = true
+                await BillingManager.shared.fetchCredits()
+            }
+            throw ChatRepositoryError.insufficientCredits(balance: await BillingManager.shared.balance, required: 2)
+        }
+        
         guard (200...299).contains(httpResponse.statusCode) else {
             if let errorMsg = String(data: data, encoding: .utf8) {
                 print("API Error: \(errorMsg)")
@@ -119,22 +130,46 @@ public class ChatRepository {
                 urlRequest.setValue("Bearer \(refreshedSession.accessToken)", forHTTPHeaderField: "Authorization")
                 let (retryBytes, retryResponse) = try await session.bytes(for: urlRequest)
                 guard let retryHttpResponse = retryResponse as? HTTPURLResponse, (200...299).contains(retryHttpResponse.statusCode) else {
-                    if let retryHttpResponse = retryResponse as? HTTPURLResponse, retryHttpResponse.statusCode == 401 {
-                        throw ChatRepositoryError.unauthorized
+                    if let retryHttpResponse = retryResponse as? HTTPURLResponse {
+                        if retryHttpResponse.statusCode == 401 {
+                            throw ChatRepositoryError.unauthorized
+                        } else if retryHttpResponse.statusCode == 402 {
+                            Task { @MainActor in
+                                BillingManager.shared.isStorePresented = true
+                                await BillingManager.shared.fetchCredits()
+                            }
+                            throw ChatRepositoryError.insufficientCredits(balance: await BillingManager.shared.balance, required: 2)
+                        }
                     }
                     throw URLError(.badServerResponse)
                 }
-                return try await parseAgentStream(bytes: retryBytes, onStatus: onStatus)
+                let retryResult = try await parseAgentStream(bytes: retryBytes, onStatus: onStatus)
+                Task { @MainActor in
+                    await BillingManager.shared.fetchCredits()
+                }
+                return retryResult
             } catch {
                 throw ChatRepositoryError.unauthorized
             }
+        }
+        
+        if httpResponse.statusCode == 402 {
+            Task { @MainActor in
+                BillingManager.shared.isStorePresented = true
+                await BillingManager.shared.fetchCredits()
+            }
+            throw ChatRepositoryError.insufficientCredits(balance: await BillingManager.shared.balance, required: 2)
         }
         
         guard (200...299).contains(httpResponse.statusCode) else {
             throw URLError(.badServerResponse)
         }
         
-        return try await parseAgentStream(bytes: bytes, onStatus: onStatus)
+        let result = try await parseAgentStream(bytes: bytes, onStatus: onStatus)
+        Task { @MainActor in
+            await BillingManager.shared.fetchCredits()
+        }
+        return result
     }
     
     private func parseAgentStream(bytes: URLSession.AsyncBytes, onStatus: ((String) -> Void)?) async throws -> AgentExecuteResponse {

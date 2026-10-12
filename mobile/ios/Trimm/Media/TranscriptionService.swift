@@ -164,6 +164,13 @@ public class TranscriptionService {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
+        if httpResponse.statusCode == 402 {
+            Task { @MainActor in
+                BillingManager.shared.isStorePresented = true
+                await BillingManager.shared.fetchCredits()
+            }
+            throw NSError(domain: "TranscriptionService", code: 402, userInfo: [NSLocalizedDescriptionKey: "You need more credits to continue."])
+        }
         if !(200...299).contains(httpResponse.statusCode) {
             let msg = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
             throw NSError(domain: "TranscriptionService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Upload failed: \(msg)"])
