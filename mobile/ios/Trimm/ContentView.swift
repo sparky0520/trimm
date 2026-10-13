@@ -56,46 +56,48 @@ struct SidebarView: View {
             .padding(.top, 16)
             .padding(.bottom, 8)
             
+            HStack(spacing: 8) {
+                Text("Past Chats")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+                if viewModel.state.isLoadingPastChats {
+                    ProgressView().scaleEffect(0.5)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+            .padding(.bottom, 2)
+            
             List {
-                Section(header: HStack {
-                    Text("Past Chats")
-                        .textCase(nil)
-                        .font(.subheadline)
+                if viewModel.state.pastChats.isEmpty && !viewModel.state.isLoadingPastChats {
+                    Text("No past chats.")
                         .foregroundColor(.gray)
-                    if viewModel.state.isLoadingPastChats {
-                        Spacer()
-                        ProgressView().scaleEffect(0.5)
-                    }
-                }) {
-                    if viewModel.state.pastChats.isEmpty && !viewModel.state.isLoadingPastChats {
-                        Text("No past chats.")
-                            .foregroundColor(.gray)
-                            .italic()
-                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-                            .listRowBackground(Color.clear)
-                    } else {
-                        ForEach(viewModel.state.pastChats) { chat in
-                            Button(action: {
-                                Task { await viewModel.loadProject(id: chat.id) }
-                                withAnimation { isDrawerOpen = false }
-                            }) {
-                                Text(chat.title)
-                            }
-                            .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) {
-                                    chatToDelete = chat.id
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
-                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-                            .listRowBackground(Color.clear)
+                        .italic()
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                        .listRowBackground(Color.clear)
+                } else {
+                    ForEach(viewModel.state.pastChats) { chat in
+                        Button(action: {
+                            Task { await viewModel.loadProject(id: chat.id) }
+                            withAnimation { isDrawerOpen = false }
+                        }) {
+                            Text(chat.title)
+                                .foregroundColor(.primary)
                         }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                chatToDelete = chat.id
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                        .listRowBackground(Color.clear)
                     }
                 }
             }
             .listStyle(.plain)
-            .padding(.horizontal, 16)
             
             if currentUser != nil {
                 Button(action: {
