@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Trimm - App Store Review Guide & Demo Walkthrough</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 20mm 18mm 20mm 18mm;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #1c1c1e;
+      background: #ffffff;
+      line-height: 1.5;
+      font-size: 13px;
+      margin: 0;
+      padding: 0;
+    }
+    .header {
+      border-bottom: 2px solid #09090b;
+      padding-bottom: 14px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+    .header h1 {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 4px 0;
+      color: #09090b;
+    }
+    .header .subtitle {
+      font-size: 13px;
+      color: #636366;
+      margin: 0;
+    }
+    .badge {
+      display: inline-block;
+      background: #09090b;
+      color: #ffffff;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      background: #f2f2f7;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 22px;
+      font-size: 12px;
+    }
+    .meta-item strong {
+      color: #1c1c1e;
+    }
+    .meta-item span {
+      color: #48484a;
+    }
+    h2 {
+      font-size: 16px;
+      color: #09090b;
+      border-bottom: 1px solid #e5e5ea;
+      padding-bottom: 6px;
+      margin-top: 20px;
+      margin-bottom: 10px;
+    }
+    h3 {
+      font-size: 13px;
+      margin-top: 12px;
+      margin-bottom: 4px;
+      color: #1c1c1e;
+    }
+    p {
+      margin: 0 0 8px 0;
+      color: #3a3a3c;
+    }
+    ol, ul {
+      margin: 0 0 12px 0;
+      padding-left: 20px;
+    }
+    li {
+      margin-bottom: 6px;
+      color: #3a3a3c;
+    }
+    .callout {
+      background: #f8f9fa;
+      border-left: 4px solid #09090b;
+      padding: 10px 14px;
+      border-radius: 0 6px 6px 0;
+      margin: 14px 0;
+      font-size: 12px;
+    }
+    .callout-title {
+      font-weight: 700;
+      margin-bottom: 4px;
+      color: #09090b;
+    }
+    .step-box {
+      border: 1px solid #e5e5ea;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 10px;
+      background: #ffffff;
+    }
+    .step-num {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      background: #09090b;
+      color: #ffffff;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 20px;
+      font-size: 11px;
+      font-weight: bold;
+      margin-right: 6px;
+    }
+    .code {
+      font-family: Menlo, Monaco, Consolas, monospace;
+      background: #f2f2f7;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #09090b;
+    }
+    .prompt-chip {
+      display: inline-block;
+      background: #e5e5ea;
+      color: #1c1c1e;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      margin: 2px 4px 2px 0;
+    }
+    .footer {
+      margin-top: 24px;
+      padding-top: 12px;
+      border-top: 1px solid #e5e5ea;
+      font-size: 11px;
+      color: #8e8e93;
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div>
+      <h1>Trimm — App Store Review Guide</h1>
+      <p class="subtitle">Quick testing instructions & architectural walkthrough for Apple Reviewers</p>
+    </div>
+    <div>
+      <span class="badge">APP REVIEW BRIEF</span>
+    </div>
+  </div>
+
+  <div class="meta-grid">
+    <div class="meta-item"><strong>App Name:</strong> <span>Trimm</span></div>
+    <div class="meta-item"><strong>Bundle Identifier:</strong> <span>ai.ctrlb.mobile</span></div>
+    <div class="meta-item"><strong>Platform:</strong> <span>iOS 17.0+ (iPhone & iPad)</span></div>
+    <div class="meta-item"><strong>Category:</strong> <span>Photo & Video / Productivity</span></div>
+    <div class="meta-item"><strong>Support URL:</strong> <span>https://usetrimm.com/support.html</span></div>
+    <div class="meta-item"><strong>Privacy Policy:</strong> <span>https://usetrimm.com/privacy.html</span></div>
+  </div>
+
+  <h2>1. Sign-In & Authentication</h2>
+  <div class="callout">
+    <div class="callout-title">✓ Native "Sign in with Apple" Enabled</div>
+    Trimm does not require a legacy username and password. Reviewers can sign in seamlessly with one tap using <strong>Sign in with Apple</strong> directly on any Apple review device or simulator.
+  </div>
+  <ul>
+    <li><strong>Sign-in method:</strong> Tap the native white <strong>"Sign in with Apple"</strong> button on the welcome screen.</li>
+    <li><strong>Automatic review balance:</strong> Every newly authenticated account is automatically granted <strong>20 free starter credits</strong> upon first sign-in, which provides ample balance to test multiple AI requests, audio transcription, and video exports.</li>
+    <li><strong>Alternative:</strong> Reviewers may also use "Sign in with Google" if preferred.</li>
+  </ul>
+
+  <h2>2. Quick 2-Minute Review Path</h2>
+  
+  <div class="step-box">
+    <strong><span class="step-num">1</span>Launch & Authenticate</strong>
+    <p>Open Trimm and tap <strong>Sign in with Apple</strong>. You will arrive immediately at the project creation screen.</p>
+  </div>
+
+  <div class="step-box">
+    <strong><span class="step-num">2</span>Select a Video Clip</strong>
+    <p>Tap <strong>"Select clips to edit"</strong>. Grant standard Photos library access and select any short sample video (such as a 10–30 second talking-head or camera roll clip). Trimm will import the footage locally and prepare the interactive timeline.</p>
+  </div>
+
+  <div class="step-box">
+    <strong><span class="step-num">3</span>Try Conversational AI Edits</strong>
+    <p>In the chat input bar at the bottom, type any natural language editing command. Here are sample prompts to test:</p>
+    <div style="margin-top: 4px;">
+      <span class="prompt-chip">"Cut out all awkward pauses and silences"</span>
+      <span class="prompt-chip">"Add clean subtitles to the video"</span>
+      <span class="prompt-chip">"Apply a warm vintage film color grading"</span>
+      <span class="prompt-chip">"Make the video tighter"</span>
+    </div>
+    <p style="margin-top: 6px;">Trimm's AI planner processes the request and returns an instant interactive preview proposal.</p>
+  </div>
+
+  <div class="step-box">
+    <strong><span class="step-num">4</span>Preview & Apply</strong>
+    <p>Review the proposal card. You can scrub the on-device timeline to see the exact cuts or overlays in real time. Tap <strong>Accept</strong> to commit the edit to your timeline, or <strong>Reject</strong> to dismiss it.</p>
+  </div>
+
+  <div class="step-box">
+    <strong><span class="step-num">5</span>Export to Camera Roll</strong>
+    <p>Tap <strong>Export Video</strong>. Trimm renders the video directly on your device via native Apple <span class="code">AVFoundation</span> and saves the final file to your Camera Roll (0 credits deducted; exporting is completely free).</p>
+  </div>
+
+  <h2>3. Privacy & On-Device Processing Architecture</h2>
+  <p>Trimm is designed around a <strong>privacy-first, on-device rendering engine</strong>:</p>
+  <ul>
+    <li><strong>Raw Video Files:</strong> High-definition video footage <strong>never leaves the user's device</strong>. All video timeline compositing, color grading filters, and rendering are executed locally via Apple AVFoundation.</li>
+    <li><strong>Cloud AI Processing:</strong> Only the audio track (for speech transcription via AssemblyAI) and the text chat instructions are transmitted to our secure cloud server for timeline planning. No video content is stored or used for model training.</li>
+  </ul>
+
+  <h2>4. In-App Purchases (Consumable Credits)</h2>
+  <p>Trimm offers consumable credit packs managed via StoreKit and RevenueCat. Video previews and video exports are permanently free. Credits are only deducted for external AI operations (2 credits for LLM timeline planning, 3 credits for full audio transcription):</p>
+  <ul>
+    <li><span class="code">ai.ctrlb.credits.100</span> — Starter Pack (100 credits, $4.99)</li>
+    <li><span class="code">ai.ctrlb.credits.300</span> — Creator Pack (300 credits, $11.99)</li>
+    <li><span class="code">ai.ctrlb.credits.1000</span> — Pro Studio Pack (1000 credits, $29.99)</li>
+  </ul>
+  <p>The store sheet includes full item descriptions, credit balances, and a working "Restore Purchases" option.</p>
+
+  <h2>5. Developer Contact for App Review</h2>
+  <p>If you encounter any questions or need further clarification during testing, please reach out directly:</p>
+  <ul>
+    <li><strong>Primary Contact:</strong> Darsh Jain</li>
+    <li><strong>Email:</strong> <a href="mailto:darshjain05.in@gmail.com">darshjain05.in@gmail.com</a></li>
+    <li><strong>Website:</strong> <a href="https://usetrimm.com">https://usetrimm.com</a></li>
+  </ul>
+
+  <div class="footer">
+    <span>Trimm iOS App Review Guide • Version 1.0</span>
+    <span>Confidential — For Apple App Review Team Use Only</span>
+  </div>
+
+</body>
+</html>
