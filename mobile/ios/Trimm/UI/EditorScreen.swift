@@ -426,16 +426,24 @@ struct AssetRowView: View {
                         .clipShape(Capsule())
                 }
                 
-                HStack(spacing: 12) {
+                HStack(spacing: 16) {
                     if source.width > 0 && source.height > 0 {
-                        Label("\(source.width)×\(source.height)", systemImage: "aspectratio")
-                            .font(.system(size: 12))
-                            .foregroundColor(.muted)
+                        HStack(spacing: 4) {
+                            Image(systemName: "aspectratio")
+                                .font(.system(size: 11))
+                            Text("\(source.width)×\(source.height)")
+                                .font(.system(size: 12))
+                        }
+                        .foregroundColor(.muted)
                     }
                     
-                    Label(source.hasAudio ? "Audio" : "Muted", systemImage: source.hasAudio ? "speaker.wave.2" : "speaker.slash")
-                        .font(.system(size: 12))
-                        .foregroundColor(source.hasAudio ? .muted : .gray)
+                    HStack(spacing: 4) {
+                        Image(systemName: source.hasAudio ? "speaker.wave.2" : "speaker.slash")
+                            .font(.system(size: 11))
+                        Text(source.hasAudio ? "Audio" : "Muted")
+                            .font(.system(size: 12))
+                    }
+                    .foregroundColor(source.hasAudio ? .muted : .gray)
                 }
             }
         }
