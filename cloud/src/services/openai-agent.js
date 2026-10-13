@@ -4,6 +4,81 @@ import { getAgentTools } from '../schema/agent-decision-schema.js';
 
 import OpenAI from 'openai';
 
+function generateCaptionNodes(videoNodes = [], transcriptWords = [], styleOptions = {}, wordsPerGroup = 4) {
+  if (!Array.isArray(videoNodes) || videoNodes.length === 0 || !Array.isArray(transcriptWords) || transcriptWords.length === 0) {
+    return [];
+  }
+
+  // 1. Map each transcript word to timeline coordinates if it falls inside an active video node
+  const timelineWords = [];
+  for (const word of transcriptWords) {
+    const wStart = word.startMs ?? word.range?.startMs ?? 0;
+    const wEnd = word.endMs ?? word.range?.endMs ?? wStart;
+    const text = word.text ?? word.word ?? '';
+    if (!text || !text.trim()) continue;
+
+    for (const v of videoNodes) {
+      const vSourceStart = v.sourceStartMs ?? 0;
+      const vDuration = v.endMs - v.startMs;
+      const vSourceEnd = vSourceStart + vDuration;
+
+      // Check if word falls inside this video node
+      if (wStart >= vSourceStart && wEnd <= vSourceEnd) {
+        const tStart = v.startMs + (wStart - vSourceStart);
+        const tEnd = v.startMs + (wEnd - vSourceStart);
+        timelineWords.push({
+          text: text.trim(),
+          startMs: tStart,
+          endMs: tEnd
+        });
+        break;
+      }
+    }
+  }
+
+  // 2. Group into caption text nodes
+  const textNodes = [];
+  let currentWords = [];
+  let currentStart = 0;
+  let currentEnd = 0;
+  const groupSize = Math.max(1, wordsPerGroup || 4);
+
+  for (let i = 0; i < timelineWords.length; i++) {
+    const tw = timelineWords[i];
+    if (currentWords.length === 0) {
+      currentStart = tw.startMs;
+    }
+    currentWords.push(tw.text);
+    currentEnd = tw.endMs;
+
+    const nextWord = timelineWords[i + 1];
+    const isPause = nextWord && (nextWord.startMs - currentEnd > 400);
+    const isMaxWords = currentWords.length >= groupSize;
+    const isLast = i === timelineWords.length - 1;
+
+    if (isMaxWords || isPause || isLast) {
+      textNodes.push({
+        type: 'text',
+        id: `caption_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 7)}`,
+        text: currentWords.join(' '),
+        startMs: currentStart,
+        endMs: currentEnd,
+        style: {
+          color: (styleOptions && styleOptions.color) || '#FFFFFF',
+          fontSize: (styleOptions && styleOptions.fontSize) || 100,
+          posY: (styleOptions && styleOptions.posY !== undefined) ? styleOptions.posY : -0.35,
+          posX: (styleOptions && styleOptions.posX !== undefined) ? styleOptions.posX : 0,
+          strokeColor: (styleOptions && styleOptions.strokeColor) || '#000000',
+          strokeWidth: (styleOptions && styleOptions.strokeWidth !== undefined) ? styleOptions.strokeWidth : 4
+        }
+      });
+      currentWords = [];
+    }
+  }
+
+  return textNodes;
+}
+
 function createOpenAIDecisionProvider({
   apiKey = process.env.LLM_API_KEY,
   baseURL = process.env.LLM_OPENAI_BASE_URL || 'https://api.moonshot.ai/v1',
@@ -164,12 +239,18 @@ Use the finish_without_proposal tool ONLY AS A LAST RESORT if the request is fun
 # Tool Usage Examples (Few-Shot Prompts):
 
 1. User: "Cut out the silence at the beginning and the part where I messed up saying 'hello'."
--> call apply_schema_patch with the modified timeline where the VideoNode(s) skip those exact timestamps.
+-> call apply_schema_patch with the modified timeline where the VideoNode(s) skip those exact timestamps. (Do NOT generate captions unless the user specifically asks for captions or subtitles).
 
-2. User: "Put a comic book title on screen that says BAM! with a black outline."
+2. User: "Add captions to the video" / "Generate subtitles" / "Transcribe subtitles on screen"
+-> call generate_captions to automatically generate synchronized captions based on the transcript onto the timeline.
+
+3. User: "Remove captions" / "Delete subtitles" / "Hide captions"
+-> call remove_captions to remove all caption/subtitle text nodes from the timeline.
+
+4. User: "Put a comic book title on screen that says BAM! with a black outline."
 -> call apply_schema_patch and add a TextNode with text "BAM!" and style: { strokeColor: "#000000", strokeWidth: 4 } in the timeline array.
 
-3. User: "Change the color of the word 'hello' to yellow in the captions."
+5. User: "Change the color of the word 'hello' to yellow in the captions."
 -> call apply_schema_patch and add a TextNode using the segments array (e.g. segments: [{text: "say "}, {text: "hello", color: "#FFFF00"}]).`;
 
     const contents = history.map(msg => ({ role: msg.role, content: msg.content }));
@@ -201,15 +282,46 @@ Use the finish_without_proposal tool ONLY AS A LAST RESORT if the request is fun
     }
 
     const schemaPatch = response.toolCalls.find(tc => tc.name === 'apply_schema_patch');
-    if (schemaPatch) {
+    const generateCaptionsCall = response.toolCalls.find(tc => tc.name === 'generate_captions');
+    const removeCaptionsCall = response.toolCalls.find(tc => tc.name === 'remove_captions');
+
+    if (generateCaptionsCall || removeCaptionsCall || schemaPatch) {
+      let baseSchema = schemaPatch ? JSON.parse(JSON.stringify(schemaPatch.args.schema)) : (schema ? JSON.parse(JSON.stringify(schema)) : { settings: {}, timeline: [] });
+      let summary = schemaPatch ? (schemaPatch.args.reason || response.rawText) : null;
+
+      if (removeCaptionsCall) {
+        baseSchema.timeline = (baseSchema.timeline || []).filter(node => node.type !== 'text');
+        summary = removeCaptionsCall.args.reason || summary || "Removed captions from the video.";
+      }
+
+      if (generateCaptionsCall) {
+        const videoNodes = (baseSchema.timeline || []).filter(node => node.type === 'video');
+        const transcriptWords = (Array.isArray(transcript) && transcript.length > 0)
+          ? transcript
+          : (schema?.metadata?.transcripts || []);
+        
+        const newCaptionNodes = generateCaptionNodes(
+          videoNodes,
+          transcriptWords,
+          generateCaptionsCall.args.style,
+          generateCaptionsCall.args.wordsPerGroup
+        );
+
+        // Remove any prior caption text nodes and add newly generated ones
+        const nonTextNodes = (baseSchema.timeline || []).filter(node => node.type !== 'text');
+        baseSchema.timeline = [...nonTextNodes, ...newCaptionNodes];
+        summary = generateCaptionsCall.args.reason || summary || "Generated synchronized captions for the video.";
+      }
+
       // Enforce immutability of metadata
       if (schema && schema.metadata) {
-        schemaPatch.args.schema.metadata = schema.metadata;
+        baseSchema.metadata = schema.metadata;
       }
+
       return {
         type: "schema_patch",
-        schema: schemaPatch.args.schema,
-        summary: schemaPatch.args.reason || response.rawText || "Proposed edit"
+        schema: baseSchema,
+        summary: summary || response.rawText || "Proposed edit"
       };
     }
 
@@ -258,4 +370,4 @@ Use the finish_without_proposal tool ONLY AS A LAST RESORT if the request is fun
   return { chatCompletion };
 }
 
-export { createOpenAIDecisionProvider };
+export { createOpenAIDecisionProvider, generateCaptionNodes };
