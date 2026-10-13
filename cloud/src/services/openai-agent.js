@@ -223,14 +223,22 @@ Represents on-screen subtitles, captions, lower-thirds, or title graphics.
 - style: Styling object:
   - color: Hex color for text (e.g. "#FFFFFF", "#FFFF00", "#FF3366").
   - fontSize: Font size in points. Standard captions: 45 to 65. Hero titles: 80 to 120.
-  - posY: Normalized vertical position from -1.0 (top) to 1.0 (bottom).
+  - posY: Normalized vertical position from -1.0 (bottom of screen) to 1.0 (top of screen).
     * -0.35 = standard lower-third captions (default).
     * 0.0 = exact vertical center.
-    * 0.35 = upper third.
-  - posX: Normalized horizontal position from -1.0 (left) to 1.0 (right). Default 0.0 is centered.
+    * 0.35 = upper third (title / header area).
+    * INCREASING posY moves text UP (towards the top of the video).
+    * DECREASING posY moves text DOWN (towards the bottom of the video).
+  - posX: Normalized horizontal position from -1.0 (left edge) to 1.0 (right edge). Default 0.0 is centered.
+    * INCREASING posX moves text RIGHT.
+    * DECREASING posX moves text LEFT.
   - scale: Scale factor multiplier (default 1.0).
+    * INCREASING scale (e.g. 1.3) enlarges/zooms text.
+    * DECREASING scale (e.g. 0.8) shrinks text.
   - strokeColor: Outline color hex (e.g. "#000000").
-  - strokeWidth: Outline stroke thickness in points (e.g. 2 to 6).
+  - strokeWidth: Outline stroke thickness in points (e.g. 0 = none, 2-4 = standard, 6-8 = heavy).
+    * INCREASING strokeWidth makes the outline border thicker and punchier.
+    * DECREASING strokeWidth makes the outline border thinner or removes it (0).
 - segments: Optional array of rich text segments for highlighting individual words (e.g. karaoke style, emphasis words):
   [ { "text": "This is ", "color": "#FFFFFF" }, { "text": "INCREDIBLE", "color": "#FFFF00" } ]
 
@@ -241,15 +249,38 @@ Applies real-time visual shader filters to the underlying video over a specific 
   - "vintage": Warm retro cinematic grading.
   - "pixelate": 8-bit / censor mosaic pixelation.
   - "zoom_blur": Radial action blur effect.
-- intensity: Float from 0.0 (subtle) to 1.0 (maximum intensity).
+- intensity: Float from 0.0 (off/none) to 1.0 (maximum intensity).
+  * INCREASING intensity makes the filter stronger and more pronounced.
+  * DECREASING intensity softens the filter so the raw footage shows through more gently.
 - startMs & endMs: Output timeline interval where the effect is active.
 
 #### D. AudioNode (type: "audio")
 Adds background music tracks or sound effect stingers.
 - src: Audio asset URI or identifier.
-- volume: Float multiplier (1.0 = normal, 0.5 = half volume, 2.0 = double).
+- volume: Float multiplier (1.0 = standard 100%, 0.5 = half volume, 0.2 = quiet background, 0.0 = muted, 1.5 = boosted).
+  * INCREASING volume makes the audio louder.
+  * DECREASING volume makes the audio quieter.
 - autoDuck: Boolean (true/false). When true, automatically and smoothly attenuates the background audio whenever dialogue is spoken on the main video track.
 - startMs & endMs: Playback interval on output timeline.
+
+---
+
+### # NUMERIC PARAMETERS CHEAT SHEET (WHAT HAPPENS ON INCREASING VS DECREASING)
+
+Use this reference table whenever modifying any numeric value in the schema:
+
+| Parameter | Type / Node | Typical Range | What happens on INCREASING | What happens on DECREASING |
+|---|---|---|---|---|
+| startMs | Integer / All | 0 to timeline duration | Moves element LATER on the exported timeline. | Moves element EARLIER on the exported timeline. |
+| endMs | Integer / All | > startMs | Extends duration (element stays on screen LONGER). | Shortens duration (cuts element off SOONER). |
+| sourceStartMs | Integer / Video & Audio | 0 to raw file duration | TRIMS / SKIPS the start of raw media (starts later in raw clip). | REVEALS earlier raw footage from the beginning of the file. |
+| posY | Float / Text style | -1.0 to 1.0 (default -0.35) | Moves text UP towards the top of the screen (e.g. -0.35 -> 0.0 center -> 0.35 top). | Moves text DOWN towards the bottom of the screen (e.g. -0.35 -> -0.5 lower). |
+| posX | Float / Text style | -1.0 to 1.0 (default 0.0) | Moves text RIGHT towards the right edge. | Moves text LEFT towards the left edge. |
+| fontSize | Number / Text style | 40 to 120 (default ~55) | Makes font LARGER and more readable from distance. | Makes font SMALLER and more compact. |
+| scale | Float / Text style | 0.5 to 2.5 (default 1.0) | Magnifies / scales up entire graphic node (e.g. 1.5 = 150%). | Shrinks graphic node (e.g. 0.8 = 80%). |
+| strokeWidth | Number / Text style | 0 to 10 (default 3) | THICKENS the outline border (increases legibility on bright backgrounds). | THINS or removes the outline border (0 = no outline). |
+| intensity | Float / Effect | 0.0 to 1.0 (default 1.0) | STRENGTHENS shader filter (e.g. heavier blur, more pixelated, pure B&W). | SOFTENS shader filter (subtler effect, closer to original). |
+| volume | Float / Audio | 0.0 to 2.0 (default 1.0) | LOUDENS audio track (e.g. 1.3 = 30% louder). | QUIETS audio track (e.g. 0.25 for background music, 0.0 for mute). |
 
 ---
 
@@ -319,6 +350,34 @@ Action:
 1. Add an EffectNode: { "type": "effect", "id": "<new-uuid>", "effectName": "black_and_white", "intensity": 1.0, "startMs": 0, "endMs": 2000 }.
 2. On VideoNode 2, set transition: "crossfade".
 3. Call apply_schema_patch with the updated schema and reason: "Added black & white filter to intro and crossfade transition."
+
+### Example 7: Moving Captions Higher & Making Text Bigger (Adjusting posY & fontSize)
+User: "The captions are covering the product at the bottom, move them higher up and make the text bigger and easier to read."
+Action:
+1. Identify all caption TextNodes. Ensure visible: true.
+2. Adjust style:
+   - posY: INCREASE from -0.35 (bottom third) to -0.15 (higher lower-third) or 0.0 (center).
+   - fontSize: INCREASE from 55 to 75.
+   - strokeWidth: INCREASE from 2 to 4 to maximize legibility.
+3. Call apply_schema_patch with the updated schema and reason: "Moved captions higher up (posY: -0.15) and increased font size to 75 with bolder outline."
+
+### Example 8: Trimming The Beginning of Raw Video (Increasing sourceStartMs)
+User: "Cut off the first 2 seconds of the video, it was just dead air before I started talking."
+Action:
+1. For VideoNode 1 (which previously had sourceStartMs: 0, startMs: 0, endMs: 8000):
+   - INCREASE sourceStartMs to 2000 (skips the first 2000ms of raw media).
+   - New duration is 6000ms, so VideoNode 1 now has startMs: 0, endMs: 6000.
+2. Shift all subsequent VideoNodes, TextNodes, EffectNodes, and AudioNodes earlier on the timeline by 2000ms.
+3. Call apply_schema_patch with the updated schema and reason: "Trimmed 2 seconds from the start by setting sourceStartMs to 2000 and shifting timeline."
+
+### Example 9: Adjusting Audio Volume & Softening Filter Intensity
+User: "The background music is way too loud, turn it down so you can hear my voice, and make the vintage filter subtle."
+Action:
+1. On the background AudioNode:
+   - DECREASE volume from 1.0 down to 0.25 (and ensure autoDuck: true).
+2. On the vintage EffectNode:
+   - DECREASE intensity from 1.0 down to 0.35 (softer, gentle warm tint).
+3. Call apply_schema_patch with the updated schema and reason: "Lowered background music volume to 0.25 and softened vintage filter intensity to 0.35."
 ======================================================================`;
 
     const contents = history.map(msg => ({ role: msg.role, content: msg.content }));

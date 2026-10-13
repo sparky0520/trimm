@@ -38,10 +38,10 @@ const APPLY_SCHEMA_PATCH_TOOL = Object.freeze({
               properties: {
                 type: { type: 'string', enum: ['video', 'text', 'effect', 'audio'] },
                 id: { type: 'string' },
-                startMs: { type: 'integer', description: 'The absolute start time in milliseconds on the final exported video timeline. Increasing this moves the element later in the video.' },
-                endMs: { type: 'integer', description: 'The absolute end time in milliseconds on the final exported video timeline. Increasing this makes the element stay on screen longer.' },
+                startMs: { type: 'integer', description: 'The absolute start time in milliseconds on the final exported video timeline. INCREASING this moves the element later in the video; DECREASING this moves it earlier.' },
+                endMs: { type: 'integer', description: 'The absolute end time in milliseconds on the final exported video timeline. INCREASING this makes the element stay on screen longer (extends end); DECREASING this cuts it off sooner (shortens duration).' },
                 src: { type: 'string' },
-                sourceStartMs: { type: 'integer', description: '(Video/Audio only) The start time in milliseconds relative to the original raw source media file. Increasing this number trims/skips the beginning of the raw clip so it starts playing from a later point.' },
+                sourceStartMs: { type: 'integer', description: '(Video/Audio only) The start time in milliseconds relative to the original raw source media file. INCREASING this trims/skips more of the beginning of the raw clip (starts playing from later in the source); DECREASING this reveals earlier footage from the raw source.' },
                 transition: { type: 'string' },
                 text: { type: 'string' },
                 visible: { type: 'boolean', description: 'Controls on-screen visibility of text/caption nodes. true to display, false to hide. Transcribed caption cues default to visible: false on import until user explicitly asks to add/show captions.' },
@@ -49,12 +49,12 @@ const APPLY_SCHEMA_PATCH_TOOL = Object.freeze({
                   type: 'object',
                   properties: {
                     color: { type: 'string' },
-                    fontSize: { type: 'number', description: 'The font size for text elements. Increasing this makes the text visually larger. Default is usually around 40 to 60.' },
-                    posY: { type: 'number', description: 'The vertical position of the text. Increasing this number moves the text downwards. A value of 0 is typically centered.' },
-                    posX: { type: 'number', description: 'The horizontal position of the text. Increasing this number moves the text to the right. A value of 0 is typically centered.' },
-                    scale: { type: 'number', description: 'The scaling multiplier for text elements. 1.0 is normal size. Increasing this (e.g. to 2.0) doubles the size. Decreasing this (e.g. to 0.5) halves it.' },
+                    fontSize: { type: 'number', description: 'Base font size in points (e.g. 50-65 for captions, 80-120 for titles). INCREASING this makes text larger and bolder; DECREASING this makes text smaller.' },
+                    posY: { type: 'number', description: 'Normalized vertical position from -1.0 (bottom) to 1.0 (top). 0.0 is center. -0.35 is lower-third (standard caption position). INCREASING moves text UP towards top of frame (e.g. 0.0 center, 0.35 top third). DECREASING moves text DOWN towards bottom of frame (e.g. -0.5 lower).' },
+                    posX: { type: 'number', description: 'Normalized horizontal position from -1.0 (left) to 1.0 (right). 0.0 is center. INCREASING moves text RIGHT (towards right edge); DECREASING moves text LEFT (towards left edge).' },
+                    scale: { type: 'number', description: 'Scaling multiplier for text elements. 1.0 is standard normal size. INCREASING (e.g. 1.5) enlarges/zooms in; DECREASING (e.g. 0.8) shrinks/zooms out.' },
                     strokeColor: { type: 'string' },
-                    strokeWidth: { type: 'number', description: 'The thickness of the text outline/stroke. Increasing this makes the outline thicker and more pronounced. Typical values are 2 to 6.' }
+                    strokeWidth: { type: 'number', description: 'Outline border stroke thickness in points. 0 is no outline; 2-4 is standard outline; 6-8 is heavy outline. INCREASING makes outline thicker; DECREASING makes outline thinner.' }
                   }
                 },
                 segments: {
@@ -69,9 +69,9 @@ const APPLY_SCHEMA_PATCH_TOOL = Object.freeze({
                   }
                 },
                 effectName: { type: 'string' },
-                intensity: { type: 'number', description: '(Effect only) The strength of the applied visual effect. Range is typically 0.0 to 1.0. Increasing this makes the effect more severe (e.g., more blurry, more pixelated).' },
+                intensity: { type: 'number', description: '(Effect only) Effect strength from 0.0 (off/none) to 1.0 (maximum). INCREASING makes effect stronger/more prominent (e.g. heavier blur, more extreme pixelation); DECREASING makes effect subtler (e.g. gentle tint).' },
                 autoDuck: { type: 'boolean' },
-                volume: { type: 'number', description: '(Audio only) The volume multiplier for the audio track. 1.0 is original volume. Increasing this (e.g. to 2.0) doubles the volume, decreasing it (e.g. to 0.5) halves the volume. 0.0 is muted.' }
+                volume: { type: 'number', description: '(Audio only) Volume multiplier. 1.0 is standard 100% volume; 0.0 is completely muted; 0.2-0.5 is background music level; >1.0 boosts volume. INCREASING makes audio louder; DECREASING makes audio quieter.' }
               },
               additionalProperties: false
             }

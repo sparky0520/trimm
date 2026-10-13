@@ -82,7 +82,9 @@ public struct EditorScreen: View {
                             .padding(.top, 8)
                         }
                         
-                        if viewModel.state.isProcessing {
+                        if viewModel.state.isProcessing && !viewModel.state.messages.contains(where: {
+                            $0.text.hasPrefix("Thinking") || $0.text.hasPrefix("Editing")
+                        }) {
                             HStack {
                                 ProgressView()
                                     .padding()
@@ -142,7 +144,7 @@ public struct EditorScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     if viewModel.canUndo {
                         Button(action: {
                             if let target = viewModel.latestUndoTarget() {
@@ -150,6 +152,7 @@ public struct EditorScreen: View {
                             }
                         }) {
                             Image(systemName: "arrow.uturn.backward")
+                                .font(.system(size: 14, weight: .semibold))
                         }
                         .foregroundColor(.lavender)
                         .disabled(viewModel.state.isProcessing)
@@ -176,27 +179,57 @@ public struct EditorScreen: View {
                         )
                     }
 
-                    Button(action: {
-                        showAssetsModal = true
-                    }) {
-                        Image(systemName: "square.stack.3d.up")
-                    }
-                    .foregroundColor(.lavender)
-                    
-                    Button(action: {
-                        withAnimation {
-                            isVideoVisible.toggle()
+                    // Three dots options menu right next to credits left
+                    Menu {
+                        Button(action: {
+                            showAssetsModal = true
+                        }) {
+                            Label("Project Assets", systemImage: "square.stack.3d.up")
                         }
-                    }) {
-                        Image(systemName: isVideoVisible ? "eye" : "eye.slash")
+                        
+                        Button(action: {
+                            withAnimation {
+                                isVideoVisible.toggle()
+                            }
+                        }) {
+                            Label(isVideoVisible ? "Hide Video Preview" : "Show Video Preview",
+                                  systemImage: isVideoVisible ? "eye.slash" : "eye")
+                        }
+                        
+                        if viewModel.canUndo {
+                            Button(action: {
+                                if let target = viewModel.latestUndoTarget() {
+                                    selectedUndoTarget = target
+                                }
+                            }) {
+                                Label("Undo Last Edit", systemImage: "arrow.uturn.backward")
+                            }
+                        }
+                        
+                        Button(action: {
+                            BillingManager.shared.isStorePresented = true
+                        }) {
+                            Label("Credits (\(BillingManager.shared.balance) Left)", systemImage: "bolt.fill")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.lavender)
+                            .frame(width: 28, height: 28)
+                            .background(Color.raised)
+                            .clipShape(Circle())
+                            .overlay(
+                                Circle().stroke(Color.border.opacity(0.6), lineWidth: 1)
+                            )
                     }
-                    .foregroundColor(.lavender)
+                    .accessibilityLabel("More Options")
                     
                     Button("Export") {
                         viewModel.export()
                     }
                     .disabled(viewModel.state.project == nil || viewModel.state.isProcessing || viewModel.state.isExporting)
                     .foregroundColor(.coral)
+                    .font(.system(size: 14, weight: .semibold))
                 }
             }
         }
@@ -233,19 +266,52 @@ public struct EditorScreen: View {
         }
         .sheet(isPresented: $showAssetsModal) {
             NavigationView {
-                List(viewModel.state.sources, id: \.uri) { source in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(source.uri).font(.headline)
-                        Text("Duration: \(source.durationMs)ms").font(.subheadline).foregroundColor(.gray)
-                        Text("Has Audio: \(source.hasAudio ? "Yes" : "No")").font(.caption).foregroundColor(.gray)
+                ZStack {
+                    Color.ink.ignoresSafeArea()
+                    
+                    if viewModel.state.sources.isEmpty {
+                        VStack(spacing: 12) {
+                            Image(systemName: "video.slash")
+                                .font(.system(size: 40))
+                                .foregroundColor(.lavender.opacity(0.6))
+                            Text("No Project Assets Found")
+                                .font(.headline)
+                                .foregroundColor(.cream)
+                            Text("Imported video clips and audio tracks will appear here.")
+                                .font(.subheadline)
+                                .foregroundColor(.muted)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 32)
+                        }
+                    } else {
+                        List(viewModel.state.sources, id: \.uri) { source in
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(URL(string: source.uri)?.lastPathComponent ?? source.uri)
+                                    .font(.headline)
+                                    .foregroundColor(.cream)
+                                HStack(spacing: 12) {
+                                    Text("\(max(1, source.durationMs / 1000))s duration")
+                                    Text(source.hasAudio ? "Audio: Yes" : "Audio: No")
+                                    if source.width > 0 && source.height > 0 {
+                                        Text("\(source.width)×\(source.height)")
+                                    }
+                                }
+                                .font(.caption)
+                                .foregroundColor(.muted)
+                            }
+                            .padding(.vertical, 4)
+                            .listRowBackground(Color.workspace)
+                        }
+                        .scrollContentBackground(.hidden)
                     }
-                    .padding(.vertical, 4)
                 }
                 .navigationTitle("Project Assets")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button("Done") { showAssetsModal = false }
+                            .foregroundColor(.coral)
+                            .fontWeight(.semibold)
                     }
                 }
             }
@@ -282,6 +348,11 @@ struct ChatBubble: View {
     let message: String
     let isUser: Bool
     var onUndo: (() -> Void)? = nil
+    
+    private var isThinkingOrEditing: Bool {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.hasPrefix("Thinking") || trimmed.hasPrefix("Editing")
+    }
     
     var body: some View {
         HStack {
@@ -322,6 +393,9 @@ struct ChatBubble: View {
                             }
                         }
                 }
+            } else if isThinkingOrEditing {
+                ThinkingShimmerView(text: message)
+                    .padding(.leading, 4)
             } else {
                 AnimatedResponseText(text: message)
                     .contextMenu {

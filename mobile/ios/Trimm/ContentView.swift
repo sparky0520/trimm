@@ -333,7 +333,7 @@ struct ContentView: View {
                     }
                 }
                 
-                if isAuthenticated {
+                if isAuthenticated && viewModel.state.project == nil {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button(action: {
                             billing.isStorePresented = true
