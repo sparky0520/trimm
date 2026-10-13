@@ -486,14 +486,56 @@ public struct TextNode: Codable, Equatable {
     public var endMs: Int64
     public var style: TextNodeStyle?
     public var segments: [TextSegment]?
+    public var visible: Bool?
 
-    public init(id: String, text: String, startMs: Int64, endMs: Int64, style: TextNodeStyle? = nil, segments: [TextSegment]? = nil) {
+    public var isVisible: Bool {
+        return visible ?? true
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case type, id, text, startMs, endMs, style, segments, visible, show, hidden
+    }
+
+    public init(id: String, text: String, startMs: Int64, endMs: Int64, style: TextNodeStyle? = nil, segments: [TextSegment]? = nil, visible: Bool? = nil) {
         self.id = id
         self.text = text
         self.startMs = startMs
         self.endMs = endMs
         self.style = style
         self.segments = segments
+        self.visible = visible
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.text = try container.decode(String.self, forKey: .text)
+        self.startMs = try container.decode(Int64.self, forKey: .startMs)
+        self.endMs = try container.decode(Int64.self, forKey: .endMs)
+        self.style = try container.decodeIfPresent(TextNodeStyle.self, forKey: .style)
+        self.segments = try container.decodeIfPresent([TextSegment].self, forKey: .segments)
+        
+        if let v = try container.decodeIfPresent(Bool.self, forKey: .visible) {
+            self.visible = v
+        } else if let s = try container.decodeIfPresent(Bool.self, forKey: .show) {
+            self.visible = s
+        } else if let h = try container.decodeIfPresent(Bool.self, forKey: .hidden) {
+            self.visible = !h
+        } else {
+            self.visible = nil
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode("text", forKey: .type)
+        try container.encode(id, forKey: .id)
+        try container.encode(text, forKey: .text)
+        try container.encode(startMs, forKey: .startMs)
+        try container.encode(endMs, forKey: .endMs)
+        try container.encodeIfPresent(style, forKey: .style)
+        try container.encodeIfPresent(segments, forKey: .segments)
+        try container.encodeIfPresent(visible, forKey: .visible)
     }
 }
 

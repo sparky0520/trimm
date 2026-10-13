@@ -44,6 +44,7 @@ const APPLY_SCHEMA_PATCH_TOOL = Object.freeze({
                 sourceStartMs: { type: 'integer', description: '(Video/Audio only) The start time in milliseconds relative to the original raw source media file. Increasing this number trims/skips the beginning of the raw clip so it starts playing from a later point.' },
                 transition: { type: 'string' },
                 text: { type: 'string' },
+                visible: { type: 'boolean', description: 'Controls on-screen visibility of text/caption nodes. true to display, false to hide. Transcribed caption cues default to visible: false on import until user explicitly asks to add/show captions.' },
                 style: {
                   type: 'object',
                   properties: {
@@ -77,48 +78,6 @@ const APPLY_SCHEMA_PATCH_TOOL = Object.freeze({
           }
         }
       }
-    }
-  }
-});
-
-const GENERATE_CAPTIONS_TOOL = Object.freeze({
-  name: 'generate_captions',
-  description: 'Automatically generate and add synchronized captions/subtitles to the video based on the spoken words from the transcript. Call this tool when the user specifically asks to add captions, generate subtitles, or transcribe subtitles on-screen. You can optionally customize the text style (color, fontSize, posY, posX, strokeColor, strokeWidth) and wordsPerGroup.',
-  parameters: {
-    type: 'object',
-    additionalProperties: false,
-    required: ['reason'],
-    properties: {
-      reason: { type: 'string', description: 'Explanation for adding captions.' },
-      style: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          color: { type: 'string', description: 'Hex color for the caption text (default: "#FFFFFF").' },
-          fontSize: { type: 'number', description: 'Font size for captions (default: 100).' },
-          posY: { type: 'number', description: 'Vertical position on screen, where -0.35 is near bottom, 0 is center (default: -0.35).' },
-          posX: { type: 'number', description: 'Horizontal position on screen (default: 0).' },
-          strokeColor: { type: 'string', description: 'Outline color (default: "#000000").' },
-          strokeWidth: { type: 'number', description: 'Outline stroke thickness (default: 4).' }
-        }
-      },
-      wordsPerGroup: {
-        type: 'integer',
-        description: 'Number of words displayed at a time per caption card (default: 4).'
-      }
-    }
-  }
-});
-
-const REMOVE_CAPTIONS_TOOL = Object.freeze({
-  name: 'remove_captions',
-  description: 'Remove all captions/subtitles/text nodes from the video timeline. Call this tool when the user asks to remove captions, turn off subtitles, or hide on-screen text.',
-  parameters: {
-    type: 'object',
-    additionalProperties: false,
-    required: ['reason'],
-    properties: {
-      reason: { type: 'string', description: 'Explanation for removing captions.' }
     }
   }
 });
@@ -157,8 +116,6 @@ const FINISH_WITHOUT_PROPOSAL_TOOL = Object.freeze({
 const getAgentTools = () => {
   return Object.freeze([
     APPLY_SCHEMA_PATCH_TOOL,
-    GENERATE_CAPTIONS_TOOL,
-    REMOVE_CAPTIONS_TOOL,
     ASK_USER_QUESTION_TOOL, 
     FINISH_WITHOUT_PROPOSAL_TOOL,
   ]);
@@ -167,6 +124,4 @@ const getAgentTools = () => {
 export { 
   getAgentTools,
   APPLY_SCHEMA_PATCH_TOOL,
-  GENERATE_CAPTIONS_TOOL,
-  REMOVE_CAPTIONS_TOOL,
 };

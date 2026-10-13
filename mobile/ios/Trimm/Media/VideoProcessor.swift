@@ -365,6 +365,7 @@ public class VideoProcessor {
                 }
                 
             case .text(let t):
+                guard t.isVisible else { continue }
                 var blueprint = [String: Any]()
                 var layout = [String: Any]()
                 var textStyle = [String: Any]()

@@ -460,6 +460,29 @@ public class EditorViewModel {
                             var timeline: [TimelineNode] = []
                             timeline.append(.video(VideoNode(id: UUID().uuidString, src: firstSource.uri, startMs: 0, endMs: durationMs, sourceStartMs: 0)))
                             
+                            var currentCaptionText = ""
+                            var currentCaptionStart: Int64 = 0
+                            var currentCaptionEnd: Int64 = 0
+                            var wordCount = 0
+                            
+                            for i in 0..<words.count {
+                                let word = words[i]
+                                if wordCount == 0 {
+                                    currentCaptionStart = word.range.startMs
+                                }
+                                currentCaptionText += (wordCount == 0 ? "" : " ") + word.text
+                                currentCaptionEnd = word.range.endMs
+                                wordCount += 1
+                                
+                                let isPause = (i < words.count - 1) && (words[i+1].range.startMs - currentCaptionEnd > 400)
+                                if wordCount >= 4 || isPause || i == words.count - 1 {
+                                    let textNode = TextNode(id: UUID().uuidString, text: currentCaptionText, startMs: currentCaptionStart, endMs: currentCaptionEnd, style: TextNodeStyle(color: "#FFFFFF", fontSize: 100, posY: -0.35), visible: false)
+                                    timeline.append(.text(textNode))
+                                    currentCaptionText = ""
+                                    wordCount = 0
+                                }
+                            }
+                            
                             let schema = CompositionSchema(settings: CompositionSettings(), metadata: metadata, timeline: timeline)
                             self.state.compositionSchema = schema
                             
@@ -765,65 +788,5 @@ public class EditorViewModel {
         exportSession = nil
         state.isExporting = false
         state.jobMessage = "Export cancelled."
-    }
-    
-    public static func generateCaptionNodes(
-        words: [TranscriptWord],
-        videoNodes: [VideoNode],
-        style: TextNodeStyle = TextNodeStyle(color: "#FFFFFF", fontSize: 100, posY: -0.35),
-        wordsPerGroup: Int = 4
-    ) -> [TimelineNode] {
-        var timelineWords: [(text: String, startMs: Int64, endMs: Int64)] = []
-        for word in words {
-            let wStart = word.range.startMs
-            let wEnd = word.range.endMs
-            let text = word.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if text.isEmpty { continue }
-            
-            for v in videoNodes {
-                let vSourceStart = v.sourceStartMs
-                let vDuration = v.endMs - v.startMs
-                let vSourceEnd = vSourceStart + vDuration
-                
-                if wStart >= vSourceStart && wEnd <= vSourceEnd {
-                    let tStart = v.startMs + (wStart - vSourceStart)
-                    let tEnd = v.startMs + (wEnd - vSourceStart)
-                    timelineWords.append((text: text, startMs: tStart, endMs: tEnd))
-                    break
-                }
-            }
-        }
-        
-        var result: [TimelineNode] = []
-        var currentCaptionText = ""
-        var currentCaptionStart: Int64 = 0
-        var currentCaptionEnd: Int64 = 0
-        var count = 0
-        let groupSize = max(1, wordsPerGroup)
-        
-        for i in 0..<timelineWords.count {
-            let tw = timelineWords[i]
-            if count == 0 {
-                currentCaptionStart = tw.startMs
-            }
-            currentCaptionText += (count == 0 ? "" : " ") + tw.text
-            currentCaptionEnd = tw.endMs
-            count += 1
-            
-            let isPause = (i < timelineWords.count - 1) && (timelineWords[i+1].startMs - currentCaptionEnd > 400)
-            if count >= groupSize || isPause || i == timelineWords.count - 1 {
-                let textNode = TextNode(
-                    id: UUID().uuidString,
-                    text: currentCaptionText,
-                    startMs: currentCaptionStart,
-                    endMs: currentCaptionEnd,
-                    style: style
-                )
-                result.append(.text(textNode))
-                currentCaptionText = ""
-                count = 0
-            }
-        }
-        return result
     }
 }

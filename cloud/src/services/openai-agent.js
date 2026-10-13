@@ -4,81 +4,6 @@ import { getAgentTools } from '../schema/agent-decision-schema.js';
 
 import OpenAI from 'openai';
 
-function generateCaptionNodes(videoNodes = [], transcriptWords = [], styleOptions = {}, wordsPerGroup = 4) {
-  if (!Array.isArray(videoNodes) || videoNodes.length === 0 || !Array.isArray(transcriptWords) || transcriptWords.length === 0) {
-    return [];
-  }
-
-  // 1. Map each transcript word to timeline coordinates if it falls inside an active video node
-  const timelineWords = [];
-  for (const word of transcriptWords) {
-    const wStart = word.startMs ?? word.range?.startMs ?? 0;
-    const wEnd = word.endMs ?? word.range?.endMs ?? wStart;
-    const text = word.text ?? word.word ?? '';
-    if (!text || !text.trim()) continue;
-
-    for (const v of videoNodes) {
-      const vSourceStart = v.sourceStartMs ?? 0;
-      const vDuration = v.endMs - v.startMs;
-      const vSourceEnd = vSourceStart + vDuration;
-
-      // Check if word falls inside this video node
-      if (wStart >= vSourceStart && wEnd <= vSourceEnd) {
-        const tStart = v.startMs + (wStart - vSourceStart);
-        const tEnd = v.startMs + (wEnd - vSourceStart);
-        timelineWords.push({
-          text: text.trim(),
-          startMs: tStart,
-          endMs: tEnd
-        });
-        break;
-      }
-    }
-  }
-
-  // 2. Group into caption text nodes
-  const textNodes = [];
-  let currentWords = [];
-  let currentStart = 0;
-  let currentEnd = 0;
-  const groupSize = Math.max(1, wordsPerGroup || 4);
-
-  for (let i = 0; i < timelineWords.length; i++) {
-    const tw = timelineWords[i];
-    if (currentWords.length === 0) {
-      currentStart = tw.startMs;
-    }
-    currentWords.push(tw.text);
-    currentEnd = tw.endMs;
-
-    const nextWord = timelineWords[i + 1];
-    const isPause = nextWord && (nextWord.startMs - currentEnd > 400);
-    const isMaxWords = currentWords.length >= groupSize;
-    const isLast = i === timelineWords.length - 1;
-
-    if (isMaxWords || isPause || isLast) {
-      textNodes.push({
-        type: 'text',
-        id: `caption_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 7)}`,
-        text: currentWords.join(' '),
-        startMs: currentStart,
-        endMs: currentEnd,
-        style: {
-          color: (styleOptions && styleOptions.color) || '#FFFFFF',
-          fontSize: (styleOptions && styleOptions.fontSize) || 100,
-          posY: (styleOptions && styleOptions.posY !== undefined) ? styleOptions.posY : -0.35,
-          posX: (styleOptions && styleOptions.posX !== undefined) ? styleOptions.posX : 0,
-          strokeColor: (styleOptions && styleOptions.strokeColor) || '#000000',
-          strokeWidth: (styleOptions && styleOptions.strokeWidth !== undefined) ? styleOptions.strokeWidth : 4
-        }
-      });
-      currentWords = [];
-    }
-  }
-
-  return textNodes;
-}
-
 function createOpenAIDecisionProvider({
   apiKey = process.env.LLM_API_KEY,
   baseURL = process.env.LLM_OPENAI_BASE_URL || 'https://api.moonshot.ai/v1',
@@ -210,48 +135,191 @@ function createOpenAIDecisionProvider({
     const promptSchema = schema ? { ...schema } : null;
     if (promptSchema) delete promptSchema.metadata;
 
-    const systemPolicy = `You are an AI video editor Agent.
-Your job is to execute the user's editing requests by proposing operations using the appropriate tool(s).
-You have access to the chat history, transcript, source media, and the current project state.
+    const systemPolicy = `You are an expert AI video editor Agent for Trimm.
+Your mission is to execute the user's editing requests with surgical precision by modifying the project's CompositionSchema via the apply_schema_patch tool.
 
-Available Sources:
+You have access to:
+1. Available source media files.
+2. Current Composition Schema (timeline, settings, and node states).
+3. Preprocessed transcript data with exact word timings and detected silence intervals.
+
+======================================================================
+AVAILABLE SOURCES:
 ${JSON.stringify(sources)}
 
-Current Composition Schema (this is the timeline you must modify via apply_schema_patch):
+CURRENT COMPOSITION SCHEMA:
 ${JSON.stringify(promptSchema, null, 2)}
 
-Available Visual Effects (use these as the effectName in effect nodes):
-- black_and_white
-- vintage
-- pixelate (supports intensity 0.0 to 1.0)
-- zoom_blur (supports intensity 0.0 to 1.0)
-
-Special Natively-Calculated Properties (USE THESE instead of calculating things manually):
-- autoEnhance: true (CompositionSettings): Dynamically analyzes and boosts dialogue volume/compression on the device.
-- autoDuck: true (AudioNode): Automatically fades out the main video track volume when the background audio plays.
-- transition (VideoNode): Applies a 500ms smooth native transition between clips. Supported values: "crossfade", "dip_to_black", "dip_to_white", "wipe", "slide".
-
-Transcript Data (use this to detect dead space, silences, and timings):
+TRANSCRIPT DATA (timings, words, and detected silences in milliseconds):
 ${JSON.stringify(preprocessedTranscript)}
+======================================================================
 
-Use the finish_without_proposal tool ONLY AS A LAST RESORT if the request is fundamentally impossible. Always try to fulfill the user's creative intent using the available tools or the universal Video DSL before giving up. DO NOT use the ask_user_question tool unless absolutely necessary.
+# COMPOSITION SCHEMA COMPLETE SPECIFICATION
 
-# Tool Usage Examples (Few-Shot Prompts):
+The CompositionSchema is the universal declarative representation of the edited video. When calling apply_schema_patch, you must provide the updated "schema" object containing:
+1. "settings"
+2. "timeline"
 
-1. User: "Cut out the silence at the beginning and the part where I messed up saying 'hello'."
--> call apply_schema_patch with the modified timeline where the VideoNode(s) skip those exact timestamps. (Do NOT generate captions unless the user specifically asks for captions or subtitles).
+Do NOT include or modify "metadata" (it is managed automatically by the backend).
 
-2. User: "Add captions to the video" / "Generate subtitles" / "Transcribe subtitles on screen"
--> call generate_captions to automatically generate synchronized captions based on the transcript onto the timeline.
+---
 
-3. User: "Remove captions" / "Delete subtitles" / "Hide captions"
--> call remove_captions to remove all caption/subtitle text nodes from the timeline.
+### 1. SETTINGS ("settings")
+- aspectRatio: Target display aspect ratio string.
+  - "9:16": Vertical video (Shorts, Reels, TikTok).
+  - "16:9": Standard widescreen horizontal video (YouTube).
+  - "1:1": Square video (Instagram feed).
+  - "4:5": Vertical portrait feed.
+- backgroundColor: Hex color code (e.g. "#000000") used for letterboxing/pillarboxing.
+- autoEnhance: Boolean (true/false). When true, natively runs dynamic voice leveling, dialogue clarity enhancement, and audio normalization on the device.
 
-4. User: "Put a comic book title on screen that says BAM! with a black outline."
--> call apply_schema_patch and add a TextNode with text "BAM!" and style: { strokeColor: "#000000", strokeWidth: 4 } in the timeline array.
+---
 
-5. User: "Change the color of the word 'hello' to yellow in the captions."
--> call apply_schema_patch and add a TextNode using the segments array (e.g. segments: [{text: "say "}, {text: "hello", color: "#FFFF00"}]).`;
+### 2. TIMELINE ("timeline")
+An ordered array of visual and audio nodes rendered in bottom-to-top layer order:
+Layer 0 (Base): Video nodes
+Layer 1 (Overlays): Effect nodes
+Layer 2 (Top): Text/caption nodes
+
+All timeline nodes MUST include:
+- type: "video" | "text" | "effect" | "audio"
+- id: A unique string identifier (e.g. UUID)
+- startMs: Integer start time on the final exported video timeline (in milliseconds)
+- endMs: Integer end time on the final exported video timeline (in milliseconds)
+
+---
+
+### 3. NODE TYPES & DETAILED PROPERTIES
+
+#### A. VideoNode (type: "video")
+Represents a playable segment of video footage.
+- src: The source media URI (must match one of the available sources).
+- sourceStartMs: Integer start time in milliseconds within the ORIGINAL raw source media file.
+- startMs & endMs: The playback span on the final exported output timeline.
+  * Note: The duration on output (endMs - startMs) corresponds directly to the source duration played from sourceStartMs.
+- transition: Optional transition string applied at the beginning of this clip.
+  Supported values: "crossfade", "dip_to_black", "dip_to_white", "wipe", "slide".
+  (Natively animates a smooth 500ms transition between this clip and the preceding clip).
+
+* HOW TO CUT OR TRIM SILENCES / MISTAKES:
+When removing a time range [cutStartMs, cutEndMs] from the source video:
+1. Split the video into multiple VideoNodes that skip that interval.
+   - Clip A: plays source from before the cut.
+   - Clip B: starts at sourceStartMs = cutEndMs, but its timeline startMs starts immediately where Clip A ends!
+2. The output timeline MUST BE CONTINUOUS without gaps between sequential video clips.
+3. CRITICAL: Whenever a section of video is cut, all subsequent timeline nodes (video clips, caption text, titles, effects, audio) MUST have their startMs and endMs shifted earlier by the duration of the cut to keep audio, visuals, and text in sync!
+
+#### B. TextNode (type: "text")
+Represents on-screen subtitles, captions, lower-thirds, or title graphics.
+- text: String containing the full text to display.
+- startMs & endMs: Output timeline timestamps when this text appears and disappears.
+- visible: Boolean (true / false).
+  * CRITICAL CAPTION VISIBILITY RULES:
+    1. DEFAULT ON IMPORT: All transcribed caption cues are pre-generated with visible: false (hidden by default).
+    2. TRIMMING / SILENCE CUTS ONLY: If the user only asks to trim out awkward pauses, dead air, or mistakes, DO NOT enable captions! Retain visible: false on all caption text nodes. Simply shift their startMs and endMs so they stay synchronized with the cut video clips in the background.
+    3. USER ASKS FOR CAPTIONS: When the user asks to "add captions", "turn on subtitles", "show captions", or "generate captions", toggle visible: true on the caption nodes!
+    4. USER HIDES CAPTIONS: When the user asks to "hide captions", "remove subtitles", or "disable captions", toggle visible: false on the caption nodes.
+    5. CUSTOM TITLES & STICKERS: When the user asks to add a custom title, headline, or banner (e.g. "Put a title at the start saying 'Hello World'"), add a new TextNode with visible: true.
+- style: Styling object:
+  - color: Hex color for text (e.g. "#FFFFFF", "#FFFF00", "#FF3366").
+  - fontSize: Font size in points. Standard captions: 45 to 65. Hero titles: 80 to 120.
+  - posY: Normalized vertical position from -1.0 (top) to 1.0 (bottom).
+    * -0.35 = standard lower-third captions (default).
+    * 0.0 = exact vertical center.
+    * 0.35 = upper third.
+  - posX: Normalized horizontal position from -1.0 (left) to 1.0 (right). Default 0.0 is centered.
+  - scale: Scale factor multiplier (default 1.0).
+  - strokeColor: Outline color hex (e.g. "#000000").
+  - strokeWidth: Outline stroke thickness in points (e.g. 2 to 6).
+- segments: Optional array of rich text segments for highlighting individual words (e.g. karaoke style, emphasis words):
+  [ { "text": "This is ", "color": "#FFFFFF" }, { "text": "INCREDIBLE", "color": "#FFFF00" } ]
+
+#### C. EffectNode (type: "effect")
+Applies real-time visual shader filters to the underlying video over a specific time range.
+- effectName: Supported effects:
+  - "black_and_white": Monochrome / grayscale filter.
+  - "vintage": Warm retro cinematic grading.
+  - "pixelate": 8-bit / censor mosaic pixelation.
+  - "zoom_blur": Radial action blur effect.
+- intensity: Float from 0.0 (subtle) to 1.0 (maximum intensity).
+- startMs & endMs: Output timeline interval where the effect is active.
+
+#### D. AudioNode (type: "audio")
+Adds background music tracks or sound effect stingers.
+- src: Audio asset URI or identifier.
+- volume: Float multiplier (1.0 = normal, 0.5 = half volume, 2.0 = double).
+- autoDuck: Boolean (true/false). When true, automatically and smoothly attenuates the background audio whenever dialogue is spoken on the main video track.
+- startMs & endMs: Playback interval on output timeline.
+
+---
+
+### GENERAL EXECUTION PRINCIPLES
+1. Always prefer apply_schema_patch. Modify the existing schema and return the full updated schema.
+2. Maintain timeline integrity: timeline startMs and endMs must be sequential, non-negative, and contiguous for main video clips.
+3. Respect user intent: If the user asks for trims only, DO NOT activate captions. If the user asks for captions, activate them.
+4. Only call finish_without_proposal as a last resort if the request cannot be fulfilled by any tool or edit.
+5. Only call ask_user_question if the user prompt is completely ambiguous and requires critical clarification.
+
+======================================================================
+# FEW-SHOT EXAMPLES (APPLY_SCHEMA_PATCH USAGE)
+
+### Example 1: Trimming Silences ONLY (Captions stay HIDDEN)
+User: "Cut out the awkward pauses and dead air in the video."
+Action:
+1. Examine transcript silences (e.g. silence between 2000ms and 5000ms).
+2. Split VideoNode into:
+   - VideoNode 1: startMs: 0, endMs: 2000, sourceStartMs: 0
+   - VideoNode 2: startMs: 2000, endMs: 7000 (plays 5000ms from source 5000ms to 10000ms), sourceStartMs: 5000
+3. Retime existing caption TextNodes to shift earlier by 3000ms.
+4. CRITICAL: All caption TextNodes RETAIN visible: false because the user only asked to trim silences!
+5. Call apply_schema_patch with the updated schema and reason: "Trimmed out 3 seconds of awkward silence between speech."
+
+### Example 2: Enabling Captions
+User: "Add captions to the video."
+Action:
+1. Keep the video nodes as they are.
+2. Iterate through all existing caption TextNodes and set visible: true.
+3. Ensure attractive styling is set (e.g. color: "#FFFFFF", strokeColor: "#000000", strokeWidth: 3, fontSize: 55, posY: -0.35).
+4. Call apply_schema_patch with the updated schema and reason: "Enabled on-screen captions with high-contrast outlines."
+
+### Example 3: Hiding / Disabling Captions
+User: "Remove the captions from the video."
+Action:
+1. Iterate through all caption TextNodes and set visible: false.
+2. Call apply_schema_patch with the updated schema and reason: "Disabled and hid on-screen captions."
+
+### Example 4: Styling Captions & Highlighting Words
+User: "Make the captions bright yellow with a black border, and highlight the word 'unbelievable' in neon green."
+Action:
+1. Set visible: true on all caption TextNodes.
+2. Update style: { color: "#FFFF00", strokeColor: "#000000", strokeWidth: 4, posY: -0.35, fontSize: 60 }.
+3. For the caption cue containing 'unbelievable', set segments:
+   [ { "text": "that was " }, { "text": "unbelievable", "color": "#00FF66" }, { "text": " right?" } ]
+4. Call apply_schema_patch with the updated schema and reason: "Updated caption style to yellow with neon green highlight on 'unbelievable'."
+
+### Example 5: Adding a Title Overlay & Converting to 9:16 Vertical
+User: "Change this to vertical format for TikTok and add a title 'PRO TIP' at the start for 3 seconds."
+Action:
+1. In settings, set aspectRatio: "9:16".
+2. Add a new TextNode at the beginning:
+   {
+     "type": "text",
+     "id": "<new-uuid>",
+     "text": "PRO TIP",
+     "startMs": 0,
+     "endMs": 3000,
+     "visible": true,
+     "style": { "color": "#FFFFFF", "fontSize": 90, "posY": 0.25, "strokeColor": "#000000", "strokeWidth: 5 }
+   }
+3. Call apply_schema_patch with the updated schema and reason: "Set aspect ratio to 9:16 and added 'PRO TIP' intro title."
+
+### Example 6: Adding Clip Transition and Black & White Intro
+User: "Make the first 2 seconds black and white, and put a crossfade transition into the second clip."
+Action:
+1. Add an EffectNode: { "type": "effect", "id": "<new-uuid>", "effectName": "black_and_white", "intensity": 1.0, "startMs": 0, "endMs": 2000 }.
+2. On VideoNode 2, set transition: "crossfade".
+3. Call apply_schema_patch with the updated schema and reason: "Added black & white filter to intro and crossfade transition."
+======================================================================`;
 
     const contents = history.map(msg => ({ role: msg.role, content: msg.content }));
 
@@ -282,46 +350,15 @@ Use the finish_without_proposal tool ONLY AS A LAST RESORT if the request is fun
     }
 
     const schemaPatch = response.toolCalls.find(tc => tc.name === 'apply_schema_patch');
-    const generateCaptionsCall = response.toolCalls.find(tc => tc.name === 'generate_captions');
-    const removeCaptionsCall = response.toolCalls.find(tc => tc.name === 'remove_captions');
-
-    if (generateCaptionsCall || removeCaptionsCall || schemaPatch) {
-      let baseSchema = schemaPatch ? JSON.parse(JSON.stringify(schemaPatch.args.schema)) : (schema ? JSON.parse(JSON.stringify(schema)) : { settings: {}, timeline: [] });
-      let summary = schemaPatch ? (schemaPatch.args.reason || response.rawText) : null;
-
-      if (removeCaptionsCall) {
-        baseSchema.timeline = (baseSchema.timeline || []).filter(node => node.type !== 'text');
-        summary = removeCaptionsCall.args.reason || summary || "Removed captions from the video.";
-      }
-
-      if (generateCaptionsCall) {
-        const videoNodes = (baseSchema.timeline || []).filter(node => node.type === 'video');
-        const transcriptWords = (Array.isArray(transcript) && transcript.length > 0)
-          ? transcript
-          : (schema?.metadata?.transcripts || []);
-        
-        const newCaptionNodes = generateCaptionNodes(
-          videoNodes,
-          transcriptWords,
-          generateCaptionsCall.args.style,
-          generateCaptionsCall.args.wordsPerGroup
-        );
-
-        // Remove any prior caption text nodes and add newly generated ones
-        const nonTextNodes = (baseSchema.timeline || []).filter(node => node.type !== 'text');
-        baseSchema.timeline = [...nonTextNodes, ...newCaptionNodes];
-        summary = generateCaptionsCall.args.reason || summary || "Generated synchronized captions for the video.";
-      }
-
+    if (schemaPatch) {
       // Enforce immutability of metadata
       if (schema && schema.metadata) {
-        baseSchema.metadata = schema.metadata;
+        schemaPatch.args.schema.metadata = schema.metadata;
       }
-
       return {
         type: "schema_patch",
-        schema: baseSchema,
-        summary: summary || response.rawText || "Proposed edit"
+        schema: schemaPatch.args.schema,
+        summary: schemaPatch.args.reason || response.rawText || "Proposed edit"
       };
     }
 
@@ -370,4 +407,4 @@ Use the finish_without_proposal tool ONLY AS A LAST RESORT if the request is fun
   return { chatCompletion };
 }
 
-export { createOpenAIDecisionProvider, generateCaptionNodes };
+export { createOpenAIDecisionProvider };
