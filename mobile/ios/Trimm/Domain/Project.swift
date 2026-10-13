@@ -172,6 +172,14 @@ public struct ProjectSnapshot: Codable, Equatable {
     public let operations: [EditOperation]
     public let sources: [SourceMedia]
     public let analysis: Analysis?
+    public let schema: CompositionSchema?
+    
+    public init(operations: [EditOperation], sources: [SourceMedia], analysis: Analysis?, schema: CompositionSchema? = nil) {
+        self.operations = operations
+        self.sources = sources
+        self.analysis = analysis
+        self.schema = schema
+    }
 }
 
 public struct MobileProject: Codable, Equatable {
@@ -221,14 +229,15 @@ public struct MobileProject: Codable, Equatable {
         orderedSources.reduce(0) { $0 + $1.durationMs }
     }
     
-    public func snapshot() -> ProjectSnapshot {
-        return ProjectSnapshot(operations: operations, sources: orderedSources, analysis: analysis)
+    public func snapshot(schema: CompositionSchema? = nil) -> ProjectSnapshot {
+        return ProjectSnapshot(operations: operations, sources: orderedSources, analysis: analysis, schema: schema)
     }
     
-    public func applyEditInstructions(next: [EditOperation], removedOperations: [String] = [], activeTurnId: String? = nil, request: String? = nil, response: String? = nil) -> MobileProject {
+    public func applyEditInstructions(next: [EditOperation], removedOperations: [String] = [], activeTurnId: String? = nil, request: String? = nil, response: String? = nil, currentSchema: CompositionSchema? = nil) -> MobileProject {
         var newHistory = analysis.chatHistory
+        let currentTurnId = activeTurnId ?? UUID().uuidString
         if let req = request, let res = response {
-            let turn = EditorialConversationTurn(request: req, response: res, evidenceIds: [])
+            let turn = EditorialConversationTurn(id: currentTurnId, request: req, response: res, evidenceIds: [])
             newHistory.append(turn)
             if newHistory.count > 100 { newHistory = Array(newHistory.suffix(100)) }
         }
@@ -241,7 +250,7 @@ public struct MobileProject: Codable, Equatable {
             takeGroups: analysis.takeGroups,
             warnings: analysis.warnings,
             completedAtEpochMs: analysis.completedAtEpochMs,
-            activeTurnId: activeTurnId,
+            activeTurnId: currentTurnId,
             activeCheckpointId: analysis.activeCheckpointId,
             editorialPlan: analysis.editorialPlan,
             pendingProposal: analysis.pendingProposal,
@@ -259,7 +268,7 @@ public struct MobileProject: Codable, Equatable {
         let finalOperations = self.operations.filter { !removedOperations.contains($0.id) } + processedNext
         let newExport = ExportSettings.resolveDimensions(source: source, operations: finalOperations, current: export)
         
-        let newUndo = Array((undo + [snapshot()]).suffix(30))
+        let newUndo = Array((undo + [snapshot(schema: currentSchema)]).suffix(30))
         return MobileProject(
             schemaVersion: schemaVersion,
             id: id,

@@ -50,12 +50,14 @@ public class EditorViewModel {
             let project = try await ChatRepository.shared.getProject(id: id)
             self.state.project = project
             self.state.sources = project.sources
-            self.state.messages = project.analysis.chatHistory.flatMap { turn in
-                [
-                    ChatMessage(text: turn.request, isUser: true),
-                    ChatMessage(text: turn.response, isUser: false)
-                ]
+            var loadedMessages: [ChatMessage] = [
+                ChatMessage(text: "Transcription complete. What would you like to edit?", isUser: false)
+            ]
+            for turn in project.analysis.chatHistory {
+                loadedMessages.append(ChatMessage(text: turn.request, isUser: true, turnId: turn.id))
+                loadedMessages.append(ChatMessage(text: turn.response, isUser: false, turnId: turn.id))
             }
+            self.state.messages = loadedMessages
             
             if let docDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
                 let fileUrl = docDir.appendingPathComponent("\(id)_composition.json")
@@ -74,12 +76,201 @@ public class EditorViewModel {
         state.isProcessing = false
     }
     
+    public var canUndo: Bool {
+        guard let project = state.project else { return false }
+        return !project.analysis.chatHistory.isEmpty || !project.undo.isEmpty
+    }
+    
+    public func latestUndoTarget() -> UndoTarget? {
+        guard let project = state.project else { return nil }
+        let history = project.analysis.chatHistory
+        if let lastTurn = history.last {
+            return UndoTarget(id: lastTurn.id, userPrompt: lastTurn.request, turnIndex: history.count - 1)
+        }
+        if let lastUserMsg = state.messages.last(where: { $0.isUser }) {
+            return UndoTarget(id: lastUserMsg.id.uuidString, userPrompt: lastUserMsg.text, turnIndex: -1)
+        }
+        return nil
+    }
+    
+    public func undoTarget(for message: ChatMessage) -> UndoTarget? {
+        guard let project = state.project else { return nil }
+        let history = project.analysis.chatHistory
+        
+        if let turnId = message.turnId, let index = history.firstIndex(where: { $0.id == turnId }) {
+            return UndoTarget(id: history[index].id, userPrompt: history[index].request, turnIndex: index)
+        }
+        if message.isUser {
+            if let index = history.lastIndex(where: { $0.request == message.text }) {
+                return UndoTarget(id: history[index].id, userPrompt: history[index].request, turnIndex: index)
+            }
+            return UndoTarget(id: message.id.uuidString, userPrompt: message.text, turnIndex: -1)
+        }
+        return nil
+    }
+    
+    @MainActor
+    public func undoTurn(target: UndoTarget) {
+        guard let project = state.project else { return }
+        
+        // If the target message was never committed to chatHistory (e.g. pending/failed)
+        if target.turnIndex == -1 {
+            state.messages.removeAll { $0.text == target.userPrompt && $0.isUser }
+            return
+        }
+        
+        let history = project.analysis.chatHistory
+        let turnIndex = target.turnIndex
+        guard turnIndex >= 0 && turnIndex < history.count else { return }
+        
+        state.isProcessing = true
+        state.jobMessage = "Undoing edit..."
+        
+        // Turns to retain are turns strictly before target.turnIndex
+        let remainingTurns = Array(history.prefix(upTo: turnIndex))
+        
+        // Find snapshot corresponding to state before target turn
+        var targetSnapshot: ProjectSnapshot? = nil
+        var targetSnapshotIndex: Int? = nil
+        
+        for (idx, snap) in project.undo.enumerated().reversed() {
+            let snapCount = snap.analysis?.chatHistory.count ?? 0
+            let snapHasTurn = snap.analysis?.chatHistory.contains(where: { $0.id == target.id }) ?? false
+            if snapCount <= turnIndex && !snapHasTurn {
+                targetSnapshot = snap
+                targetSnapshotIndex = idx
+                break
+            }
+        }
+        
+        let newUndo: [ProjectSnapshot]
+        let newRedo: [ProjectSnapshot]
+        let restoredOperations: [EditOperation]
+        let restoredSources: [SourceMedia]
+        var restoredSchema: CompositionSchema? = nil
+        let restoredAnalysis: Analysis
+        
+        if let snap = targetSnapshot, let snapIdx = targetSnapshotIndex {
+            newUndo = Array(project.undo.prefix(upTo: snapIdx))
+            newRedo = Array((project.redo + [project.snapshot(schema: state.compositionSchema)]).suffix(30))
+            restoredOperations = snap.operations
+            restoredSources = snap.sources.isEmpty ? project.orderedSources : snap.sources
+            restoredSchema = snap.schema
+            
+            let baseAnalysis = snap.analysis ?? project.analysis
+            restoredAnalysis = Analysis(
+                words: baseAnalysis.words,
+                captions: baseAnalysis.captions,
+                speechHints: baseAnalysis.speechHints,
+                lowConfidenceFumbles: baseAnalysis.lowConfidenceFumbles,
+                takeGroups: baseAnalysis.takeGroups,
+                warnings: baseAnalysis.warnings,
+                completedAtEpochMs: baseAnalysis.completedAtEpochMs,
+                activeTurnId: remainingTurns.last?.id,
+                activeCheckpointId: baseAnalysis.activeCheckpointId,
+                editorialPlan: baseAnalysis.editorialPlan,
+                pendingProposal: nil,
+                chatHistory: remainingTurns,
+                settledConstraints: baseAnalysis.settledConstraints
+            )
+        } else {
+            newUndo = []
+            newRedo = Array((project.redo + [project.snapshot(schema: state.compositionSchema)]).suffix(30))
+            restoredOperations = []
+            restoredSources = project.orderedSources
+            
+            if let docDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                let initialFileUrl = docDir.appendingPathComponent("\(project.id)_initial_composition.json")
+                if let data = try? Data(contentsOf: initialFileUrl),
+                   let decoded = try? JSONDecoder().decode(CompositionSchema.self, from: data) {
+                    restoredSchema = decoded
+                }
+            }
+            
+            let baseAnalysis = project.analysis
+            restoredAnalysis = Analysis(
+                words: baseAnalysis.words,
+                captions: baseAnalysis.captions,
+                speechHints: baseAnalysis.speechHints,
+                lowConfidenceFumbles: baseAnalysis.lowConfidenceFumbles,
+                takeGroups: baseAnalysis.takeGroups,
+                warnings: baseAnalysis.warnings,
+                completedAtEpochMs: baseAnalysis.completedAtEpochMs,
+                activeTurnId: nil,
+                activeCheckpointId: nil,
+                editorialPlan: nil,
+                pendingProposal: nil,
+                chatHistory: [],
+                settledConstraints: []
+            )
+        }
+        
+        let newExport = ExportSettings.resolveDimensions(
+            source: restoredSources.first ?? project.source,
+            operations: restoredOperations,
+            current: project.export
+        )
+        
+        let restoredProject = MobileProject(
+            schemaVersion: project.schemaVersion,
+            id: project.id,
+            title: project.title,
+            source: restoredSources.first ?? project.source,
+            sources: restoredSources,
+            proxyUri: project.proxyUri,
+            preferences: project.preferences,
+            analysis: restoredAnalysis,
+            evidenceGraphs: project.evidenceGraphs,
+            operations: restoredOperations,
+            undo: newUndo,
+            redo: newRedo,
+            export: newExport,
+            revision: project.revision + 1
+        )
+        
+        self.state.project = restoredProject
+        
+        if let schemaToApply = restoredSchema {
+            self.state.compositionSchema = schemaToApply
+            if let docDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                let fileUrl = docDir.appendingPathComponent("\(project.id)_composition.json")
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = .prettyPrinted
+                if let data = try? encoder.encode(schemaToApply) {
+                    try? data.write(to: fileUrl)
+                }
+            }
+        }
+        
+        var updatedMessages: [ChatMessage] = [
+            ChatMessage(text: "Transcription complete. What would you like to edit?", isUser: false)
+        ]
+        for turn in remainingTurns {
+            updatedMessages.append(ChatMessage(text: turn.request, isUser: true, turnId: turn.id))
+            updatedMessages.append(ChatMessage(text: turn.response, isUser: false, turnId: turn.id))
+        }
+        self.state.messages = updatedMessages
+        self.state.jobMessage = nil
+        
+        Task {
+            await refreshPlayer(project: restoredProject)
+            do {
+                try await ChatRepository.shared.syncProject(project: restoredProject)
+            } catch {
+                print("Failed to sync project after undo: \(error)")
+            }
+            await loadPastChats()
+            await MainActor.run {
+                self.state.isProcessing = false
+            }
+        }
+    }
+    
     @MainActor
     public func undo() {
-        guard let project = state.project else { return }
-        let restored = project.restoreCheckpoint()
-        state.project = restored
-        Task { await refreshPlayer(project: restored) }
+        if let target = latestUndoTarget() {
+            undoTurn(target: target)
+        }
     }
     
     @MainActor
@@ -297,12 +488,38 @@ public class EditorViewModel {
                             
                             if let docDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
                                 let fileUrl = docDir.appendingPathComponent("\(updatedProject.id)_composition.json")
+                                let initialUrl = docDir.appendingPathComponent("\(updatedProject.id)_initial_composition.json")
                                 let encoder = JSONEncoder()
                                 encoder.outputFormatting = .prettyPrinted
                                 if let data = try? encoder.encode(schema) {
                                     try? data.write(to: fileUrl)
+                                    try? data.write(to: initialUrl)
                                 }
                             }
+                            
+                            let initialSnapshot = ProjectSnapshot(
+                                operations: updatedProject.operations,
+                                sources: updatedProject.sources,
+                                analysis: updatedAnalysis,
+                                schema: schema
+                            )
+                            let projectWithSnapshot = MobileProject(
+                                schemaVersion: updatedProject.schemaVersion,
+                                id: updatedProject.id,
+                                title: updatedProject.title,
+                                source: updatedProject.source,
+                                sources: updatedProject.sources,
+                                proxyUri: updatedProject.proxyUri,
+                                preferences: updatedProject.preferences,
+                                analysis: updatedAnalysis,
+                                evidenceGraphs: updatedProject.evidenceGraphs,
+                                operations: updatedProject.operations,
+                                undo: [initialSnapshot],
+                                redo: [],
+                                export: updatedProject.export,
+                                revision: updatedProject.revision
+                            )
+                            self.state.project = projectWithSnapshot
                         }
                     }
                     
@@ -351,10 +568,11 @@ public class EditorViewModel {
     public func reviseStory(request: String) {
         guard !request.isEmpty, !state.isProcessing, let project = state.project else { return }
         
+        let turnId = UUID().uuidString
         state.isProcessing = true
-        state.messages.append(ChatMessage(text: request, isUser: true))
+        state.messages.append(ChatMessage(text: request, isUser: true, turnId: turnId))
         state.jobMessage = "Thinking…"
-        state.messages.append(ChatMessage(text: state.jobMessage!, isUser: false))
+        state.messages.append(ChatMessage(text: state.jobMessage!, isUser: false, turnId: turnId))
         
         Task {
             let isAuth = await ChatRepository.shared.isAuthenticated()
@@ -408,7 +626,7 @@ public class EditorViewModel {
                             self.state.jobMessage = "Editing…"
                             if let lastIndex = self.state.messages.lastIndex(where: { $0.text == "Thinking…" }) {
                                 self.state.messages.remove(at: lastIndex)
-                                self.state.messages.append(ChatMessage(text: "Editing…", isUser: false))
+                                self.state.messages.append(ChatMessage(text: "Editing…", isUser: false, turnId: turnId))
                             }
                         }
                     }
@@ -417,6 +635,7 @@ public class EditorViewModel {
                     if response.type == "edit_program" || response.type == "schema_patch" {
                         let replyText = response.summary ?? "Revised proposal ready to review"
                         
+                        let previousSchema = self.state.compositionSchema
                         if let updatedSchema = response.schema {
                             self.state.compositionSchema = updatedSchema
                             
@@ -431,11 +650,18 @@ public class EditorViewModel {
                             }
                         }
                         
-                        let updatedProject = project.applyEditInstructions(next: response.operations ?? [], removedOperations: response.removedOperations ?? [], request: request, response: replyText)
+                        let updatedProject = project.applyEditInstructions(
+                            next: response.operations ?? [],
+                            removedOperations: response.removedOperations ?? [],
+                            activeTurnId: turnId,
+                            request: request,
+                            response: replyText,
+                            currentSchema: previousSchema
+                        )
                         self.state.project = updatedProject
                         self.state.jobMessage = replyText
                         self.state.messages.removeAll { $0.text == "Thinking…" || $0.text == "Editing…" }
-                        self.state.messages.append(ChatMessage(text: replyText, isUser: false))
+                        self.state.messages.append(ChatMessage(text: replyText, isUser: false, turnId: turnId))
                         
                         Task {
                             do {

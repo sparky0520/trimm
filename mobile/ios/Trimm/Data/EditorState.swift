@@ -1,13 +1,28 @@
 import Foundation
 
+public struct UndoTarget: Identifiable, Equatable {
+    public let id: String
+    public let userPrompt: String
+    public let turnIndex: Int
+    
+    public init(id: String, userPrompt: String, turnIndex: Int) {
+        self.id = id
+        self.userPrompt = userPrompt
+        self.turnIndex = turnIndex
+    }
+}
+
 public struct ChatMessage: Identifiable, Equatable {
-    public let id = UUID()
+    public let id: UUID
     public let text: String
     public let isUser: Bool
+    public let turnId: String?
     
-    public init(text: String, isUser: Bool) {
+    public init(id: UUID = UUID(), text: String, isUser: Bool, turnId: String? = nil) {
+        self.id = id
         self.text = text
         self.isUser = isUser
+        self.turnId = turnId
     }
 }
 

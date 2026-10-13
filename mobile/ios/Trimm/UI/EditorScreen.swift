@@ -8,6 +8,7 @@ public struct EditorScreen: View {
     @State private var isVideoVisible: Bool = true
     @State private var showAssetsModal: Bool = false
     @State private var selectedNewItem: PhotosPickerItem?
+    @State private var selectedUndoTarget: UndoTarget? = nil
     
     public init(viewModel: EditorViewModel) {
         self.viewModel = viewModel
@@ -47,7 +48,14 @@ public struct EditorScreen: View {
                 ScrollView {
                     VStack(spacing: 16) {
                         ForEach(viewModel.state.messages) { msg in
-                            ChatBubble(message: msg.text, isUser: msg.isUser)
+                            let target = viewModel.undoTarget(for: msg)
+                            ChatBubble(
+                                message: msg.text,
+                                isUser: msg.isUser,
+                                onUndo: target != nil ? {
+                                    selectedUndoTarget = target
+                                } : nil
+                            )
                         }
                         if let clarification = viewModel.state.pendingClarification {
                             VStack(alignment: .leading, spacing: 8) {
@@ -135,6 +143,19 @@ public struct EditorScreen: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 12) {
+                    if viewModel.canUndo {
+                        Button(action: {
+                            if let target = viewModel.latestUndoTarget() {
+                                selectedUndoTarget = target
+                            }
+                        }) {
+                            Image(systemName: "arrow.uturn.backward")
+                        }
+                        .foregroundColor(.lavender)
+                        .disabled(viewModel.state.isProcessing)
+                        .accessibilityLabel("Undo")
+                    }
+                    
                     Button(action: {
                         BillingManager.shared.isStorePresented = true
                     }) {
@@ -236,27 +257,85 @@ public struct EditorScreen: View {
                 dismissButton: .default(Text("OK"))
             )
         }
+        .alert("Undo Edits", isPresented: Binding(
+            get: { selectedUndoTarget != nil },
+            set: { if !$0 { selectedUndoTarget = nil } }
+        )) {
+            Button("Undo", role: .destructive) {
+                if let target = selectedUndoTarget {
+                    viewModel.undoTurn(target: target)
+                }
+                selectedUndoTarget = nil
+            }
+            Button("Cancel", role: .cancel) {
+                selectedUndoTarget = nil
+            }
+        } message: {
+            if let target = selectedUndoTarget {
+                Text("“\(target.userPrompt)”\n\nAre you sure you want to undo? All video edits and chat messages from this point forward will be removed.")
+            }
+        }
     }
 }
 
 struct ChatBubble: View {
     let message: String
     let isUser: Bool
+    var onUndo: (() -> Void)? = nil
     
     var body: some View {
         HStack {
             if isUser { Spacer() }
             
             if isUser {
-                Text(message)
-                    .font(.system(size: 15))
-                    .padding(12)
-                    .background(Color.raised)
-                    .foregroundColor(.cream)
-                    .cornerRadius(16)
-                    .frame(maxWidth: 280, alignment: .trailing)
+                HStack(spacing: 8) {
+                    if let onUndo = onUndo {
+                        Button(action: onUndo) {
+                            Image(systemName: "arrow.uturn.backward")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.lavender.opacity(0.85))
+                                .padding(7)
+                                .background(Color.workspace)
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Undo this edit")
+                    }
+                    
+                    Text(message)
+                        .font(.system(size: 15))
+                        .padding(12)
+                        .background(Color.raised)
+                        .foregroundColor(.cream)
+                        .cornerRadius(16)
+                        .frame(maxWidth: 280, alignment: .trailing)
+                        .contextMenu {
+                            if let onUndo = onUndo {
+                                Button(role: .destructive, action: onUndo) {
+                                    Label("Undo to this edit", systemImage: "arrow.uturn.backward")
+                                }
+                            }
+                            Button {
+                                UIPasteboard.general.string = message
+                            } label: {
+                                Label("Copy", systemImage: "doc.on.doc")
+                            }
+                        }
+                }
             } else {
                 AnimatedResponseText(text: message)
+                    .contextMenu {
+                        if let onUndo = onUndo {
+                            Button(role: .destructive, action: onUndo) {
+                                Label("Undo this edit", systemImage: "arrow.uturn.backward")
+                            }
+                        }
+                        Button {
+                            UIPasteboard.general.string = message
+                        } label: {
+                            Label("Copy", systemImage: "doc.on.doc")
+                        }
+                    }
             }
             
             if !isUser { Spacer() }

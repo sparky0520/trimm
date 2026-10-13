@@ -89,6 +89,7 @@ import kotlinx.serialization.json.jsonPrimitive
     @Suppress("DEPRECATION")
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current // Fallback since LocalClipboard might require newer compose versions, but let's keep it safe or suppress
     var menuExpanded by remember { mutableStateOf(false) }
+    var showUndoConfirmation by remember { mutableStateOf(false) }
 
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         Box {
@@ -126,12 +127,40 @@ import kotlinx.serialization.json.jsonPrimitive
                     DropdownMenuItem(
                         text = { Text("Undo to this step", color = Coral) },
                         onClick = {
-                            onUndo()
                             menuExpanded = false
+                            showUndoConfirmation = true
                         }
                     )
                 }
             }
         }
+    }
+
+    if (showUndoConfirmation && onUndo != null) {
+        AlertDialog(
+            onDismissRequest = { showUndoConfirmation = false },
+            title = { Text("Undo Edits", color = Cream, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "“$text”\n\nAre you sure you want to undo? All video edits and chat messages from this point forward will be removed.",
+                    color = CreamRaised,
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showUndoConfirmation = false
+                    onUndo()
+                }) {
+                    Text("Undo", color = Coral, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUndoConfirmation = false }) {
+                    Text("Cancel", color = Muted)
+                }
+            },
+            containerColor = Raised
+        )
     }
 }
