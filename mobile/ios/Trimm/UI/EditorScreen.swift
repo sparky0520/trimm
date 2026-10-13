@@ -1,5 +1,6 @@
 import SwiftUI
 import AVKit
+import AVFoundation
 import PhotosUI
 
 public struct EditorScreen: View {
@@ -254,24 +255,15 @@ public struct EditorScreen: View {
                                 .padding(.horizontal, 32)
                         }
                     } else {
-                        List(viewModel.state.sources, id: \.uri) { source in
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(URL(string: source.uri)?.lastPathComponent ?? source.uri)
-                                    .font(.headline)
-                                    .foregroundColor(.cream)
-                                HStack(spacing: 12) {
-                                    Text("\(max(1, source.durationMs / 1000))s duration")
-                                    Text(source.hasAudio ? "Audio: Yes" : "Audio: No")
-                                    if source.width > 0 && source.height > 0 {
-                                        Text("\(source.width)×\(source.height)")
-                                    }
-                                }
-                                .font(.caption)
-                                .foregroundColor(.muted)
+                        List {
+                            ForEach(Array(viewModel.state.sources.enumerated()), id: \.element.uri) { index, source in
+                                AssetRowView(source: source, index: index)
+                                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                                    .listRowBackground(Color.workspace)
+                                    .listRowSeparator(.hidden)
                             }
-                            .padding(.vertical, 4)
-                            .listRowBackground(Color.workspace)
                         }
+                        .listStyle(.plain)
                         .scrollContentBackground(.hidden)
                     }
                 }
@@ -384,5 +376,109 @@ struct ChatBubble: View {
             
             if !isUser { Spacer() }
         }
+    }
+}
+
+struct AssetRowView: View {
+    let source: SourceMedia
+    let index: Int
+    @State private var thumbnail: UIImage? = nil
+    
+    var body: some View {
+        HStack(spacing: 14) {
+            // Thumbnail / preview image on the left
+            ZStack {
+                Color.raised
+                
+                if let image = thumbnail {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Image(systemName: "film")
+                        .font(.system(size: 22))
+                        .foregroundColor(.lavender.opacity(0.6))
+                }
+            }
+            .frame(width: 72, height: 72)
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.border.opacity(0.4), lineWidth: 1)
+            )
+            
+            // Metadata on the right
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Clip \(index + 1)")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.cream)
+                    
+                    Spacer()
+                    
+                    Text(formatDuration(source.durationMs))
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.coral)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.coral.opacity(0.15))
+                        .clipShape(Capsule())
+                }
+                
+                HStack(spacing: 12) {
+                    if source.width > 0 && source.height > 0 {
+                        Label("\(source.width)×\(source.height)", systemImage: "aspectratio")
+                            .font(.system(size: 12))
+                            .foregroundColor(.muted)
+                    }
+                    
+                    Label(source.hasAudio ? "Audio" : "Muted", systemImage: source.hasAudio ? "speaker.wave.2" : "speaker.slash")
+                        .font(.system(size: 12))
+                        .foregroundColor(source.hasAudio ? .muted : .gray)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .task {
+            if thumbnail == nil {
+                thumbnail = await generateThumbnail(for: source)
+            }
+        }
+    }
+    
+    private func formatDuration(_ ms: Int64) -> String {
+        let totalSeconds = max(1, Int(ms / 1000))
+        let minutes = totalSeconds / 60
+        let seconds = totalSeconds % 60
+        if minutes > 0 {
+            return String(format: "%d:%02d", minutes, seconds)
+        } else {
+            return "\(seconds)s"
+        }
+    }
+    
+    private func generateThumbnail(for source: SourceMedia) async -> UIImage? {
+        guard let url = source.resolvedUrl else { return nil }
+        let asset = AVURLAsset(url: url)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 240, height: 240)
+        let targetSec = min(1.0, max(0.1, Double(source.durationMs) / 2000.0))
+        let time = CMTime(seconds: targetSec, preferredTimescale: 600)
+        
+        return await Task.detached(priority: .userInitiated) {
+            do {
+                if #available(iOS 16.0, *) {
+                    let (cgImage, _) = try await generator.image(at: time)
+                    return UIImage(cgImage: cgImage)
+                } else {
+                    let cgImage = try generator.copyCGImage(at: time, actualTime: nil)
+                    return UIImage(cgImage: cgImage)
+                }
+            } catch {
+                return nil
+            }
+        }.value
     }
 }

@@ -66,8 +66,8 @@ struct SidebarView: View {
                 Spacer()
             }
             .padding(.horizontal, 16)
-            .padding(.top, 4)
-            .padding(.bottom, 2)
+            .padding(.top, 20)
+            .padding(.bottom, 6)
             
             List {
                 if viewModel.state.pastChats.isEmpty && !viewModel.state.isLoadingPastChats {
@@ -76,6 +76,7 @@ struct SidebarView: View {
                         .italic()
                         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                         .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 } else {
                     ForEach(viewModel.state.pastChats) { chat in
                         Button(action: {
@@ -94,10 +95,12 @@ struct SidebarView: View {
                         }
                         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                         .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                     }
                 }
             }
             .listStyle(.plain)
+            .listRowSeparator(.hidden)
             
             if currentUser != nil {
                 Button(action: {
