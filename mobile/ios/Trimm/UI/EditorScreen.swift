@@ -145,20 +145,6 @@ public struct EditorScreen: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 10) {
-                    if viewModel.canUndo {
-                        Button(action: {
-                            if let target = viewModel.latestUndoTarget() {
-                                selectedUndoTarget = target
-                            }
-                        }) {
-                            Image(systemName: "arrow.uturn.backward")
-                                .font(.system(size: 14, weight: .semibold))
-                        }
-                        .foregroundColor(.lavender)
-                        .disabled(viewModel.state.isProcessing)
-                        .accessibilityLabel("Undo")
-                    }
-                    
                     Button(action: {
                         BillingManager.shared.isStorePresented = true
                     }) {
