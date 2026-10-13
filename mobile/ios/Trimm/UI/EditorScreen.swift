@@ -182,6 +182,13 @@ public struct EditorScreen: View {
                     // Three dots options menu right next to credits left
                     Menu {
                         Button(action: {
+                            viewModel.export()
+                        }) {
+                            Label("Export Video", systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(viewModel.state.project == nil || viewModel.state.isProcessing || viewModel.state.isExporting)
+
+                        Button(action: {
                             showAssetsModal = true
                         }) {
                             Label("Project Assets", systemImage: "square.stack.3d.up")
@@ -195,22 +202,6 @@ public struct EditorScreen: View {
                             Label(isVideoVisible ? "Hide Video Preview" : "Show Video Preview",
                                   systemImage: isVideoVisible ? "eye.slash" : "eye")
                         }
-                        
-                        if viewModel.canUndo {
-                            Button(action: {
-                                if let target = viewModel.latestUndoTarget() {
-                                    selectedUndoTarget = target
-                                }
-                            }) {
-                                Label("Undo Last Edit", systemImage: "arrow.uturn.backward")
-                            }
-                        }
-                        
-                        Button(action: {
-                            BillingManager.shared.isStorePresented = true
-                        }) {
-                            Label("Credits (\(BillingManager.shared.balance) Left)", systemImage: "bolt.fill")
-                        }
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.system(size: 14, weight: .bold))
@@ -223,13 +214,6 @@ public struct EditorScreen: View {
                             )
                     }
                     .accessibilityLabel("More Options")
-                    
-                    Button("Export") {
-                        viewModel.export()
-                    }
-                    .disabled(viewModel.state.project == nil || viewModel.state.isProcessing || viewModel.state.isExporting)
-                    .foregroundColor(.coral)
-                    .font(.system(size: 14, weight: .semibold))
                 }
             }
         }
