@@ -82,14 +82,32 @@ fun EditorScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    // Seamless stitched composition player with original working color space (no yellow tint, zero-lag transitions)
+    // Native hardware video player (zero color tint, direct SurfaceView output)
     val player = remember {
-        val videoFrameProcessorFactory = androidx.media3.effect.DefaultVideoFrameProcessor.Factory.Builder()
-            .setSdrWorkingColorSpace(androidx.media3.effect.DefaultVideoFrameProcessor.WORKING_COLOR_SPACE_ORIGINAL)
+        val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                /* minBufferMs = */ 1000,
+                /* maxBufferMs = */ 5000,
+                /* bufferForPlaybackMs = */ 0,
+                /* bufferForPlaybackAfterRebufferMs = */ 0
+            )
+            .setBufferDurationsMsForLocalPlayback(
+                /* minBufferForLocalPlaybackMs = */ 1000,
+                /* maxBufferForLocalPlaybackMs = */ 5000,
+                /* bufferForPlaybackForLocalPlaybackMs = */ 0,
+                /* bufferForPlaybackAfterRebufferForLocalPlaybackMs = */ 0
+            )
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .setPrioritizeTimeOverSizeThresholdsForLocalPlayback(true)
             .build()
-        val videoGraphFactory = androidx.media3.effect.SingleInputVideoGraph.Factory(videoFrameProcessorFactory)
-        androidx.media3.transformer.CompositionPlayer.Builder(context)
-            .setVideoGraphFactory(videoGraphFactory)
+
+        val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(context)
+            .forceEnableMediaCodecAsynchronousQueueing()
+
+        ExoPlayer.Builder(context, renderersFactory)
+            .setLoadControl(loadControl)
+            .setSeekBackIncrementMs(5000)
+            .setSeekForwardIncrementMs(15000)
             .build().apply {
                 repeatMode = Player.REPEAT_MODE_ALL
                 playWhenReady = true
@@ -110,14 +128,59 @@ fun EditorScreen(
         }
     }
 
-    // Refresh player composition when project or composition schema changes
+    // Refresh player media source when project or composition schema changes
     LaunchedEffect(state.project, state.compositionSchema) {
         val proj = state.project ?: return@LaunchedEffect
-        val comp = runCatching {
-            ExportCoordinator.composition(context, proj, isPreview = true, schema = state.compositionSchema)
-        }.getOrNull()
-        if (comp != null) {
-            player.setComposition(comp)
+        val schema = state.compositionSchema
+        val videoNodes = schema?.timeline?.filterIsInstance<TimelineNode.Video>()?.filter { (it.endMs - it.startMs) > 0 } ?: emptyList()
+        val sourceUri = state.source?.uri ?: proj.orderedSources.firstOrNull()?.uri
+
+        if (videoNodes.isNotEmpty()) {
+            val builder = ConcatenatingMediaSource2.Builder()
+                .useDefaultMediaSourceFactory(context)
+
+            videoNodes.forEach { node ->
+                val durationMs = node.endMs - node.startMs
+                val clipping = MediaItem.ClippingConfiguration.Builder()
+                    .setStartPositionMs(node.sourceStartMs)
+                    .setEndPositionMs(node.sourceStartMs + durationMs)
+                    .build()
+                val uriString = node.src.takeIf { it.isNotBlank() } ?: sourceUri ?: ""
+                val mediaItem = MediaItem.Builder()
+                    .setUri(Uri.parse(uriString))
+                    .setClippingConfiguration(clipping)
+                    .build()
+                builder.add(mediaItem, durationMs)
+            }
+            player.setMediaSource(builder.build())
+            player.prepare()
+        } else if (proj.operations.any { it is RemoveRanges && it.enabled }) {
+            val durationMs = proj.durationMs
+            val cuts = proj.operations.filterIsInstance<RemoveRanges>().filter { it.enabled }.flatMap { it.ranges }.sortedBy { it.startMs }
+            val retained = ExportCoordinator.retainedRanges(durationMs, cuts)
+            if (retained.isNotEmpty() && !sourceUri.isNullOrEmpty()) {
+                val builder = ConcatenatingMediaSource2.Builder()
+                    .useDefaultMediaSourceFactory(context)
+                retained.forEach { r ->
+                    val segmentDuration = r.endMs - r.startMs
+                    val clipping = MediaItem.ClippingConfiguration.Builder()
+                        .setStartPositionMs(r.startMs)
+                        .setEndPositionMs(r.endMs)
+                        .build()
+                    val mediaItem = MediaItem.Builder()
+                        .setUri(Uri.parse(sourceUri))
+                        .setClippingConfiguration(clipping)
+                        .build()
+                    builder.add(mediaItem, segmentDuration)
+                }
+                player.setMediaSource(builder.build())
+                player.prepare()
+            } else if (!sourceUri.isNullOrEmpty()) {
+                player.setMediaItem(MediaItem.fromUri(Uri.parse(sourceUri)))
+                player.prepare()
+            }
+        } else if (!sourceUri.isNullOrEmpty()) {
+            player.setMediaItem(MediaItem.fromUri(Uri.parse(sourceUri)))
             player.prepare()
         }
     }
