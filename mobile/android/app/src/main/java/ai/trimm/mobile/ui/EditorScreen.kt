@@ -64,6 +64,14 @@ import androidx.compose.ui.draw.clipToBounds
 import ai.trimm.mobile.domain.displaySize
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.platform.LocalDensity
 
 @OptIn(ExperimentalMaterial3Api::class, UnstableApi::class)
 @Composable
@@ -461,6 +469,47 @@ fun EditorScreen(
                             }
 
                             if (!isControlsVisible && activeCaption != null) {
+                                val density = LocalDensity.current
+                                val scaleFactor = (videoWidth.value / 1000f)
+                                val rawFontSize = activeCaption.style?.fontSize ?: 60f
+                                val rawScale = activeCaption.style?.scale ?: 1f
+                                val effectiveFontSize = (rawFontSize * rawScale * scaleFactor).coerceAtLeast(12f)
+                                val fontSizeSp = effectiveFontSize.sp
+
+                                val rawStrokeWidth = activeCaption.style?.strokeWidth ?: 4f
+                                val strokeWidthPx = with(density) {
+                                    val swDp = (rawStrokeWidth * rawScale * scaleFactor).dp
+                                    swDp.toPx().coerceAtLeast(1.5f)
+                                }
+
+                                val defaultColorHex = activeCaption.style?.color ?: "#FFFFFF"
+                                val baseTextColor = remember(defaultColorHex) {
+                                    runCatching { Color(android.graphics.Color.parseColor(defaultColorHex)) }.getOrDefault(Color.White)
+                                }
+
+                                val strokeColorHex = activeCaption.style?.strokeColor ?: "#000000"
+                                val strokeColor = remember(strokeColorHex) {
+                                    runCatching { Color(android.graphics.Color.parseColor(strokeColorHex)) }.getOrDefault(Color.Black)
+                                }
+
+                                val annotatedText = remember(activeCaption.text, activeCaption.segments, baseTextColor) {
+                                    if (!activeCaption.segments.isNullOrEmpty()) {
+                                        buildAnnotatedString {
+                                            activeCaption.segments.forEach { seg ->
+                                                val segColor = seg.color?.let { c ->
+                                                    runCatching { Color(android.graphics.Color.parseColor(c)) }.getOrNull()
+                                                } ?: baseTextColor
+                                                withStyle(SpanStyle(color = segColor)) {
+                                                    append(seg.text)
+                                                }
+                                            }
+                                        }
+                                    } else null
+                                }
+
+                                val posX = (activeCaption.style?.posX ?: 0f).coerceIn(-1f, 1f)
+                                val posY = (activeCaption.style?.posY ?: -0.35f).coerceIn(-1f, 1f)
+
                                 Box(
                                     modifier = Modifier
                                         .width(videoWidth)
@@ -468,29 +517,63 @@ fun EditorScreen(
                                         .clipToBounds(),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    val posY = activeCaption.style?.posY ?: -0.35f
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                                        contentAlignment = BiasAlignment(0f, -posY)
+                                            .padding(horizontal = 24.dp, vertical = 16.dp),
+                                        contentAlignment = BiasAlignment(posX, -posY)
                                     ) {
-                                        Text(
-                                            text = activeCaption.text,
-                                            color = Color(android.graphics.Color.parseColor(activeCaption.style?.color ?: "#FFFFFF")),
-                                            fontSize = ((activeCaption.style?.fontSize ?: 60f) * 0.28f).sp,
-                                            fontWeight = FontWeight.Bold,
-                                            textAlign = TextAlign.Center,
-                                            style = TextStyle(
-                                                shadow = Shadow(
-                                                    color = Color.Black,
-                                                    blurRadius = 8f
+                                        Box(contentAlignment = Alignment.Center) {
+                                            // Pass 1: Outline stroke (drawn behind)
+                                            if (strokeWidthPx > 0f) {
+                                                Text(
+                                                    text = activeCaption.text,
+                                                    color = strokeColor,
+                                                    fontSize = fontSizeSp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    textAlign = TextAlign.Center,
+                                                    style = TextStyle(
+                                                        drawStyle = Stroke(
+                                                            width = strokeWidthPx,
+                                                            join = StrokeJoin.Round
+                                                        )
+                                                    )
                                                 )
-                                            ),
-                                            modifier = Modifier
-                                                .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(6.dp))
-                                                .padding(horizontal = 10.dp, vertical = 4.dp)
-                                        )
+                                            }
+                                            // Pass 2: Main fill text + drop shadow (drawn on top, NO translucent background box)
+                                            if (annotatedText != null) {
+                                                Text(
+                                                    text = annotatedText,
+                                                    fontSize = fontSizeSp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    textAlign = TextAlign.Center,
+                                                    style = TextStyle(
+                                                        drawStyle = Fill,
+                                                        shadow = Shadow(
+                                                            color = Color.Black.copy(alpha = 0.85f),
+                                                            offset = Offset(0f, 2f),
+                                                            blurRadius = 4f
+                                                        )
+                                                    )
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = activeCaption.text,
+                                                    color = baseTextColor,
+                                                    fontSize = fontSizeSp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    textAlign = TextAlign.Center,
+                                                    style = TextStyle(
+                                                        drawStyle = Fill,
+                                                        shadow = Shadow(
+                                                            color = Color.Black.copy(alpha = 0.85f),
+                                                            offset = Offset(0f, 2f),
+                                                            blurRadius = 4f
+                                                        )
+                                                    )
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }

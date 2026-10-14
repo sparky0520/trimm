@@ -25,6 +25,7 @@ import androidx.media3.effect.RgbAdjustment
 import androidx.media3.effect.OverlayEffect
 import androidx.media3.effect.ScaleAndRotateTransformation
 import androidx.media3.effect.Crop
+import androidx.media3.effect.DefaultVideoFrameProcessor
 import ai.trimm.mobile.media.effects.MotionPresetEffect
 import ai.trimm.mobile.media.effects.GraphicOverlayEffect
 import kotlinx.coroutines.Dispatchers
@@ -350,7 +351,11 @@ object ExportCoordinator {
         output.parentFile?.mkdirs(); output.delete()
         val composition = composition(context, project)
         suspendCancellableCoroutine { continuation ->
+            val videoFrameProcessorFactory = DefaultVideoFrameProcessor.Factory.Builder()
+                .setSdrWorkingColorSpace(DefaultVideoFrameProcessor.WORKING_COLOR_SPACE_ORIGINAL)
+                .build()
             val transformer = Transformer.Builder(context)
+                .setVideoFrameProcessorFactory(videoFrameProcessorFactory)
                 .setVideoMimeType(if (project.export.codec == "video/hevc") MimeTypes.VIDEO_H265 else MimeTypes.VIDEO_H264)
                 .addListener(object : Transformer.Listener {
                     override fun onCompleted(composition: Composition, exportResult: ExportResult) { if (continuation.isActive) continuation.resume(output) }
@@ -452,8 +457,12 @@ private fun targets(itemId: String, exactId: String, legacyId: String, startMs: 
         val composition = buildPreviewComposition(context, project, schema)
         suspendCancellableCoroutine { continuation ->
             val isHevc = project.export.codec == "video/hevc"
+            val videoFrameProcessorFactory = DefaultVideoFrameProcessor.Factory.Builder()
+                .setSdrWorkingColorSpace(DefaultVideoFrameProcessor.WORKING_COLOR_SPACE_ORIGINAL)
+                .build()
 
             val transformer = Transformer.Builder(context)
+                .setVideoFrameProcessorFactory(videoFrameProcessorFactory)
                 .setVideoMimeType(if (isHevc) MimeTypes.VIDEO_H265 else MimeTypes.VIDEO_H264)
                 .addListener(object : Transformer.Listener {
                     override fun onCompleted(composition: Composition, exportResult: ExportResult) {

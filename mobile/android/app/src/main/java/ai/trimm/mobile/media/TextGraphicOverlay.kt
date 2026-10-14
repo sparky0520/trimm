@@ -168,17 +168,39 @@ class TextGraphicOverlay(
             if (tShadowRadius > 0 && tShadowColor != Color.TRANSPARENT) {
                 textPaint.setShadowLayer(tShadowRadius, 5f, 5f, tShadowColor)
             } else {
-                textPaint.clearShadowLayer()
+                textPaint.setShadowLayer(4f, 0f, 2f, Color.argb(200, 0, 0, 0))
+            }
+
+            val segmentsArray = blueprint.optJSONArray("segments")
+            val charSequence: CharSequence = if (segmentsArray != null && segmentsArray.length() > 0) {
+                val ssb = android.text.SpannableStringBuilder()
+                for (i in 0 until segmentsArray.length()) {
+                    val seg = segmentsArray.getJSONObject(i)
+                    val segText = seg.optString("text", "")
+                    val segColorStr = seg.optString("color")
+                    val segColor = parseColor(segColorStr, tColor)
+                    val start = ssb.length
+                    ssb.append(segText)
+                    ssb.setSpan(
+                        android.text.style.ForegroundColorSpan(segColor),
+                        start,
+                        ssb.length,
+                        android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                }
+                ssb
+            } else {
+                text
             }
 
             val textWidth = (width * 0.9f).toInt()
             val staticLayout = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                StaticLayout.Builder.obtain(text, 0, text.length, textPaint, textWidth)
+                StaticLayout.Builder.obtain(charSequence, 0, charSequence.length, textPaint, textWidth)
                     .setAlignment(Layout.Alignment.ALIGN_CENTER)
                     .build()
             } else {
                 @Suppress("DEPRECATION")
-                StaticLayout(text, textPaint, textWidth, Layout.Alignment.ALIGN_CENTER, 1.0f, 0.0f, false)
+                StaticLayout(charSequence, textPaint, textWidth, Layout.Alignment.ALIGN_CENTER, 1.0f, 0.0f, false)
             }
 
             val textHeight = staticLayout.height
@@ -189,6 +211,7 @@ class TextGraphicOverlay(
                 val outlinePaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
                 outlinePaint.style = Paint.Style.STROKE
                 outlinePaint.strokeWidth = tStrokeWidth
+                outlinePaint.strokeJoin = Paint.Join.ROUND
                 outlinePaint.color = tStrokeColor
                 outlinePaint.textSize = fontSize
                 outlinePaint.typeface = tf

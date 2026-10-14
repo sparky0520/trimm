@@ -31,6 +31,7 @@ import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
+import androidx.media3.effect.DefaultVideoFrameProcessor
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
 import kotlinx.coroutines.*
@@ -91,7 +92,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         val hash = computeVideoCutsHash(schema)
         val previewDir = File(getApplication<Application>().cacheDir, "previews").apply { mkdirs() }
-        val proxyFile = File(previewDir, "proxy_${project.id}_$hash.mp4")
+        val proxyFile = File(previewDir, "proxy_v3_${project.id}_$hash.mp4")
+
+        // Invalidate and delete any older proxy files that had legacy color shifts
+        previewDir.listFiles()?.forEach { f ->
+            if (f.name.startsWith("proxy_") && !f.name.startsWith("proxy_v3_")) {
+                f.delete()
+            }
+        }
 
         if (proxyFile.exists() && proxyFile.length() > 0) {
             val uriStr = Uri.fromFile(proxyFile).toString()
@@ -870,7 +878,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val composition = ExportCoordinator.composition(context, project, schema = mutable.value.compositionSchema)
                 val progressHolder = ProgressHolder()
 
+                val videoFrameProcessorFactory = DefaultVideoFrameProcessor.Factory.Builder()
+                    .setSdrWorkingColorSpace(DefaultVideoFrameProcessor.WORKING_COLOR_SPACE_ORIGINAL)
+                    .build()
+
                 val transformer = Transformer.Builder(context)
+                    .setVideoFrameProcessorFactory(videoFrameProcessorFactory)
                     .setVideoMimeType(
                         if (project.export.codec == "video/hevc") MimeTypes.VIDEO_H265 else MimeTypes.VIDEO_H264
                     )
