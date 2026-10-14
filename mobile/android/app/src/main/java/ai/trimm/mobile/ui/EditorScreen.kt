@@ -58,6 +58,7 @@ import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalClipboardManager
+import android.view.View
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.draw.clipToBounds
 import ai.trimm.mobile.domain.displaySize
@@ -407,6 +408,8 @@ fun EditorScreen(
                         else -> if (isSourcePortrait) 9f / 16f else 16f / 9f
                     }
 
+                    var isControlsVisible by remember { mutableStateOf(false) }
+
                     BoxWithConstraints(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -423,39 +426,49 @@ fun EditorScreen(
                         }
 
                         if (state.source != null) {
-                            Box(
-                                modifier = Modifier
-                                    .width(videoWidth)
-                                    .height(videoHeight)
-                                    .clipToBounds(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                AndroidView(
-                                    factory = { ctx ->
-                                        PlayerView(ctx).apply {
-                                            this.player = player
-                                            useController = true
-                                            setShowMultiWindowTimeBar(true)
-                                            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                                            setShowPreviousButton(false)
-                                            setShowNextButton(false)
-                                            setShowRewindButton(true)
-                                            setShowFastForwardButton(true)
-                                        }
-                                    },
-                                    update = { if (it.player != player) it.player = player },
-                                    modifier = Modifier.fillMaxSize()
-                                )
+                            // 1. PlayerView fills the entire container so ExoPlayer controls have full width.
+                            // This ensures PlayerControlView has adequate width (>240dp), completely preventing
+                            // minimal mode from hiding the rewind button, fast-forward button, and the bottom bar (time elapsed / total duration).
+                            AndroidView(
+                                factory = { ctx ->
+                                    PlayerView(ctx).apply {
+                                        this.player = player
+                                        useController = true
+                                        setShowMultiWindowTimeBar(true)
+                                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                        setShowPreviousButton(false)
+                                        setShowNextButton(false)
+                                        setShowRewindButton(true)
+                                        setShowFastForwardButton(true)
+                                        controllerShowTimeoutMs = 3000
+                                        controllerHideOnTouch = true
+                                        setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
+                                            isControlsVisible = (visibility == View.VISIBLE)
+                                        })
+                                    }
+                                },
+                                update = { if (it.player != player) it.player = player },
+                                modifier = Modifier.fillMaxSize()
+                            )
 
-                                // On-screen subtitle/caption overlay - strictly bounded within video frame!
-                                val activeCaption = remember(playbackPositionMs, state.compositionSchema) {
-                                    val schema = state.compositionSchema
-                                    schema?.timeline?.filterIsInstance<TimelineNode.Text>()
-                                        ?.firstOrNull { it.isVisible && playbackPositionMs in it.startMs..it.endMs }
-                                }
+                            // 2. On-screen subtitle/caption overlay:
+                            // Strictly bounded within the 9:16 portrait video frame (videoWidth x videoHeight),
+                            // and only visible when player controls are hidden so captions never display on top of or collide with controls.
+                            val activeCaption = remember(playbackPositionMs, state.compositionSchema) {
+                                val schema = state.compositionSchema
+                                schema?.timeline?.filterIsInstance<TimelineNode.Text>()
+                                    ?.firstOrNull { it.isVisible && playbackPositionMs in it.startMs..it.endMs }
+                            }
 
-                                activeCaption?.let { caption ->
-                                    val posY = caption.style?.posY ?: -0.35f
+                            if (!isControlsVisible && activeCaption != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(videoWidth)
+                                        .height(videoHeight)
+                                        .clipToBounds(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    val posY = activeCaption.style?.posY ?: -0.35f
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
@@ -463,9 +476,9 @@ fun EditorScreen(
                                         contentAlignment = BiasAlignment(0f, -posY)
                                     ) {
                                         Text(
-                                            text = caption.text,
-                                            color = Color(android.graphics.Color.parseColor(caption.style?.color ?: "#FFFFFF")),
-                                            fontSize = ((caption.style?.fontSize ?: 60f) * 0.28f).sp,
+                                            text = activeCaption.text,
+                                            color = Color(android.graphics.Color.parseColor(activeCaption.style?.color ?: "#FFFFFF")),
+                                            fontSize = ((activeCaption.style?.fontSize ?: 60f) * 0.28f).sp,
                                             fontWeight = FontWeight.Bold,
                                             textAlign = TextAlign.Center,
                                             style = TextStyle(
