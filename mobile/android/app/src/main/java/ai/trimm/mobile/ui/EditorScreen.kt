@@ -43,8 +43,10 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.common.util.ExperimentalApi
+import androidx.media3.transformer.CompositionPlayer
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -59,7 +61,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 
-@OptIn(ExperimentalMaterial3Api::class, UnstableApi::class)
+@OptIn(ExperimentalMaterial3Api::class, UnstableApi::class, ExperimentalApi::class)
 @Composable
 fun EditorScreen(
     vm: ChatViewModel,
@@ -79,15 +81,12 @@ fun EditorScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    // Video Player
+    // Composition Player for seamless stitched playback matching iOS AVPlayer + AVMutableComposition
     val player = remember {
-        ExoPlayer.Builder(context)
-            .setSeekBackIncrementMs(5000)
-            .setSeekForwardIncrementMs(15000)
-            .build().apply {
-                repeatMode = ExoPlayer.REPEAT_MODE_ALL
-                playWhenReady = true
-            }
+        CompositionPlayer.Builder(context).build().apply {
+            repeatMode = Player.REPEAT_MODE_ALL
+            playWhenReady = true
+        }
     }
 
     DisposableEffect(player) {
@@ -97,67 +96,21 @@ fun EditorScreen(
     }
 
     // Continuously monitor playback position for synchronized overlay rendering
-    LaunchedEffect(player, state.compositionSchema) {
+    LaunchedEffect(player) {
         while (true) {
-            val schema = state.compositionSchema
-            val vNodes = schema?.timeline?.filterIsInstance<TimelineNode.Video>()?.filter { (it.endMs - it.startMs) > 0 } ?: emptyList()
-            if (vNodes.isNotEmpty()) {
-                val curIndex = player.currentMediaItemIndex
-                if (curIndex in vNodes.indices) {
-                    playbackPositionMs = vNodes[curIndex].startMs + player.currentPosition
-                }
-            } else {
-                playbackPositionMs = player.currentPosition
-            }
-            delay(50)
+            playbackPositionMs = player.currentPosition
+            delay(33)
         }
     }
 
-    // Refresh player item when project or composition schema changes
+    // Refresh player composition when project or composition schema changes
     LaunchedEffect(state.project, state.compositionSchema) {
-        val schema = state.compositionSchema
-        val videoNodes = schema?.timeline?.filterIsInstance<TimelineNode.Video>()?.filter { (it.endMs - it.startMs) > 0 } ?: emptyList()
-        val sourceUri = state.source?.uri
-
-        if (videoNodes.isNotEmpty()) {
-            val items = videoNodes.map { node ->
-                val durationMs = node.endMs - node.startMs
-                val clipping = MediaItem.ClippingConfiguration.Builder()
-                    .setStartPositionMs(node.sourceStartMs)
-                    .setEndPositionMs(node.sourceStartMs + durationMs)
-                    .build()
-                val uriString = node.src.takeIf { it.isNotBlank() } ?: sourceUri ?: ""
-                MediaItem.Builder()
-                    .setUri(Uri.parse(uriString))
-                    .setClippingConfiguration(clipping)
-                    .build()
-            }
-            player.setMediaItems(items)
-            player.prepare()
-        } else if (state.project != null && state.project!!.operations.any { it is RemoveRanges && it.enabled }) {
-            val proj = state.project!!
-            val durationMs = proj.durationMs
-            val cuts = proj.operations.filterIsInstance<RemoveRanges>().filter { it.enabled }.flatMap { it.ranges }.sortedBy { it.startMs }
-            val retained = ExportCoordinator.retainedRanges(durationMs, cuts)
-            if (retained.isNotEmpty() && !sourceUri.isNullOrEmpty()) {
-                val items = retained.map { r ->
-                    val clipping = MediaItem.ClippingConfiguration.Builder()
-                        .setStartPositionMs(r.startMs)
-                        .setEndPositionMs(r.endMs)
-                        .build()
-                    MediaItem.Builder()
-                        .setUri(Uri.parse(sourceUri))
-                        .setClippingConfiguration(clipping)
-                        .build()
-                }
-                player.setMediaItems(items)
-                player.prepare()
-            } else if (!sourceUri.isNullOrEmpty()) {
-                player.setMediaItem(MediaItem.fromUri(Uri.parse(sourceUri)))
-                player.prepare()
-            }
-        } else if (!sourceUri.isNullOrEmpty()) {
-            player.setMediaItem(MediaItem.fromUri(Uri.parse(sourceUri)))
+        val proj = state.project ?: return@LaunchedEffect
+        val comp = runCatching {
+            ExportCoordinator.composition(context, proj, isPreview = true, schema = state.compositionSchema)
+        }.getOrNull()
+        if (comp != null) {
+            player.setComposition(comp)
             player.prepare()
         }
     }
@@ -349,13 +302,13 @@ fun EditorScreen(
                                     PlayerView(ctx).apply {
                                         this.player = player
                                         useController = true
-                                        setShowMultiWindowTimeBar(true)
                                         setShowPreviousButton(false)
                                         setShowNextButton(false)
                                         setShowRewindButton(true)
                                         setShowFastForwardButton(true)
                                     }
                                 },
+                                update = { if (it.player != player) it.player = player },
                                 modifier = Modifier.fillMaxSize()
                             )
 

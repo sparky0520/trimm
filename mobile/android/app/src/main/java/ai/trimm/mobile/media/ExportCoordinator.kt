@@ -45,7 +45,7 @@ object ExportCoordinator {
         isPreview: Boolean = false,
         schema: CompositionSchema? = null
     ): Composition {
-        if (schema != null && schema.timeline.any { it is TimelineNode.Video }) {
+        if (schema != null && schema.timeline.any { it is TimelineNode.Video && (it.endMs - it.startMs) > 0 }) {
             return buildCompositionFromSchema(context, project, schema, isPreview)
         }
         val cuts = (
@@ -457,8 +457,13 @@ private fun targets(itemId: String, exactId: String, legacyId: String, startMs: 
                 .setEndPositionMs(node.sourceStartMs + durationMs)
                 .build()
 
+            val uriString = node.src.takeIf { it.isNotBlank() }
+                ?: project.source?.uri
+                ?: project.orderedSources.firstOrNull()?.uri
+                ?: ""
+
             val mediaItem = MediaItem.Builder()
-                .setUri(Uri.parse(node.src))
+                .setUri(Uri.parse(uriString))
                 .setClippingConfiguration(clipping)
                 .build()
 
@@ -469,8 +474,12 @@ private fun targets(itemId: String, exactId: String, legacyId: String, startMs: 
 
             val itemVideoEffects = mutableListOf<Effect>()
 
+            val sourceDurationMs = project.orderedSources.find { it.uri == uriString }?.durationMs
+                ?: project.source?.durationMs
+                ?: project.durationMs
+
             EditedMediaItem.Builder(mediaItem)
-                .setDurationUs(durationMs * 1000L)
+                .setDurationUs(maxOf(1L, sourceDurationMs * 1000L))
                 .setEffects(Effects(audioEffects, itemVideoEffects))
                 .build()
         }
@@ -484,23 +493,25 @@ private fun targets(itemId: String, exactId: String, legacyId: String, startMs: 
             Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP
         )
 
-        // Text / Caption overlays
-        val textNodes = schema.timeline.filterIsInstance<TimelineNode.Text>().filter { it.isVisible }
-        textNodes.forEach { textNode ->
-            val blueprintJson = buildBlueprintJson(textNode)
-            videoEffects += OverlayEffect(
-                listOf(
-                    TextGraphicOverlay(
-                        context = context,
-                        text = textNode.text,
-                        blueprintJson = blueprintJson,
-                        startMs = textNode.startMs,
-                        endMs = textNode.endMs,
-                        videoWidth = targetWidth,
-                        videoHeight = targetHeight
+        // Text / Caption overlays for export (during preview, Compose renders overlay at 60fps)
+        if (!isPreview) {
+            val textNodes = schema.timeline.filterIsInstance<TimelineNode.Text>().filter { it.isVisible }
+            textNodes.forEach { textNode ->
+                val blueprintJson = buildBlueprintJson(textNode)
+                videoEffects += OverlayEffect(
+                    listOf(
+                        TextGraphicOverlay(
+                            context = context,
+                            text = textNode.text,
+                            blueprintJson = blueprintJson,
+                            startMs = textNode.startMs,
+                            endMs = textNode.endMs,
+                            videoWidth = targetWidth,
+                            videoHeight = targetHeight
+                        )
                     )
                 )
-            )
+            }
         }
 
         val sequences = mutableListOf(sequence)
