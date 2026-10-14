@@ -6,6 +6,4 @@ app/build/
 local.properties
 .env
 .env.local
-*.jks
-*.keystore
 captures/
