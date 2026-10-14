@@ -106,65 +106,31 @@ class ChatRepository {
                 .build()
         }
 
-        var attempt = 0
-        var response: okhttp3.Response? = null
-        var lastException: Exception? = null
+        val currentToken = token ?: throw ChatRepositoryException.Unauthorized
+        var call = httpClient.newCall(buildRequest(currentToken))
+        var response = call.execute()
 
-        while (attempt < 2) {
-            attempt++
+        // Handle 401 refresh (matching iOS)
+        if (response.code == 401) {
+            response.close()
             try {
-                val currentToken = token ?: throw ChatRepositoryException.Unauthorized
-                var currentCall = httpClient.newCall(buildRequest(currentToken))
-                var currentResponse = currentCall.execute()
-
-                // Handle 401 retry
-                if (currentResponse.code == 401) {
-                    currentResponse.close()
-                    try {
-                        supabase.auth.refreshCurrentSession()
-                        token = supabase.auth.currentAccessTokenOrNull()
-                    } catch (e: Exception) {
-                        throw ChatRepositoryException.Unauthorized
-                    }
-                    val refreshedToken = token
-                    if (refreshedToken.isNullOrEmpty()) {
-                        throw ChatRepositoryException.Unauthorized
-                    }
-                    currentCall = httpClient.newCall(buildRequest(refreshedToken))
-                    currentResponse = currentCall.execute()
-                    if (currentResponse.code == 401) {
-                        currentResponse.close()
-                        throw ChatRepositoryException.Unauthorized
-                    }
-                }
-
-                // If transient gateway error (502, 503, 504), retry once after brief delay
-                if (currentResponse.code in 502..504 && attempt < 2) {
-                    Log.w(TAG, "Transient server error HTTP ${currentResponse.code} on attempt $attempt, retrying in 2000ms...")
-                    currentResponse.close()
-                    delay(2000)
-                    continue
-                }
-
-                response = currentResponse
-                break
+                supabase.auth.refreshCurrentSession()
+                token = supabase.auth.currentAccessTokenOrNull()
             } catch (e: Exception) {
-                if (e is ChatRepositoryException) throw e
-                lastException = e
-                if (attempt < 2 && (e is java.io.IOException)) {
-                    Log.w(TAG, "Transient network I/O error on attempt $attempt, retrying in 2000ms...", e)
-                    delay(2000)
-                    continue
-                }
-                throw e
+                throw ChatRepositoryException.Unauthorized
+            }
+            val refreshedToken = token ?: throw ChatRepositoryException.Unauthorized
+            call = httpClient.newCall(buildRequest(refreshedToken))
+            response = call.execute()
+            if (response.code == 401) {
+                response.close()
+                throw ChatRepositoryException.Unauthorized
             }
         }
 
-        val activeResponse = response ?: throw (lastException ?: ChatRepositoryException.BadServerResponse(500))
-
         // Handle 402 Insufficient credits
-        if (activeResponse.code == 402) {
-            activeResponse.close()
+        if (response.code == 402) {
+            response.close()
             CoroutineScope(Dispatchers.Main).launch {
                 BillingManager.setStorePresented(true)
                 BillingManager.fetchCredits()
@@ -172,14 +138,14 @@ class ChatRepository {
             throw ChatRepositoryException.InsufficientCredits(BillingManager.balance.value, 2)
         }
 
-        if (!activeResponse.isSuccessful) {
-            val code = activeResponse.code
-            activeResponse.close()
+        if (!response.isSuccessful) {
+            val code = response.code
+            response.close()
             throw ChatRepositoryException.BadServerResponse(code)
         }
 
-        val reader = activeResponse.body?.byteStream()?.bufferedReader()
-            ?: throw ChatRepositoryException.BadServerResponse(activeResponse.code)
+        val reader = response.body?.byteStream()?.bufferedReader()
+            ?: throw ChatRepositoryException.BadServerResponse(response.code)
 
         var currentEvent = ""
         var doneResult: AgentExecuteResponse? = null
