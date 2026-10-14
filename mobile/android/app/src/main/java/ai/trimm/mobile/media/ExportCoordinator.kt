@@ -174,11 +174,13 @@ object ExportCoordinator {
         val sequence = if (project.orderedSources.all { it.hasAudio }) EditedMediaItemSequence.withAudioAndVideoFrom(clips) else EditedMediaItemSequence.withVideoFrom(clips)
         val videoEffects = mutableListOf<Effect>(
         )
-        videoEffects += Presentation.createForWidthAndHeight(
+        if (!isPreview) {
+            videoEffects += Presentation.createForWidthAndHeight(
                 project.export.width,
                 project.export.height,
                 Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP
             )
+        }
         if (BuildConfig.FORCE_4K_EXPORT && maxOf(project.export.width, project.export.height) >= 3840) {
             // Prevent Media3 from remuxing a no-op presentation during the physical-device
             // experiment. This imperceptible adjustment requires a genuine decode/encode pass.
