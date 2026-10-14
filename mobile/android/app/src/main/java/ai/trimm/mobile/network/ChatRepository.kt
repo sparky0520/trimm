@@ -168,7 +168,9 @@ class ChatRepository {
                             }
                         }
                         "done" -> {
+                            Log.d(TAG, "Raw SSE done data received: $data")
                             doneResult = json.decodeFromString<AgentExecuteResponse>(data)
+                            Log.d(TAG, "Agent stream done event parsed: type=${doneResult?.type}, summary=${doneResult?.summary}, timelineNodes=${doneResult?.schema?.timeline?.size}")
                             break
                         }
                         "error" -> {

@@ -39,7 +39,15 @@ import kotlin.math.pow
 
 @OptIn(UnstableApi::class)
 object ExportCoordinator {
-    fun composition(context: Context, project: MobileProject, isPreview: Boolean = false): Composition {
+    fun composition(
+        context: Context,
+        project: MobileProject,
+        isPreview: Boolean = false,
+        schema: CompositionSchema? = null
+    ): Composition {
+        if (schema != null && schema.timeline.any { it is TimelineNode.Video }) {
+            return buildCompositionFromSchema(context, project, schema, isPreview)
+        }
         val cuts = (
             project.operations.filterIsInstance<RemoveRanges>().filter { it.enabled }.flatMap { it.ranges }
             ).distinct().sortedBy { it.startMs }
@@ -425,4 +433,133 @@ private fun targets(itemId: String, exactId: String, legacyId: String, startMs: 
         }
         return Uri.fromFile(file)
     }
+
+    private fun buildCompositionFromSchema(
+        context: Context,
+        project: MobileProject,
+        schema: CompositionSchema,
+        isPreview: Boolean
+    ): Composition {
+        val videoNodes = schema.timeline.filterIsInstance<TimelineNode.Video>().filter { (it.endMs - it.startMs) > 0 }
+        require(videoNodes.isNotEmpty()) { "The composition timeline contains no video nodes." }
+
+        val (targetWidth, targetHeight) = when (schema.settings.aspectRatio) {
+            "9:16" -> 1080 to 1920
+            "1:1" -> 1080 to 1080
+            "4:5" -> 1080 to 1350
+            else -> 1920 to 1080
+        }
+
+        val clips = videoNodes.map { node ->
+            val durationMs = node.endMs - node.startMs
+            val clipping = MediaItem.ClippingConfiguration.Builder()
+                .setStartPositionMs(node.sourceStartMs)
+                .setEndPositionMs(node.sourceStartMs + durationMs)
+                .build()
+
+            val mediaItem = MediaItem.Builder()
+                .setUri(Uri.parse(node.src))
+                .setClippingConfiguration(clipping)
+                .build()
+
+            val audioEffects = mutableListOf<androidx.media3.common.audio.AudioProcessor>()
+            if (schema.settings.autoEnhance) {
+                audioEffects.add(DialogueAudioProcessor(0f, -16f))
+            }
+
+            val itemVideoEffects = mutableListOf<Effect>()
+
+            EditedMediaItem.Builder(mediaItem)
+                .setDurationUs(durationMs * 1000L)
+                .setEffects(Effects(audioEffects, itemVideoEffects))
+                .build()
+        }
+
+        val sequence = EditedMediaItemSequence.withAudioAndVideoFrom(clips)
+        val videoEffects = mutableListOf<Effect>()
+
+        videoEffects += Presentation.createForWidthAndHeight(
+            targetWidth,
+            targetHeight,
+            Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP
+        )
+
+        // Text / Caption overlays
+        val textNodes = schema.timeline.filterIsInstance<TimelineNode.Text>().filter { it.isVisible }
+        textNodes.forEach { textNode ->
+            val blueprintJson = buildBlueprintJson(textNode)
+            videoEffects += OverlayEffect(
+                listOf(
+                    TextGraphicOverlay(
+                        context = context,
+                        text = textNode.text,
+                        blueprintJson = blueprintJson,
+                        startMs = textNode.startMs,
+                        endMs = textNode.endMs,
+                        videoWidth = targetWidth,
+                        videoHeight = targetHeight
+                    )
+                )
+            )
+        }
+
+        val sequences = mutableListOf(sequence)
+
+        // Audio Nodes (BGM / SFX)
+        val audioNodes = schema.timeline.filterIsInstance<TimelineNode.Audio>()
+        audioNodes.forEach { audio ->
+            val audioUri = Uri.parse(audio.src)
+            val audioDurationMs = getRemoteMediaDurationMs(audio.src, 15000L)
+            val volume = audio.volume ?: 1f
+            val audioEffects = mutableListOf<androidx.media3.common.audio.AudioProcessor>()
+            if (audio.autoDuck == true) {
+                val speechRanges = project.analysis.words.map { word ->
+                    TimeRange(maxOf(0L, word.range.startMs - 500L), word.range.endMs + 500L)
+                }
+                audioEffects.add(GainProcessor(SpeechDuckingGainProvider(volume, -15f, speechRanges)))
+            } else if (volume != 1f) {
+                audioEffects.add(GainProcessor(SpeechDuckingGainProvider(volume, 0f, emptyList())))
+            }
+
+            val mediaItem = MediaItem.Builder().setUri(audioUri).build()
+            val editedAudio = EditedMediaItem.Builder(mediaItem)
+                .setDurationUs(audioDurationMs * 1000L)
+                .setEffects(Effects(audioEffects, emptyList()))
+                .build()
+
+            sequences.add(EditedMediaItemSequence.withAudioFrom(listOf(editedAudio)))
+        }
+
+        return Composition.Builder(sequences)
+            .setEffects(Effects(emptyList(), videoEffects))
+            .build()
+    }
+
+    private fun buildBlueprintJson(t: TimelineNode.Text): String {
+        val obj = org.json.JSONObject()
+        val layout = org.json.JSONObject()
+        val textStyle = org.json.JSONObject()
+        t.style?.let { s ->
+            s.color?.let { textStyle.put("color", it) }
+            s.fontSize?.let { textStyle.put("fontSize", it.toDouble()) }
+            s.strokeColor?.let { textStyle.put("strokeColor", it) }
+            s.strokeWidth?.let { textStyle.put("strokeWidth", it.toDouble()) }
+            s.posX?.let { layout.put("posX", it.toDouble()) }
+            s.posY?.let { layout.put("posY", it.toDouble()) }
+            s.scale?.let { layout.put("scale", it.toDouble()) }
+        }
+        if (textStyle.length() > 0) obj.put("textStyle", textStyle)
+        if (layout.length() > 0) obj.put("layout", layout)
+        t.segments?.let { segs ->
+            val arr = org.json.JSONArray()
+            segs.forEach { seg ->
+                val sObj = org.json.JSONObject().put("text", seg.text)
+                seg.color?.let { sObj.put("color", it) }
+                arr.put(sObj)
+            }
+            obj.put("segments", arr)
+        }
+        return obj.toString()
+    }
 }
+

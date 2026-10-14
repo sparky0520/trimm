@@ -785,7 +785,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             tempFile.delete()
 
             try {
-                val composition = ExportCoordinator.composition(context, project)
+                val composition = ExportCoordinator.composition(context, project, schema = mutable.value.compositionSchema)
                 val progressHolder = ProgressHolder()
 
                 val transformer = Transformer.Builder(context)

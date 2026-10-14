@@ -47,8 +47,19 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import ai.trimm.mobile.domain.TimelineNode
+import ai.trimm.mobile.domain.RemoveRanges
+import ai.trimm.mobile.media.ExportCoordinator
+import androidx.compose.ui.BiasAlignment
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, UnstableApi::class)
 @Composable
 fun EditorScreen(
     vm: ChatViewModel,
@@ -63,6 +74,7 @@ fun EditorScreen(
     var showAssetsModal by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var selectedUndoTarget by remember { mutableStateOf<UndoTarget?>(null) }
+    var playbackPositionMs by remember { mutableLongStateOf(0L) }
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -81,12 +93,69 @@ fun EditorScreen(
         }
     }
 
-    // Refresh player item when project or source changes
+    // Continuously monitor playback position for synchronized overlay rendering
+    LaunchedEffect(player, state.compositionSchema) {
+        while (true) {
+            val schema = state.compositionSchema
+            val vNodes = schema?.timeline?.filterIsInstance<TimelineNode.Video>()?.filter { (it.endMs - it.startMs) > 0 } ?: emptyList()
+            if (vNodes.isNotEmpty()) {
+                val curIndex = player.currentMediaItemIndex
+                var offset = 0L
+                for (i in 0 until minOf(curIndex, vNodes.size)) {
+                    offset += (vNodes[i].endMs - vNodes[i].startMs)
+                }
+                playbackPositionMs = offset + player.currentPosition
+            } else {
+                playbackPositionMs = player.currentPosition
+            }
+            delay(100)
+        }
+    }
+
+    // Refresh player item when project or composition schema changes
     LaunchedEffect(state.project, state.compositionSchema) {
+        val schema = state.compositionSchema
+        val videoNodes = schema?.timeline?.filterIsInstance<TimelineNode.Video>()?.filter { (it.endMs - it.startMs) > 0 } ?: emptyList()
         val sourceUri = state.source?.uri
-        if (!sourceUri.isNullOrEmpty()) {
-            val mediaItem = MediaItem.fromUri(Uri.parse(sourceUri))
-            player.setMediaItem(mediaItem)
+
+        if (videoNodes.isNotEmpty()) {
+            val items = videoNodes.map { node ->
+                val durationMs = node.endMs - node.startMs
+                val clipping = MediaItem.ClippingConfiguration.Builder()
+                    .setStartPositionMs(node.sourceStartMs)
+                    .setEndPositionMs(node.sourceStartMs + durationMs)
+                    .build()
+                MediaItem.Builder()
+                    .setUri(Uri.parse(node.src))
+                    .setClippingConfiguration(clipping)
+                    .build()
+            }
+            player.setMediaItems(items)
+            player.prepare()
+        } else if (state.project != null && state.project!!.operations.any { it is RemoveRanges && it.enabled }) {
+            val proj = state.project!!
+            val durationMs = proj.durationMs
+            val cuts = proj.operations.filterIsInstance<RemoveRanges>().filter { it.enabled }.flatMap { it.ranges }.sortedBy { it.startMs }
+            val retained = ExportCoordinator.retainedRanges(durationMs, cuts)
+            if (retained.isNotEmpty() && !sourceUri.isNullOrEmpty()) {
+                val items = retained.map { r ->
+                    val clipping = MediaItem.ClippingConfiguration.Builder()
+                        .setStartPositionMs(r.startMs)
+                        .setEndPositionMs(r.endMs)
+                        .build()
+                    MediaItem.Builder()
+                        .setUri(Uri.parse(sourceUri))
+                        .setClippingConfiguration(clipping)
+                        .build()
+                }
+                player.setMediaItems(items)
+                player.prepare()
+            } else if (!sourceUri.isNullOrEmpty()) {
+                player.setMediaItem(MediaItem.fromUri(Uri.parse(sourceUri)))
+                player.prepare()
+            }
+        } else if (!sourceUri.isNullOrEmpty()) {
+            player.setMediaItem(MediaItem.fromUri(Uri.parse(sourceUri)))
             player.prepare()
         }
     }
@@ -282,6 +351,40 @@ fun EditorScreen(
                                 },
                                 modifier = Modifier.fillMaxSize()
                             )
+
+                            // On-screen subtitle/caption overlay
+                            val activeCaption = remember(playbackPositionMs, state.compositionSchema) {
+                                val schema = state.compositionSchema
+                                schema?.timeline?.filterIsInstance<TimelineNode.Text>()
+                                    ?.firstOrNull { it.isVisible && playbackPositionMs in it.startMs..it.endMs }
+                            }
+
+                            activeCaption?.let { caption ->
+                                val posY = caption.style?.posY ?: -0.35f
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 24.dp, vertical = 20.dp),
+                                    contentAlignment = BiasAlignment(0f, -posY)
+                                ) {
+                                    Text(
+                                        text = caption.text,
+                                        color = Color(android.graphics.Color.parseColor(caption.style?.color ?: "#FFFFFF")),
+                                        fontSize = ((caption.style?.fontSize ?: 60f) * 0.32f).sp,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center,
+                                        style = TextStyle(
+                                            shadow = Shadow(
+                                                color = Color.Black,
+                                                blurRadius = 8f
+                                            )
+                                        ),
+                                        modifier = Modifier
+                                            .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
+                                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
                         } else {
                             CircularProgressIndicator(color = Lavender)
                         }
@@ -639,12 +742,15 @@ fun EditorScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChatBubbleItem(
     message: UiChatMessage,
     onUndo: (() -> Unit)? = null
 ) {
     val isThinkingOrEditing = message.text.startsWith("Thinking") || message.text.startsWith("Editing")
+    val clipboardManager = LocalClipboardManager.current
+    var showContextMenu by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -683,6 +789,10 @@ fun ChatBubbleItem(
                         .widthIn(max = 280.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(Raised)
+                        .combinedClickable(
+                            onClick = {},
+                            onLongClick = { showContextMenu = true }
+                        )
                         .padding(horizontal = 14.dp, vertical = 10.dp)
                 ) {
                     Text(
@@ -691,6 +801,43 @@ fun ChatBubbleItem(
                         color = Cream,
                         lineHeight = 20.sp
                     )
+
+                    DropdownMenu(
+                        expanded = showContextMenu,
+                        onDismissRequest = { showContextMenu = false },
+                        modifier = Modifier.background(Raised)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Copy", color = Cream) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = null,
+                                    tint = Cream
+                                )
+                            },
+                            onClick = {
+                                showContextMenu = false
+                                clipboardManager.setText(AnnotatedString(message.text))
+                            }
+                        )
+                        if (onUndo != null) {
+                            DropdownMenuItem(
+                                text = { Text("Undo this edit", color = Coral) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Undo,
+                                        contentDescription = null,
+                                        tint = Coral
+                                    )
+                                },
+                                onClick = {
+                                    showContextMenu = false
+                                    onUndo()
+                                }
+                            )
+                        }
+                    }
                 }
             }
         } else if (isThinkingOrEditing) {
@@ -701,14 +848,55 @@ fun ChatBubbleItem(
                     .widthIn(max = 280.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(Workspace)
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = { showContextMenu = true }
+                    )
                     .padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
-                Text(
+                AnimatedResponseText(
                     text = message.text,
-                    fontSize = 15.sp,
                     color = Cream,
+                    fontSize = 15.sp,
                     lineHeight = 20.sp
                 )
+
+                DropdownMenu(
+                    expanded = showContextMenu,
+                    onDismissRequest = { showContextMenu = false },
+                    modifier = Modifier.background(Raised)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Copy", color = Cream) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = null,
+                                tint = Cream
+                            )
+                        },
+                        onClick = {
+                            showContextMenu = false
+                            clipboardManager.setText(AnnotatedString(message.text))
+                        }
+                    )
+                    if (onUndo != null) {
+                        DropdownMenuItem(
+                            text = { Text("Undo this edit", color = Coral) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Undo,
+                                    contentDescription = null,
+                                    tint = Coral
+                                )
+                            },
+                            onClick = {
+                                showContextMenu = false
+                                onUndo()
+                            }
+                        )
+                    }
+                }
             }
         }
     }

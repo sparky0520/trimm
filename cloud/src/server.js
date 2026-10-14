@@ -277,6 +277,7 @@ const server = http.createServer(async (request, response) => {
       const finalRes = await agentDecisionProvider.chatCompletion(payload, (status) => {
         response.write(`event: status\ndata: ${JSON.stringify({ status })}\n\n`);
       });
+      console.log(`[chat-completion] decision type: ${finalRes.type}, summary: "${finalRes.summary || ''}", schema nodes: ${finalRes.schema?.timeline?.length || 0}`);
       response.write(`event: done\ndata: ${JSON.stringify(finalRes)}\n\n`);
       return response.end();
     } catch (error) {

@@ -208,6 +208,8 @@ When removing a time range [cutStartMs, cutEndMs] from the source video:
    - Clip B: starts at sourceStartMs = cutEndMs, but its timeline startMs starts immediately where Clip A ends!
 2. The output timeline MUST BE CONTINUOUS without gaps between sequential video clips.
 3. CRITICAL: Whenever a section of video is cut, all subsequent timeline nodes (video clips, caption text, titles, effects, audio) MUST have their startMs and endMs shifted earlier by the duration of the cut to keep audio, visuals, and text in sync!
+4. CRITICAL RULE: When removing dead air, awkward pauses, or silences, you MUST return MULTIPLE sequential VideoNode items that omit the silence gaps. NEVER return a single uncut VideoNode spanning the whole video when claiming to cut pauses or dead air.
+
 
 #### B. TextNode (type: "text")
 Represents on-screen subtitles, captions, lower-thirds, or title graphics.
@@ -396,8 +398,96 @@ Action:
       return { type: "edit_program", operations: [], summary: failure.args.reason };
     }
 
+function sliceVideoNodesBySilences(baseSchema, silences, sourceUri, originalDurationMs, minSilenceMs = 500) {
+  if (!baseSchema || !Array.isArray(silences) || silences.length === 0 || !originalDurationMs) {
+    return baseSchema;
+  }
+  const filteredSilences = silences
+    .filter(s => (s.endMs - s.startMs) >= minSilenceMs)
+    .sort((a, b) => a.startMs - b.startMs);
+
+  if (filteredSilences.length === 0) return baseSchema;
+
+  const retained = [];
+  let curr = 0;
+  for (const s of filteredSilences) {
+    if (s.startMs > curr) {
+      retained.push({ sourceStartMs: curr, sourceEndMs: s.startMs });
+    }
+    curr = Math.max(curr, s.endMs);
+  }
+  if (curr < originalDurationMs) {
+    retained.push({ sourceStartMs: curr, sourceEndMs: originalDurationMs });
+  }
+
+  if (retained.length === 0) return baseSchema;
+
+  let timelineMs = 0;
+  const newVideoNodes = retained.map((r, i) => {
+    const dur = r.sourceEndMs - r.sourceStartMs;
+    const node = {
+      type: 'video',
+      id: `vseg-${i}-${Date.now().toString(36)}`,
+      src: sourceUri,
+      startMs: timelineMs,
+      endMs: timelineMs + dur,
+      sourceStartMs: r.sourceStartMs,
+      transition: i > 0 ? 'crossfade' : null
+    };
+    timelineMs += dur;
+    return node;
+  });
+
+  const sourceToOutput = (sourceMs) => {
+    let outputMs = 0;
+    for (const r of retained) {
+      const dur = r.sourceEndMs - r.sourceStartMs;
+      if (sourceMs < r.sourceStartMs) return outputMs;
+      if (sourceMs <= r.sourceEndMs) return outputMs + (sourceMs - r.sourceStartMs);
+      outputMs += dur;
+    }
+    return outputMs;
+  };
+
+  const otherNodes = (baseSchema.timeline || [])
+    .filter(n => n.type !== 'video')
+    .map(n => {
+      const newStart = sourceToOutput(n.startMs);
+      const newEnd = sourceToOutput(n.endMs);
+      return {
+        ...n,
+        startMs: newStart,
+        endMs: Math.max(newStart, newEnd)
+      };
+    });
+
+  return {
+    ...baseSchema,
+    timeline: [...newVideoNodes, ...otherNodes]
+  };
+}
+
     if (!response.toolCalls || response.toolCalls.length === 0) {
       if (response.rawText) {
+        const rawLower = response.rawText.toLowerCase();
+        const lastUserMsg = (history[history.length - 1]?.content || '').toLowerCase();
+        const userAskedSilenceCut = lastUserMsg.includes('cut') || lastUserMsg.includes('trim') || lastUserMsg.includes('silence') || lastUserMsg.includes('dead air') || lastUserMsg.includes('pause');
+        const modelClaimedSilenceCut = rawLower.includes('silence') || rawLower.includes('dead air') || rawLower.includes('pause') || rawLower.includes('removed') || rawLower.includes('trimmed');
+
+        if (schema && (userAskedSilenceCut || modelClaimedSilenceCut)) {
+          const detectedSilences = (schema?.metadata?.silences && schema.metadata.silences.length > 0)
+            ? schema.metadata.silences
+            : preprocessedTranscript.filter(t => t.type === 'silence');
+          const primaryDuration = sources[0]?.durationMs || 0;
+          if (detectedSilences.length > 0 && primaryDuration > 0) {
+            const sliced = sliceVideoNodesBySilences(schema, detectedSilences, sources[0]?.uri || '', primaryDuration);
+            return {
+              type: "schema_patch",
+              schema: sliced,
+              summary: response.rawText
+            };
+          }
+        }
         return { type: "edit_program", operations: [], summary: response.rawText };
       }
       throw Object.assign(new Error("Agent did not return any operations or text response."), { code: 'worker_execution_error' });
@@ -410,13 +500,34 @@ Action:
 
     const schemaPatch = response.toolCalls.find(tc => tc.name === 'apply_schema_patch');
     if (schemaPatch) {
+      let finalPatchSchema = schemaPatch.args.schema;
+      const videoNodes = (finalPatchSchema.timeline || []).filter(tc => tc.type === 'video');
+      const reasonText = (schemaPatch.args.reason || response.rawText || '').toLowerCase();
+      const lastUserMsg = (history[history.length - 1]?.content || '').toLowerCase();
+      const userAskedSilenceCut = lastUserMsg.includes('cut') || lastUserMsg.includes('trim') || lastUserMsg.includes('silence') || lastUserMsg.includes('dead air') || lastUserMsg.includes('pause');
+      const modelClaimedSilenceCut = reasonText.includes('silence') || reasonText.includes('dead air') || reasonText.includes('pause') || reasonText.includes('removed');
+
+      // If silence cut was claimed/requested, but videoNodes were returned unsliced (single node spanning entire duration)
+      const primaryDuration = sources[0]?.durationMs || 0;
+      if ((userAskedSilenceCut || modelClaimedSilenceCut) && videoNodes.length === 1 && primaryDuration > 0) {
+        const vNode = videoNodes[0];
+        if (vNode.sourceStartMs === 0 && (vNode.endMs - vNode.startMs) >= (primaryDuration - 250)) {
+          const detectedSilences = (schema?.metadata?.silences && schema.metadata.silences.length > 0)
+            ? schema.metadata.silences
+            : preprocessedTranscript.filter(t => t.type === 'silence');
+          if (detectedSilences.length > 0) {
+            finalPatchSchema = sliceVideoNodesBySilences(finalPatchSchema, detectedSilences, vNode.src || sources[0]?.uri, primaryDuration);
+          }
+        }
+      }
+
       // Enforce immutability of metadata
       if (schema && schema.metadata) {
-        schemaPatch.args.schema.metadata = schema.metadata;
+        finalPatchSchema.metadata = schema.metadata;
       }
       return {
         type: "schema_patch",
-        schema: schemaPatch.args.schema,
+        schema: finalPatchSchema,
         summary: schemaPatch.args.reason || response.rawText || "Proposed edit"
       };
     }
