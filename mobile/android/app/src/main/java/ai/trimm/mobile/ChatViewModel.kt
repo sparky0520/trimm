@@ -215,6 +215,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             analysis = Analysis(),
             operations = emptyList(),
             undo = emptyList(),
+            export = ExportSettingsResolver.resolve(firstSource),
             revision = 1L
         )
 
@@ -362,8 +363,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
+            val isVertical = (firstSource.rotation == 90 || firstSource.rotation == 270) || (firstSource.height > firstSource.width)
             val schema = CompositionSchema(
-                settings = CompositionSettings(),
+                settings = CompositionSettings(aspectRatio = if (isVertical) "9:16" else "16:9"),
                 metadata = metadata,
                 timeline = timeline
             )

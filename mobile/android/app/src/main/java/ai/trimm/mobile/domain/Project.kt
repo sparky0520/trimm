@@ -268,6 +268,55 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val createdAtEpochMs: Long = System.currentTimeMillis()
 )
 @Serializable data class ExportSettings(val width: Int, val height: Int, val codec: String = "video/avc", val bitrate: Int = 16_000_000)
+
+object ExportSettingsResolver {
+    fun resolve(
+        source: SourceMedia,
+        operations: List<EditInstruction> = emptyList(),
+        current: ExportSettings? = null
+    ): ExportSettings {
+        val isRotated = source.rotation == 90 || source.rotation == 270
+        val effectiveWidth = if (isRotated) source.height else source.width
+        val effectiveHeight = if (isRotated) source.width else source.height
+
+        val shortSide = minOf(effectiveWidth, effectiveHeight).takeIf { it > 0 } ?: 1080
+        val longSide = maxOf(effectiveWidth, effectiveHeight).takeIf { it > 0 } ?: 1920
+
+        val ratio = effectiveWidth.toFloat() / effectiveHeight.toFloat().coerceAtLeast(1f)
+        var targetRatio = when {
+            ratio in 0.9f..1.1f -> AspectRatio.SQUARE
+            effectiveWidth > effectiveHeight -> AspectRatio.LANDSCAPE
+            else -> AspectRatio.PORTRAIT
+        }
+
+        for (op in operations) {
+            if (op is SetAspectRatio && op.enabled) {
+                targetRatio = op.ratio
+            }
+        }
+
+        operations.filterIsInstance<SetRotation>().lastOrNull { it.enabled }?.let { op ->
+            val rotation = op.rotation
+            if (kotlin.math.abs(rotation % 180f) == 90f) {
+                targetRatio = if (targetRatio == AspectRatio.LANDSCAPE) AspectRatio.PORTRAIT else AspectRatio.LANDSCAPE
+            }
+        }
+
+        val (outW, outH) = when (targetRatio) {
+            AspectRatio.PORTRAIT -> shortSide to longSide
+            AspectRatio.SQUARE -> shortSide to shortSide
+            AspectRatio.LANDSCAPE -> longSide to shortSide
+        }
+
+        return ExportSettings(
+            width = outW,
+            height = outH,
+            codec = current?.codec ?: "video/avc",
+            bitrate = current?.bitrate ?: 16_000_000
+        )
+    }
+}
+
 @Serializable data class ProjectSnapshot(
     val operations: List<EditInstruction> = emptyList(),
     val sources: List<SourceMedia> = emptyList(),
@@ -288,7 +337,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val operations: List<EditInstruction> = emptyList(),
     val undo: List<ProjectSnapshot> = emptyList(),
     val redo: List<ProjectSnapshot> = emptyList(),
-    val export: ExportSettings = ExportSettings(1920, 1080),
+    val export: ExportSettings = ExportSettings(1080, 1920),
     val revision: Long = 0,
     val appliedProgramIds: List<String> = emptyList()
 ) {
@@ -296,22 +345,7 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
     val orderedSources: List<SourceMedia> get() = sources.ifEmpty { listOf(source) }
     val durationMs: Long get() = orderedSources.sumOf { it.durationMs }
     private fun withExportRatioRecomputed(): MobileProject {
-        var targetRatio = operations.filterIsInstance<SetAspectRatio>().lastOrNull { it.enabled }?.ratio ?: preferences.aspectRatio
-        
-        operations.filterIsInstance<SetRotation>().lastOrNull { it.enabled }?.let { op ->
-            val rotation = op.rotation
-            if (kotlin.math.abs(rotation % 180f) == 90f) {
-                targetRatio = if (targetRatio == AspectRatio.LANDSCAPE) AspectRatio.PORTRAIT else AspectRatio.LANDSCAPE
-            }
-        }
-
-        val longSide = maxOf(export.width, export.height)
-        val shortSide = minOf(export.width, export.height)
-        val nextExport = when (targetRatio) {
-            AspectRatio.PORTRAIT -> export.copy(width = shortSide, height = longSide)
-            AspectRatio.LANDSCAPE -> export.copy(width = longSide, height = shortSide)
-            AspectRatio.SQUARE -> export.copy(width = shortSide, height = shortSide)
-        }
+        val nextExport = ExportSettingsResolver.resolve(source, operations, export)
         return if (export == nextExport) this else copy(export = nextExport)
     }
 

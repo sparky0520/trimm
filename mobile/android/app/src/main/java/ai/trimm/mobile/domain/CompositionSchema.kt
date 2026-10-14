@@ -13,7 +13,7 @@ data class CompositionSchema(
 
 @Serializable
 data class CompositionSettings(
-    var aspectRatio: String = "16:9",
+    var aspectRatio: String = "9:16",
     var backgroundColor: String = "#000000",
     var autoEnhance: Boolean = false
 )

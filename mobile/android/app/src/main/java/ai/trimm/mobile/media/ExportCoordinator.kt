@@ -443,7 +443,20 @@ private fun targets(itemId: String, exactId: String, legacyId: String, startMs: 
         val videoNodes = schema.timeline.filterIsInstance<TimelineNode.Video>().filter { (it.endMs - it.startMs) > 0 }
         require(videoNodes.isNotEmpty()) { "The composition timeline contains no video nodes." }
 
-        val (targetWidth, targetHeight) = when (schema.settings.aspectRatio) {
+        val isVertical = project.orderedSources.firstOrNull()?.let {
+            it.rotation == 90 || it.rotation == 270 || it.height > it.width
+        } ?: (project.export.height > project.export.width)
+
+        val defaultRatio = if (isVertical) "9:16" else "16:9"
+        val effectiveRatio = when (schema.settings.aspectRatio) {
+            "9:16" -> "9:16"
+            "1:1" -> "1:1"
+            "4:5" -> "4:5"
+            "16:9" -> if (isVertical) "9:16" else "16:9"
+            else -> defaultRatio
+        }
+
+        val (targetWidth, targetHeight) = when (effectiveRatio) {
             "9:16" -> 1080 to 1920
             "1:1" -> 1080 to 1080
             "4:5" -> 1080 to 1350
@@ -487,11 +500,13 @@ private fun targets(itemId: String, exactId: String, legacyId: String, startMs: 
         val sequence = EditedMediaItemSequence.withAudioAndVideoFrom(clips)
         val videoEffects = mutableListOf<Effect>()
 
-        videoEffects += Presentation.createForWidthAndHeight(
-            targetWidth,
-            targetHeight,
-            Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP
-        )
+        if (!isPreview) {
+            videoEffects += Presentation.createForWidthAndHeight(
+                targetWidth,
+                targetHeight,
+                Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP
+            )
+        }
 
         // Text / Caption overlays for export (during preview, Compose renders overlay at 60fps)
         if (!isPreview) {
