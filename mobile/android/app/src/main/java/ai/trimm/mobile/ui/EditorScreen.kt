@@ -529,11 +529,15 @@ fun EditorScreen(
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp)
+                                            .fillMaxSize()
                                             .layout { measurable, constraints ->
-                                                val placeable = measurable.measure(constraints)
-                                                layout(placeable.width, placeable.height) {
+                                                val maxTextWidth = (videoWidthPx * 0.9f).roundToInt()
+                                                val childConstraints = constraints.copy(
+                                                    minWidth = 0,
+                                                    maxWidth = maxTextWidth.coerceAtMost(constraints.maxWidth)
+                                                )
+                                                val placeable = measurable.measure(childConstraints)
+                                                layout(constraints.maxWidth, constraints.maxHeight) {
                                                     val x = (targetCenterX - placeable.width / 2f).roundToInt()
                                                     val y = (targetCenterY - placeable.height / 2f).roundToInt()
                                                     placeable.placeRelative(x, y)
