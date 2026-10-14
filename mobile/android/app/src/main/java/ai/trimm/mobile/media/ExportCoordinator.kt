@@ -340,7 +340,10 @@ object ExportCoordinator {
             sequences += EditedMediaItemSequence.withAudioFrom(items)
         }
 
-        return Composition.Builder(sequences).setEffects(Effects(emptyList(), videoEffects)).build()
+        return Composition.Builder(sequences)
+            .setHdrMode(Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL)
+            .setEffects(Effects(emptyList(), videoEffects))
+            .build()
     }
 
     suspend fun export(context: Context, project: MobileProject, output: File): File = withContext(Dispatchers.Main) {
@@ -559,6 +562,7 @@ private fun targets(itemId: String, exactId: String, legacyId: String, startMs: 
         }
 
         return Composition.Builder(sequences)
+            .setHdrMode(Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL)
             .setEffects(Effects(emptyList(), videoEffects))
             .build()
     }
