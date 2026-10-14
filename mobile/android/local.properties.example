@@ -1,10 +1,13 @@
 TRIMM_BACKEND_URL=https://your-backend-url.fly.dev
 
-# Android release signing
+# Android release signing (Defaults are configured in build.gradle.kts)
 TRIMM_ANDROID_UPLOAD_STORE_FILE=keystore/trimm-upload.jks
-TRIMM_ANDROID_UPLOAD_STORE_PASSWORD=your_keystore_password
-TRIMM_ANDROID_UPLOAD_KEY_ALIAS=your_key_alias
-TRIMM_ANDROID_UPLOAD_KEY_PASSWORD=your_key_password
+TRIMM_ANDROID_UPLOAD_STORE_PASSWORD=6zyONJtxzPQPui33C2ws
+TRIMM_ANDROID_UPLOAD_KEY_ALIAS=trimm-upload
+TRIMM_ANDROID_UPLOAD_KEY_PASSWORD=6zyONJtxzPQPui33C2ws
+
+# RevenueCat (Google Play public API key starting with 'goog_')
+REVENUECAT_API_KEY=goog_your_google_play_key
 
 # Supabase Auth
 GOOGLE_WEB_CLIENT_ID=your_google_web_client_id.apps.googleusercontent.com

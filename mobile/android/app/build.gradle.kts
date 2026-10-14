@@ -12,10 +12,22 @@ if (localPropertiesFile.exists()) {
     localPropertiesFile.inputStream().use { localProperties.load(it) }
 }
 
-val uploadStorePath = localProperties.getProperty("TRIMM_ANDROID_UPLOAD_STORE_FILE") ?: ""
-val uploadStorePassword = localProperties.getProperty("TRIMM_ANDROID_UPLOAD_STORE_PASSWORD") ?: ""
-val uploadKeyAlias = localProperties.getProperty("TRIMM_ANDROID_UPLOAD_KEY_ALIAS") ?: ""
-val uploadKeyPassword = localProperties.getProperty("TRIMM_ANDROID_UPLOAD_KEY_PASSWORD") ?: ""
+val uploadStorePath = providers.gradleProperty("TRIMM_ANDROID_UPLOAD_STORE_FILE")
+    .orElse(providers.environmentVariable("TRIMM_ANDROID_UPLOAD_STORE_FILE"))
+    .orElse(localProperties.getProperty("TRIMM_ANDROID_UPLOAD_STORE_FILE") ?: "keystore/trimm-upload.jks")
+    .get()
+val uploadStorePassword = providers.gradleProperty("TRIMM_ANDROID_UPLOAD_STORE_PASSWORD")
+    .orElse(providers.environmentVariable("TRIMM_ANDROID_UPLOAD_STORE_PASSWORD"))
+    .orElse(localProperties.getProperty("TRIMM_ANDROID_UPLOAD_STORE_PASSWORD") ?: "6zyONJtxzPQPui33C2ws")
+    .get()
+val uploadKeyAlias = providers.gradleProperty("TRIMM_ANDROID_UPLOAD_KEY_ALIAS")
+    .orElse(providers.environmentVariable("TRIMM_ANDROID_UPLOAD_KEY_ALIAS"))
+    .orElse(localProperties.getProperty("TRIMM_ANDROID_UPLOAD_KEY_ALIAS") ?: "trimm-upload")
+    .get()
+val uploadKeyPassword = providers.gradleProperty("TRIMM_ANDROID_UPLOAD_KEY_PASSWORD")
+    .orElse(providers.environmentVariable("TRIMM_ANDROID_UPLOAD_KEY_PASSWORD"))
+    .orElse(localProperties.getProperty("TRIMM_ANDROID_UPLOAD_KEY_PASSWORD") ?: "6zyONJtxzPQPui33C2ws")
+    .get()
 
 android {
     namespace = "ai.trimm.mobile"
