@@ -62,6 +62,65 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var activeTransformer: Transformer? = null
     private var exportProgressJob: Job? = null
     private var fetchChatsJob: Job? = null
+    private var proxyJob: Job? = null
+
+    fun computeVideoCutsHash(schema: CompositionSchema?): String {
+        if (schema == null) return "source"
+        val videoNodes = schema.timeline.filterIsInstance<TimelineNode.Video>().filter { (it.endMs - it.startMs) > 0 }
+        if (videoNodes.isEmpty()) return "source"
+        val signature = videoNodes.joinToString(";") {
+            "${it.src}:${it.sourceStartMs}:${it.startMs}:${it.endMs}"
+        }
+        return signature.hashCode().toString().replace("-", "n")
+    }
+
+    private fun normalizeSchemaAspectRatio(project: MobileProject?, schema: CompositionSchema) {
+        val firstSrc = project?.orderedSources?.firstOrNull() ?: project?.source
+        val isVertical = firstSrc?.displaySize()?.let { it.height > it.width } ?: false
+        if (isVertical && (schema.settings.aspectRatio == "16:9" || schema.settings.aspectRatio.isBlank())) {
+            schema.settings.aspectRatio = "9:16"
+        }
+    }
+
+    fun updatePreviewProxy(project: MobileProject, schema: CompositionSchema?) {
+        val videoNodes = schema?.timeline?.filterIsInstance<TimelineNode.Video>()?.filter { (it.endMs - it.startMs) > 0 } ?: emptyList()
+        if (videoNodes.size <= 1) {
+            mutable.update { it.copy(previewUri = null) }
+            return
+        }
+
+        val hash = computeVideoCutsHash(schema)
+        val previewDir = File(getApplication<Application>().cacheDir, "previews").apply { mkdirs() }
+        val proxyFile = File(previewDir, "proxy_${project.id}_$hash.mp4")
+
+        if (proxyFile.exists() && proxyFile.length() > 0) {
+            val uriStr = Uri.fromFile(proxyFile).toString()
+            if (mutable.value.previewUri != uriStr) {
+                mutable.update { it.copy(previewUri = uriStr) }
+            }
+            return
+        }
+
+        proxyJob?.cancel()
+        proxyJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val generated = ExportCoordinator.generatePreviewProxy(
+                    getApplication(),
+                    project,
+                    schema!!,
+                    proxyFile
+                )
+                if (generated.exists() && generated.length() > 0) {
+                    val uriStr = Uri.fromFile(generated).toString()
+                    withContext(Dispatchers.Main) {
+                        mutable.update { it.copy(previewUri = uriStr) }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("ChatViewModel", "Preview proxy generation failed, falling back to direct playlist", e)
+            }
+        }
+    }
 
     init {
         viewModelScope.launch {
@@ -169,6 +228,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     jobMessage = null,
                     isProcessing = false
                 )
+            }
+
+            loadedSchema?.let { schema ->
+                val prevRatio = schema.settings.aspectRatio
+                normalizeSchemaAspectRatio(project, schema)
+                if (schema.settings.aspectRatio != prevRatio) {
+                    runCatching {
+                        val jsonStr = defaultJson.encodeToString(CompositionSchema.serializer(), schema)
+                        File(getApplication<Application>().filesDir, "${id}_composition.json").writeText(jsonStr)
+                    }
+                }
+                updatePreviewProxy(project, schema)
             }
         } catch (e: Exception) {
             mutable.update {
@@ -363,7 +434,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            val isVertical = (firstSource.rotation == 90 || firstSource.rotation == 270) || (firstSource.height > firstSource.width)
+            val isVertical = firstSource.displaySize().height > firstSource.displaySize().width
             val schema = CompositionSchema(
                 settings = CompositionSettings(aspectRatio = if (isVertical) "9:16" else "16:9"),
                 metadata = metadata,
@@ -423,6 +494,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     jobMessage = null
                 )
             }
+
+            updatePreviewProxy(projectWithSnapshot, schema)
 
             refreshChats()
         }
@@ -540,6 +613,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     val previousSchema = mutable.value.compositionSchema
 
                     if (response.schema != null) {
+                        normalizeSchemaAspectRatio(project, response.schema)
                         mutable.update { it.copy(compositionSchema = response.schema) }
                         runCatching {
                             val jsonStr = defaultJson.encodeToString(CompositionSchema.serializer(), response.schema)
@@ -569,6 +643,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             messages = filtered + UiChatMessage(text = replyText, isUser = false, turnId = turnId),
                             isProcessing = false
                         )
+                    }
+                    if (response.schema != null) {
+                        updatePreviewProxy(updatedProject, response.schema)
                     }
                     refreshChats()
                 } else if (response.type == "clarification") {
@@ -706,6 +783,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         )
 
         if (restoredSchema != null) {
+            normalizeSchemaAspectRatio(restoredProject, restoredSchema)
             runCatching {
                 val jsonStr = defaultJson.encodeToString(CompositionSchema.serializer(), restoredSchema)
                 File(getApplication<Application>().filesDir, "${project.id}_composition.json").writeText(jsonStr)
@@ -728,6 +806,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 isProcessing = false
             )
         }
+
+        updatePreviewProxy(restoredProject, restoredSchema ?: mutable.value.compositionSchema)
 
         viewModelScope.launch {
             runCatching {

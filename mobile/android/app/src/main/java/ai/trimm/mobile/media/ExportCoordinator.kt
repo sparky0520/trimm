@@ -341,7 +341,7 @@ object ExportCoordinator {
         }
 
         return Composition.Builder(sequences)
-            .setHdrMode(Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL)
+            .setHdrMode(Composition.HDR_MODE_KEEP_HDR)
             .setEffects(Effects(emptyList(), videoEffects))
             .build()
     }
@@ -439,6 +439,156 @@ private fun targets(itemId: String, exactId: String, legacyId: String, startMs: 
         return Uri.fromFile(file)
     }
 
+    suspend fun generatePreviewProxy(
+        context: Context,
+        project: MobileProject,
+        schema: CompositionSchema,
+        output: File
+    ): File = withContext(Dispatchers.Main) {
+        output.parentFile?.mkdirs()
+        val tempFile = File(output.parentFile, "${output.name}.tmp")
+        tempFile.delete()
+
+        val composition = buildPreviewComposition(context, project, schema)
+        suspendCancellableCoroutine { continuation ->
+            val isHevc = project.export.codec == "video/hevc"
+
+            val transformer = Transformer.Builder(context)
+                .setVideoMimeType(if (isHevc) MimeTypes.VIDEO_H265 else MimeTypes.VIDEO_H264)
+                .addListener(object : Transformer.Listener {
+                    override fun onCompleted(composition: Composition, exportResult: ExportResult) {
+                        if (tempFile.exists() && tempFile.renameTo(output)) {
+                            if (continuation.isActive) continuation.resume(output)
+                        } else if (tempFile.exists()) {
+                            if (continuation.isActive) continuation.resume(tempFile)
+                        } else {
+                            if (continuation.isActive) continuation.resume(output)
+                        }
+                    }
+
+                    override fun onError(
+                        composition: Composition,
+                        exportResult: ExportResult,
+                        exportException: ExportException
+                    ) {
+                        tempFile.delete()
+                        if (continuation.isActive) continuation.resumeWithException(exportException)
+                    }
+                }).build()
+
+            continuation.invokeOnCancellation {
+                Handler(Looper.getMainLooper()).post {
+                    transformer.cancel()
+                    tempFile.delete()
+                }
+            }
+            transformer.start(composition, tempFile.absolutePath)
+        }
+    }
+
+    private fun buildPreviewComposition(
+        context: Context,
+        project: MobileProject,
+        schema: CompositionSchema
+    ): Composition {
+        val videoNodes = schema.timeline.filterIsInstance<TimelineNode.Video>().filter { (it.endMs - it.startMs) > 0 }
+        require(videoNodes.isNotEmpty()) { "The composition timeline contains no video nodes." }
+
+        val firstSrc = project.orderedSources.firstOrNull() ?: project.source
+        val isVertical = firstSrc?.displaySize()?.let { it.height > it.width }
+            ?: (project.export.height > project.export.width)
+
+        val defaultRatio = if (isVertical) "9:16" else "16:9"
+        val effectiveRatio = when (schema.settings.aspectRatio) {
+            "9:16" -> "9:16"
+            "1:1" -> "1:1"
+            "4:5" -> "4:5"
+            "16:9" -> if (isVertical) "9:16" else "16:9"
+            else -> defaultRatio
+        }
+
+        // 720p preview gives instant 1-2s hardware encode while looking retina-sharp in player view
+        val (targetWidth, targetHeight) = when (effectiveRatio) {
+            "9:16" -> 720 to 1280
+            "1:1" -> 720 to 720
+            "4:5" -> 720 to 900
+            else -> 1280 to 720
+        }
+
+        val clips = videoNodes.map { node ->
+            val durationMs = node.endMs - node.startMs
+            val clipping = MediaItem.ClippingConfiguration.Builder()
+                .setStartPositionMs(node.sourceStartMs)
+                .setEndPositionMs(node.sourceStartMs + durationMs)
+                .build()
+
+            val uriString = node.src.takeIf { it.isNotBlank() }
+                ?: project.source?.uri
+                ?: project.orderedSources.firstOrNull()?.uri
+                ?: ""
+
+            val mediaItem = MediaItem.Builder()
+                .setUri(Uri.parse(uriString))
+                .setClippingConfiguration(clipping)
+                .build()
+
+            val audioEffects = mutableListOf<androidx.media3.common.audio.AudioProcessor>()
+            if (schema.settings.autoEnhance) {
+                audioEffects.add(DialogueAudioProcessor(0f, -16f))
+            }
+
+            val sourceDurationMs = project.orderedSources.find { it.uri == uriString }?.durationMs
+                ?: project.source?.durationMs
+                ?: project.durationMs
+
+            EditedMediaItem.Builder(mediaItem)
+                .setDurationUs(maxOf(1L, sourceDurationMs * 1000L))
+                .setEffects(Effects(audioEffects, emptyList()))
+                .build()
+        }
+
+        val sequence = EditedMediaItemSequence.withAudioAndVideoFrom(clips)
+        val videoEffects = mutableListOf<Effect>()
+
+        videoEffects += Presentation.createForWidthAndHeight(
+            targetWidth,
+            targetHeight,
+            Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP
+        )
+
+        val sequences = mutableListOf(sequence)
+
+        // Audio Nodes (BGM / SFX)
+        val audioNodes = schema.timeline.filterIsInstance<TimelineNode.Audio>()
+        audioNodes.forEach { audio ->
+            val audioUri = Uri.parse(audio.src)
+            val audioDurationMs = getRemoteMediaDurationMs(audio.src, 15000L)
+            val volume = audio.volume ?: 1f
+            val audioEffects = mutableListOf<androidx.media3.common.audio.AudioProcessor>()
+            if (audio.autoDuck == true) {
+                val speechRanges = project.analysis.words.map { word ->
+                    TimeRange(maxOf(0L, word.range.startMs - 500L), word.range.endMs + 500L)
+                }
+                audioEffects.add(GainProcessor(SpeechDuckingGainProvider(volume, -15f, speechRanges)))
+            } else if (volume != 1f) {
+                audioEffects.add(GainProcessor(SpeechDuckingGainProvider(volume, 0f, emptyList())))
+            }
+
+            val mediaItem = MediaItem.Builder().setUri(audioUri).build()
+            val editedAudio = EditedMediaItem.Builder(mediaItem)
+                .setDurationUs(audioDurationMs * 1000L)
+                .setEffects(Effects(audioEffects, emptyList()))
+                .build()
+
+            sequences.add(EditedMediaItemSequence.withAudioFrom(listOf(editedAudio)))
+        }
+
+        return Composition.Builder(sequences)
+            .setHdrMode(Composition.HDR_MODE_KEEP_HDR)
+            .setEffects(Effects(emptyList(), videoEffects))
+            .build()
+    }
+
     private fun buildCompositionFromSchema(
         context: Context,
         project: MobileProject,
@@ -448,9 +598,9 @@ private fun targets(itemId: String, exactId: String, legacyId: String, startMs: 
         val videoNodes = schema.timeline.filterIsInstance<TimelineNode.Video>().filter { (it.endMs - it.startMs) > 0 }
         require(videoNodes.isNotEmpty()) { "The composition timeline contains no video nodes." }
 
-        val isVertical = project.orderedSources.firstOrNull()?.let {
-            it.rotation == 90 || it.rotation == 270 || it.height > it.width
-        } ?: (project.export.height > project.export.width)
+        val firstSrc = project.orderedSources.firstOrNull() ?: project.source
+        val isVertical = firstSrc?.displaySize()?.let { it.height > it.width }
+            ?: (project.export.height > project.export.width)
 
         val defaultRatio = if (isVertical) "9:16" else "16:9"
         val effectiveRatio = when (schema.settings.aspectRatio) {
@@ -562,7 +712,7 @@ private fun targets(itemId: String, exactId: String, legacyId: String, startMs: 
         }
 
         return Composition.Builder(sequences)
-            .setHdrMode(Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL)
+            .setHdrMode(Composition.HDR_MODE_KEEP_HDR)
             .setEffects(Effects(emptyList(), videoEffects))
             .build()
     }

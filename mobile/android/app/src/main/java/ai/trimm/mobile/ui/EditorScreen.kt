@@ -59,6 +59,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.draw.clipToBounds
+import ai.trimm.mobile.domain.displaySize
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 
@@ -123,11 +125,14 @@ fun EditorScreen(
     }
 
     // Continuously monitor playback position for synchronized overlay rendering
-    LaunchedEffect(player, state.compositionSchema) {
+    LaunchedEffect(player, state.compositionSchema, state.previewUri) {
         while (true) {
             val schema = state.compositionSchema
             val vNodes = schema?.timeline?.filterIsInstance<TimelineNode.Video>()?.filter { (it.endMs - it.startMs) > 0 } ?: emptyList()
-            if (vNodes.isNotEmpty()) {
+            if (!state.previewUri.isNullOrEmpty()) {
+                // Preview proxy is a single continuous stitched video: player position matches timeline 1:1!
+                playbackPositionMs = player.currentPosition
+            } else if (vNodes.isNotEmpty()) {
                 val curIndex = player.currentMediaItemIndex
                 if (curIndex in vNodes.indices) {
                     playbackPositionMs = vNodes[curIndex].startMs + player.currentPosition
@@ -139,57 +144,82 @@ fun EditorScreen(
         }
     }
 
-    // Refresh player media source when project or composition schema changes
-    LaunchedEffect(state.project, state.compositionSchema) {
+    var currentLoadedSignature by remember { mutableStateOf<String?>(null) }
+
+    // Refresh player media source when project, composition schema, or previewUri changes
+    LaunchedEffect(state.project, state.compositionSchema, state.previewUri) {
         val proj = state.project ?: return@LaunchedEffect
         val schema = state.compositionSchema
-        val videoNodes = schema?.timeline?.filterIsInstance<TimelineNode.Video>()?.filter { (it.endMs - it.startMs) > 0 } ?: emptyList()
         val sourceUri = state.source?.uri ?: proj.orderedSources.firstOrNull()?.uri
 
-        val extractorsFactory = androidx.media3.extractor.DefaultExtractorsFactory()
-            .setMp4ExtractorFlags(androidx.media3.extractor.mp4.Mp4Extractor.FLAG_WORKAROUND_IGNORE_EDIT_LISTS)
-        val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(context, extractorsFactory)
-            .setEnableClippingInMediaPeriod(true)
-
-        if (videoNodes.isNotEmpty()) {
-            val items = videoNodes.map { node ->
-                val durationMs = node.endMs - node.startMs
-                val clipping = MediaItem.ClippingConfiguration.Builder()
-                    .setStartPositionMs(node.sourceStartMs)
-                    .setEndPositionMs(node.sourceStartMs + durationMs)
-                    .build()
-                val uriString = node.src.takeIf { it.isNotBlank() } ?: sourceUri ?: ""
-                MediaItem.Builder()
-                    .setUri(Uri.parse(uriString))
-                    .setClippingConfiguration(clipping)
-                    .build()
+        // Priority 1: Fast Local Preview Proxy (single continuous file, 0 transitions, 60fps scrub)
+        if (!state.previewUri.isNullOrEmpty()) {
+            val proxyUriStr = state.previewUri
+            if (currentLoadedSignature != proxyUriStr || player.mediaItemCount != 1) {
+                currentLoadedSignature = proxyUriStr
+                val wasPlaying = player.isPlaying
+                val currentPos = player.currentPosition
+                player.setMediaItem(MediaItem.fromUri(Uri.parse(proxyUriStr)))
+                player.prepare()
+                if (currentPos > 0) player.seekTo(currentPos)
+                if (wasPlaying) player.play()
             }
-            player.setMediaItems(items)
-            player.prepare()
-        } else if (proj.operations.any { it is RemoveRanges && it.enabled }) {
-            val durationMs = proj.durationMs
-            val cuts = proj.operations.filterIsInstance<RemoveRanges>().filter { it.enabled }.flatMap { it.ranges }.sortedBy { it.startMs }
-            val retained = ExportCoordinator.retainedRanges(durationMs, cuts)
-            if (retained.isNotEmpty() && !sourceUri.isNullOrEmpty()) {
-                val items = retained.map { r ->
+            return@LaunchedEffect
+        }
+
+        // Priority 2: Direct playlist of video cuts while proxy is rendering in background
+        val videoNodes = schema?.timeline?.filterIsInstance<TimelineNode.Video>()?.filter { (it.endMs - it.startMs) > 0 } ?: emptyList()
+        if (videoNodes.isNotEmpty()) {
+            val signature = "cuts:" + videoNodes.joinToString(";") { "${it.src}:${it.sourceStartMs}:${it.startMs}:${it.endMs}" }
+            if (currentLoadedSignature != signature || player.mediaItemCount != videoNodes.size) {
+                currentLoadedSignature = signature
+                val items = videoNodes.map { node ->
+                    val durationMs = node.endMs - node.startMs
                     val clipping = MediaItem.ClippingConfiguration.Builder()
-                        .setStartPositionMs(r.startMs)
-                        .setEndPositionMs(r.endMs)
+                        .setStartPositionMs(node.sourceStartMs)
+                        .setEndPositionMs(node.sourceStartMs + durationMs)
                         .build()
+                    val uriString = node.src.takeIf { it.isNotBlank() } ?: sourceUri ?: ""
                     MediaItem.Builder()
-                        .setUri(Uri.parse(sourceUri))
+                        .setUri(Uri.parse(uriString))
                         .setClippingConfiguration(clipping)
                         .build()
                 }
                 player.setMediaItems(items)
                 player.prepare()
-            } else if (!sourceUri.isNullOrEmpty()) {
+            }
+        } else if (proj.operations.any { it is RemoveRanges && it.enabled }) {
+            val durationMs = proj.durationMs
+            val cuts = proj.operations.filterIsInstance<RemoveRanges>().filter { it.enabled }.flatMap { it.ranges }.sortedBy { it.startMs }
+            val retained = ExportCoordinator.retainedRanges(durationMs, cuts)
+            val signature = "ops:" + retained.joinToString(";") { "${it.startMs}:${it.endMs}" }
+            if (currentLoadedSignature != signature) {
+                currentLoadedSignature = signature
+                if (retained.isNotEmpty() && !sourceUri.isNullOrEmpty()) {
+                    val items = retained.map { r ->
+                        val clipping = MediaItem.ClippingConfiguration.Builder()
+                            .setStartPositionMs(r.startMs)
+                            .setEndPositionMs(r.endMs)
+                            .build()
+                        MediaItem.Builder()
+                            .setUri(Uri.parse(sourceUri))
+                            .setClippingConfiguration(clipping)
+                            .build()
+                    }
+                    player.setMediaItems(items)
+                    player.prepare()
+                } else if (!sourceUri.isNullOrEmpty()) {
+                    player.setMediaItem(MediaItem.fromUri(Uri.parse(sourceUri)))
+                    player.prepare()
+                }
+            }
+        } else if (!sourceUri.isNullOrEmpty()) {
+            val signature = "single:$sourceUri"
+            if (currentLoadedSignature != signature) {
+                currentLoadedSignature = signature
                 player.setMediaItem(MediaItem.fromUri(Uri.parse(sourceUri)))
                 player.prepare()
             }
-        } else if (!sourceUri.isNullOrEmpty()) {
-            player.setMediaItem(MediaItem.fromUri(Uri.parse(sourceUri)))
-            player.prepare()
         }
     }
 
@@ -367,62 +397,88 @@ fun EditorScreen(
                     enter = expandVertically(animationSpec = tween(300)) + fadeIn(),
                     exit = shrinkVertically(animationSpec = tween(300)) + fadeOut()
                 ) {
-                    Box(
+                    val sourceMedia = state.source ?: state.project?.orderedSources?.firstOrNull()
+                    val isSourcePortrait = sourceMedia?.displaySize()?.let { it.height > it.width } ?: true
+                    val effectiveAspectRatio = when (state.compositionSchema?.settings?.aspectRatio) {
+                        "9:16" -> 9f / 16f
+                        "1:1" -> 1f
+                        "4:5" -> 4f / 5f
+                        "16:9" -> if (isSourcePortrait) 9f / 16f else 16f / 9f
+                        else -> if (isSourcePortrait) 9f / 16f else 16f / 9f
+                    }
+
+                    BoxWithConstraints(
                         modifier = Modifier
                             .fillMaxWidth()
                             .fillMaxHeight(0.40f)
                             .background(Color.Black),
                         contentAlignment = Alignment.Center
                     ) {
+                        val containerWidth = maxWidth
+                        val containerHeight = maxHeight
+                        val (videoWidth, videoHeight) = if ((containerWidth / containerHeight) > effectiveAspectRatio) {
+                            (containerHeight * effectiveAspectRatio) to containerHeight
+                        } else {
+                            containerWidth to (containerWidth / effectiveAspectRatio)
+                        }
+
                         if (state.source != null) {
-                            AndroidView(
-                                factory = { ctx ->
-                                    PlayerView(ctx).apply {
-                                        this.player = player
-                                        useController = true
-                                        setShowMultiWindowTimeBar(true)
-                                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                                        setShowPreviousButton(false)
-                                        setShowNextButton(false)
-                                        setShowRewindButton(true)
-                                        setShowFastForwardButton(true)
-                                    }
-                                },
-                                update = { if (it.player != player) it.player = player },
-                                modifier = Modifier.fillMaxSize()
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .width(videoWidth)
+                                    .height(videoHeight)
+                                    .clipToBounds(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                AndroidView(
+                                    factory = { ctx ->
+                                        PlayerView(ctx).apply {
+                                            this.player = player
+                                            useController = true
+                                            setShowMultiWindowTimeBar(true)
+                                            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                            setShowPreviousButton(false)
+                                            setShowNextButton(false)
+                                            setShowRewindButton(true)
+                                            setShowFastForwardButton(true)
+                                        }
+                                    },
+                                    update = { if (it.player != player) it.player = player },
+                                    modifier = Modifier.fillMaxSize()
+                                )
 
-                            // On-screen subtitle/caption overlay
-                            val activeCaption = remember(playbackPositionMs, state.compositionSchema) {
-                                val schema = state.compositionSchema
-                                schema?.timeline?.filterIsInstance<TimelineNode.Text>()
-                                    ?.firstOrNull { it.isVisible && playbackPositionMs in it.startMs..it.endMs }
-                            }
+                                // On-screen subtitle/caption overlay - strictly bounded within video frame!
+                                val activeCaption = remember(playbackPositionMs, state.compositionSchema) {
+                                    val schema = state.compositionSchema
+                                    schema?.timeline?.filterIsInstance<TimelineNode.Text>()
+                                        ?.firstOrNull { it.isVisible && playbackPositionMs in it.startMs..it.endMs }
+                                }
 
-                            activeCaption?.let { caption ->
-                                val posY = caption.style?.posY ?: -0.35f
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = 24.dp, vertical = 20.dp),
-                                    contentAlignment = BiasAlignment(0f, -posY)
-                                ) {
-                                    Text(
-                                        text = caption.text,
-                                        color = Color(android.graphics.Color.parseColor(caption.style?.color ?: "#FFFFFF")),
-                                        fontSize = ((caption.style?.fontSize ?: 60f) * 0.32f).sp,
-                                        fontWeight = FontWeight.Bold,
-                                        textAlign = TextAlign.Center,
-                                        style = TextStyle(
-                                            shadow = Shadow(
-                                                color = Color.Black,
-                                                blurRadius = 8f
-                                            )
-                                        ),
+                                activeCaption?.let { caption ->
+                                    val posY = caption.style?.posY ?: -0.35f
+                                    Box(
                                         modifier = Modifier
-                                            .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
-                                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                                    )
+                                            .fillMaxSize()
+                                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                                        contentAlignment = BiasAlignment(0f, -posY)
+                                    ) {
+                                        Text(
+                                            text = caption.text,
+                                            color = Color(android.graphics.Color.parseColor(caption.style?.color ?: "#FFFFFF")),
+                                            fontSize = ((caption.style?.fontSize ?: 60f) * 0.28f).sp,
+                                            fontWeight = FontWeight.Bold,
+                                            textAlign = TextAlign.Center,
+                                            style = TextStyle(
+                                                shadow = Shadow(
+                                                    color = Color.Black,
+                                                    blurRadius = 8f
+                                                )
+                                            ),
+                                            modifier = Modifier
+                                                .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(6.dp))
+                                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                        )
+                                    }
                                 }
                             }
                         } else {
@@ -804,10 +860,7 @@ fun ChatBubbleItem(
                 if (onUndo != null) {
                     Box(
                         modifier = Modifier
-                            .size(26.dp)
-                            .clip(CircleShape)
-                            .background(Workspace)
-                            .border(1.dp, Border.copy(alpha = 0.5f), CircleShape)
+                            .size(36.dp)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
@@ -815,12 +868,21 @@ fun ChatBubbleItem(
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Undo,
-                            contentDescription = "Undo this edit",
-                            tint = Lavender.copy(alpha = 0.85f),
-                            modifier = Modifier.size(13.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(26.dp)
+                                .clip(CircleShape)
+                                .background(Workspace)
+                                .border(1.dp, Border.copy(alpha = 0.5f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Undo,
+                                contentDescription = "Undo this edit",
+                                tint = Lavender.copy(alpha = 0.85f),
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
                     }
                 }
 
