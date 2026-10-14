@@ -81,10 +81,13 @@ fun EditorScreen(
 
     // Video Player
     val player = remember {
-        ExoPlayer.Builder(context).build().apply {
-            repeatMode = ExoPlayer.REPEAT_MODE_ALL
-            playWhenReady = true
-        }
+        ExoPlayer.Builder(context)
+            .setSeekBackIncrementMs(5000)
+            .setSeekForwardIncrementMs(15000)
+            .build().apply {
+                repeatMode = ExoPlayer.REPEAT_MODE_ALL
+                playWhenReady = true
+            }
     }
 
     DisposableEffect(player) {
@@ -100,15 +103,13 @@ fun EditorScreen(
             val vNodes = schema?.timeline?.filterIsInstance<TimelineNode.Video>()?.filter { (it.endMs - it.startMs) > 0 } ?: emptyList()
             if (vNodes.isNotEmpty()) {
                 val curIndex = player.currentMediaItemIndex
-                var offset = 0L
-                for (i in 0 until minOf(curIndex, vNodes.size)) {
-                    offset += (vNodes[i].endMs - vNodes[i].startMs)
+                if (curIndex in vNodes.indices) {
+                    playbackPositionMs = vNodes[curIndex].startMs + player.currentPosition
                 }
-                playbackPositionMs = offset + player.currentPosition
             } else {
                 playbackPositionMs = player.currentPosition
             }
-            delay(100)
+            delay(50)
         }
     }
 
@@ -125,8 +126,9 @@ fun EditorScreen(
                     .setStartPositionMs(node.sourceStartMs)
                     .setEndPositionMs(node.sourceStartMs + durationMs)
                     .build()
+                val uriString = node.src.takeIf { it.isNotBlank() } ?: sourceUri ?: ""
                 MediaItem.Builder()
-                    .setUri(Uri.parse(node.src))
+                    .setUri(Uri.parse(uriString))
                     .setClippingConfiguration(clipping)
                     .build()
             }
@@ -347,6 +349,11 @@ fun EditorScreen(
                                     PlayerView(ctx).apply {
                                         this.player = player
                                         useController = true
+                                        setShowMultiWindowTimeBar(true)
+                                        setShowPreviousButton(false)
+                                        setShowNextButton(false)
+                                        setShowRewindButton(true)
+                                        setShowFastForwardButton(true)
                                     }
                                 },
                                 modifier = Modifier.fillMaxSize()

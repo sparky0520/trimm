@@ -230,7 +230,7 @@ class ChatRepository {
         json.decodeFromString<MobileProject>(content)
     }
 
-    suspend fun syncProject(context: Context, project: MobileProject) = withContext(Dispatchers.IO) {
+    suspend fun syncProject(context: Context, project: MobileProject, schema: CompositionSchema? = null) = withContext(Dispatchers.IO) {
         val dir = getProjectsDir(context)
         val file = File(dir, "${project.id}.json")
         val content = json.encodeToString(MobileProject.serializer(), project)
@@ -238,7 +238,7 @@ class ChatRepository {
         tmp.writeText(content)
         tmp.renameTo(file)
 
-        project.undo.lastOrNull()?.schema?.let { schema ->
+        if (schema != null) {
             runCatching {
                 val schemaFile = File(context.filesDir, "${project.id}_composition.json")
                 val schemaContent = json.encodeToString(CompositionSchema.serializer(), schema)

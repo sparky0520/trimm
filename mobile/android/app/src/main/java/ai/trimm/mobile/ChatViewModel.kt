@@ -401,7 +401,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             )
 
             runCatching {
-                ChatRepository.shared.syncProject(context, projectWithSnapshot)
+                ChatRepository.shared.syncProject(context, projectWithSnapshot, schema)
                 store.save(projectWithSnapshot)
             }
 
@@ -555,7 +555,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     )
 
                     runCatching {
-                        ChatRepository.shared.syncProject(getApplication(), updatedProject)
+                        ChatRepository.shared.syncProject(getApplication(), updatedProject, response.schema)
                         store.save(updatedProject)
                     }
 
@@ -729,7 +729,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             runCatching {
-                ChatRepository.shared.syncProject(getApplication(), restoredProject)
+                ChatRepository.shared.syncProject(getApplication(), restoredProject, restoredSchema)
                 store.save(restoredProject)
             }
             refreshChats()
