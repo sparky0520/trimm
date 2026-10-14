@@ -86,23 +86,25 @@ fun EditorScreen(
     val player = remember {
         val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                /* minBufferMs = */ 1000,
-                /* maxBufferMs = */ 5000,
-                /* bufferForPlaybackMs = */ 0,
-                /* bufferForPlaybackAfterRebufferMs = */ 0
+                /* minBufferMs = */ 15_000,
+                /* maxBufferMs = */ 50_000,
+                /* bufferForPlaybackMs = */ 100,
+                /* bufferForPlaybackAfterRebufferMs = */ 250
             )
             .setBufferDurationsMsForLocalPlayback(
-                /* minBufferForLocalPlaybackMs = */ 1000,
-                /* maxBufferForLocalPlaybackMs = */ 5000,
-                /* bufferForPlaybackForLocalPlaybackMs = */ 0,
-                /* bufferForPlaybackAfterRebufferForLocalPlaybackMs = */ 0
+                /* minBufferForLocalPlaybackMs = */ 15_000,
+                /* maxBufferForLocalPlaybackMs = */ 50_000,
+                /* bufferForPlaybackForLocalPlaybackMs = */ 100,
+                /* bufferForPlaybackAfterRebufferForLocalPlaybackMs = */ 250
             )
+            .setBackBuffer(5_000, true)
             .setPrioritizeTimeOverSizeThresholds(true)
             .setPrioritizeTimeOverSizeThresholdsForLocalPlayback(true)
             .build()
 
         val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(context)
-            .forceEnableMediaCodecAsynchronousQueueing()
+            .setEnableDecoderFallback(true)
+            .experimentalSetEnableMediaCodecVideoRendererPrewarming(true)
 
         ExoPlayer.Builder(context, renderersFactory)
             .setLoadControl(loadControl)
@@ -121,9 +123,18 @@ fun EditorScreen(
     }
 
     // Continuously monitor playback position for synchronized overlay rendering
-    LaunchedEffect(player) {
+    LaunchedEffect(player, state.compositionSchema) {
         while (true) {
-            playbackPositionMs = player.currentPosition
+            val schema = state.compositionSchema
+            val vNodes = schema?.timeline?.filterIsInstance<TimelineNode.Video>()?.filter { (it.endMs - it.startMs) > 0 } ?: emptyList()
+            if (vNodes.isNotEmpty()) {
+                val curIndex = player.currentMediaItemIndex
+                if (curIndex in vNodes.indices) {
+                    playbackPositionMs = vNodes[curIndex].startMs + player.currentPosition
+                }
+            } else {
+                playbackPositionMs = player.currentPosition
+            }
             delay(33)
         }
     }
@@ -135,45 +146,42 @@ fun EditorScreen(
         val videoNodes = schema?.timeline?.filterIsInstance<TimelineNode.Video>()?.filter { (it.endMs - it.startMs) > 0 } ?: emptyList()
         val sourceUri = state.source?.uri ?: proj.orderedSources.firstOrNull()?.uri
 
-        if (videoNodes.isNotEmpty()) {
-            val builder = ConcatenatingMediaSource2.Builder()
-                .useDefaultMediaSourceFactory(context)
+        val extractorsFactory = androidx.media3.extractor.DefaultExtractorsFactory()
+            .setMp4ExtractorFlags(androidx.media3.extractor.mp4.Mp4Extractor.FLAG_WORKAROUND_IGNORE_EDIT_LISTS)
+        val mediaSourceFactory = androidx.media3.exoplayer.source.DefaultMediaSourceFactory(context, extractorsFactory)
+            .setEnableClippingInMediaPeriod(true)
 
-            videoNodes.forEach { node ->
+        if (videoNodes.isNotEmpty()) {
+            val items = videoNodes.map { node ->
                 val durationMs = node.endMs - node.startMs
                 val clipping = MediaItem.ClippingConfiguration.Builder()
                     .setStartPositionMs(node.sourceStartMs)
                     .setEndPositionMs(node.sourceStartMs + durationMs)
                     .build()
                 val uriString = node.src.takeIf { it.isNotBlank() } ?: sourceUri ?: ""
-                val mediaItem = MediaItem.Builder()
+                MediaItem.Builder()
                     .setUri(Uri.parse(uriString))
                     .setClippingConfiguration(clipping)
                     .build()
-                builder.add(mediaItem, durationMs)
             }
-            player.setMediaSource(builder.build())
+            player.setMediaItems(items)
             player.prepare()
         } else if (proj.operations.any { it is RemoveRanges && it.enabled }) {
             val durationMs = proj.durationMs
             val cuts = proj.operations.filterIsInstance<RemoveRanges>().filter { it.enabled }.flatMap { it.ranges }.sortedBy { it.startMs }
             val retained = ExportCoordinator.retainedRanges(durationMs, cuts)
             if (retained.isNotEmpty() && !sourceUri.isNullOrEmpty()) {
-                val builder = ConcatenatingMediaSource2.Builder()
-                    .useDefaultMediaSourceFactory(context)
-                retained.forEach { r ->
-                    val segmentDuration = r.endMs - r.startMs
+                val items = retained.map { r ->
                     val clipping = MediaItem.ClippingConfiguration.Builder()
                         .setStartPositionMs(r.startMs)
                         .setEndPositionMs(r.endMs)
                         .build()
-                    val mediaItem = MediaItem.Builder()
+                    MediaItem.Builder()
                         .setUri(Uri.parse(sourceUri))
                         .setClippingConfiguration(clipping)
                         .build()
-                    builder.add(mediaItem, segmentDuration)
                 }
-                player.setMediaSource(builder.build())
+                player.setMediaItems(items)
                 player.prepare()
             } else if (!sourceUri.isNullOrEmpty()) {
                 player.setMediaItem(MediaItem.fromUri(Uri.parse(sourceUri)))
@@ -372,6 +380,7 @@ fun EditorScreen(
                                     PlayerView(ctx).apply {
                                         this.player = player
                                         useController = true
+                                        setShowMultiWindowTimeBar(true)
                                         resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                                         setShowPreviousButton(false)
                                         setShowNextButton(false)
