@@ -452,3 +452,17 @@ const server = http.createServer(async (request, response) => {
 server.requestTimeout = 0;
 server.keepAliveTimeout = 65_000;
 server.listen(port, () => console.log(`[trimm-backend] listening on :${port} with ${model}`));
+
+let isShuttingDown = false;
+function gracefulShutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`[trimm-backend] received ${signal}, draining connections and closing server...`);
+  server.close(() => {
+    console.log('[trimm-backend] server closed cleanly, exiting.');
+    process.exit(0);
+  });
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+

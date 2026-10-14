@@ -5,6 +5,8 @@
 
 app = 'trimm'
 primary_region = 'sin'
+kill_signal = 'SIGINT'
+kill_timeout = '120s'
 
 # NOTE: Fly does not support specifying machine count directly in fly.toml.
 # We have scaled this to 2 machines via `fly scale count 2` for High Availability on the free tier.
@@ -22,7 +24,8 @@ primary_region = 'sin'
   processes = ['app']
 
 [[vm]]
-  memory = '256mb'
+  memory = '512mb'
   cpu_kind = 'shared'
   cpus = 1
-  memory_mb = 256
+  memory_mb = 512
+
