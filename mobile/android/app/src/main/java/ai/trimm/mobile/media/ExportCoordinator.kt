@@ -342,7 +342,7 @@ object ExportCoordinator {
         }
 
         return Composition.Builder(sequences)
-            .setHdrMode(Composition.HDR_MODE_KEEP_HDR)
+            .setHdrMode(Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_MEDIACODEC)
             .setEffects(Effects(emptyList(), videoEffects))
             .build()
     }
@@ -351,11 +351,7 @@ object ExportCoordinator {
         output.parentFile?.mkdirs(); output.delete()
         val composition = composition(context, project)
         suspendCancellableCoroutine { continuation ->
-            val videoFrameProcessorFactory = DefaultVideoFrameProcessor.Factory.Builder()
-                .setSdrWorkingColorSpace(DefaultVideoFrameProcessor.WORKING_COLOR_SPACE_ORIGINAL)
-                .build()
             val transformer = Transformer.Builder(context)
-                .setVideoFrameProcessorFactory(videoFrameProcessorFactory)
                 .setVideoMimeType(if (project.export.codec == "video/hevc") MimeTypes.VIDEO_H265 else MimeTypes.VIDEO_H264)
                 .addListener(object : Transformer.Listener {
                     override fun onCompleted(composition: Composition, exportResult: ExportResult) { if (continuation.isActive) continuation.resume(output) }
@@ -457,12 +453,7 @@ private fun targets(itemId: String, exactId: String, legacyId: String, startMs: 
         val composition = buildPreviewComposition(context, project, schema)
         suspendCancellableCoroutine { continuation ->
             val isHevc = project.export.codec == "video/hevc"
-            val videoFrameProcessorFactory = DefaultVideoFrameProcessor.Factory.Builder()
-                .setSdrWorkingColorSpace(DefaultVideoFrameProcessor.WORKING_COLOR_SPACE_ORIGINAL)
-                .build()
-
             val transformer = Transformer.Builder(context)
-                .setVideoFrameProcessorFactory(videoFrameProcessorFactory)
                 .setVideoMimeType(if (isHevc) MimeTypes.VIDEO_H265 else MimeTypes.VIDEO_H264)
                 .addListener(object : Transformer.Listener {
                     override fun onCompleted(composition: Composition, exportResult: ExportResult) {
@@ -593,7 +584,7 @@ private fun targets(itemId: String, exactId: String, legacyId: String, startMs: 
         }
 
         return Composition.Builder(sequences)
-            .setHdrMode(Composition.HDR_MODE_KEEP_HDR)
+            .setHdrMode(Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_MEDIACODEC)
             .setEffects(Effects(emptyList(), videoEffects))
             .build()
     }
@@ -721,7 +712,7 @@ private fun targets(itemId: String, exactId: String, legacyId: String, startMs: 
         }
 
         return Composition.Builder(sequences)
-            .setHdrMode(Composition.HDR_MODE_KEEP_HDR)
+            .setHdrMode(Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_MEDIACODEC)
             .setEffects(Effects(emptyList(), videoEffects))
             .build()
     }

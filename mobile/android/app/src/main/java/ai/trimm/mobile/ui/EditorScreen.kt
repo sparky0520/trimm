@@ -58,6 +58,8 @@ import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.layout.layout
+import kotlin.math.roundToInt
 import android.view.View
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.draw.clipToBounds
@@ -510,18 +512,34 @@ fun EditorScreen(
                                 val posX = (activeCaption.style?.posX ?: 0f).coerceIn(-1f, 1f)
                                 val posY = (activeCaption.style?.posY ?: -0.35f).coerceIn(-1f, 1f)
 
+                                val videoWidthPx = with(density) { videoWidth.toPx() }
+                                val videoHeightPx = with(density) { videoHeight.toPx() }
+
+                                // Exact 1:1 mathematical coordinate mapping matching TextGraphicOverlay (Android & iOS):
+                                // posX: normalized horizontal anchor (-1.0 left, 0.0 center, 1.0 right) -> cx = width * (0.5 + posX / 2)
+                                // posY: normalized vertical anchor (-1.0 bottom, 0.0 center, 1.0 top) -> cy = height * (0.5 - posY / 2)
+                                val targetCenterX = videoWidthPx * (0.5f + posX / 2f)
+                                val targetCenterY = videoHeightPx * (0.5f - posY / 2f)
+
                                 Box(
                                     modifier = Modifier
                                         .width(videoWidth)
                                         .height(videoHeight)
-                                        .clipToBounds(),
-                                    contentAlignment = Alignment.Center
+                                        .clipToBounds()
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(horizontal = 24.dp, vertical = 16.dp),
-                                        contentAlignment = BiasAlignment(posX, -posY)
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp)
+                                            .layout { measurable, constraints ->
+                                                val placeable = measurable.measure(constraints)
+                                                layout(placeable.width, placeable.height) {
+                                                    val x = (targetCenterX - placeable.width / 2f).roundToInt()
+                                                    val y = (targetCenterY - placeable.height / 2f).roundToInt()
+                                                    placeable.placeRelative(x, y)
+                                                }
+                                            },
+                                        contentAlignment = Alignment.Center
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
                                             // Pass 1: Outline stroke (drawn behind)
