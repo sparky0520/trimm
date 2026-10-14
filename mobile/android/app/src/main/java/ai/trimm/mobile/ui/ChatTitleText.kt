@@ -83,8 +83,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 
-@Composable fun ChatTitleText(pastChat: ai.trimm.mobile.data.ChatSummary) {
-    val cleanTitle = pastChat.title
+@Composable fun ChatTitleText(title: String) {
+    val cleanTitle = title
 
     var displayedText by rememberSaveable(cleanTitle) { mutableStateOf("") }
     LaunchedEffect(cleanTitle) {
@@ -99,4 +99,12 @@ import kotlinx.serialization.json.jsonPrimitive
         }
     }
     Text(displayedText.takeIf { it.isNotBlank() } ?: "Untitled Chat", color = Cream)
+}
+
+@Composable fun ChatTitleText(pastChat: ai.trimm.mobile.network.ChatSummary) {
+    ChatTitleText(pastChat.title)
+}
+
+@Composable fun ChatTitleText(pastChat: ai.trimm.mobile.data.ChatSummary) {
+    ChatTitleText(pastChat.title)
 }

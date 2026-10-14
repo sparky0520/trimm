@@ -26,5 +26,6 @@ import ai.trimm.mobile.planning.RequestShapedMediaIndex
     val id: String,
     val prompt: String,
     val options: List<ClarificationOption>,
-    val recommendedOptionId: String = ""
+    val recommendedOptionId: String = "",
+    val allowWriteIn: Boolean? = true
 )

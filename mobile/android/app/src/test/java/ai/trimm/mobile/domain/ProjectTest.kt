@@ -58,4 +58,16 @@ class ProjectTest {
             InstructionValidator.validate(project, listOf(cleanup.copy(target = OperationTarget("hash", 9_000, 11_000))))
         }
     }
+
+    @Test fun `mobile project with schema serializes and deserializes properly`() {
+        val schema = CompositionSchema(
+            timeline = listOf(TimelineNode.Video(src = "test.mp4", startMs = 0, endMs = 1000))
+        )
+        val snapshot = ProjectSnapshot(schema = schema)
+        val project = MobileProject(title = "Test Project", source = source, undo = listOf(snapshot))
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
+        val encoded = json.encodeToString(MobileProject.serializer(), project)
+        val decoded = json.decodeFromString(MobileProject.serializer(), encoded)
+        assertEquals(project.title, decoded.title)
+    }
 }

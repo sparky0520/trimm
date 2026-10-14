@@ -124,21 +124,13 @@ import kotlinx.serialization.json.jsonPrimitive
 
     Box(Modifier.fillMaxSize()) {
         when {
-            state.source == null -> {
+            state.project == null -> {
                 val activity = androidx.activity.compose.LocalActivity.current
                 if (activity != null) {
                     ImportScreen(activity, vm::import, state.isLoadingPastChats, onOpenDrawer)
                 }
             }
-            state.project != null -> ChatView(
-                state, vm::undo, vm::export, vm::applyProposal, vm::rejectProposal,
-                vm::undoCheckpoint, vm::undoTurn,
-                vm::reviseStory, vm::retryTurn, vm::switchBranch, vm::recoverAgent, vm::cancelAnalysis,
-                vm::relinkVideo,
-                isOnline,
-                onOpenDrawer
-            )
-            else -> NewEditChatScreen(state, vm::generateDraft, vm::moveClip, vm::relinkVideo, isOnline, onOpenDrawer)
+            else -> EditorScreen(vm, onOpenDrawer)
         }
 
         if (!isOnline) {

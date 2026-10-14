@@ -383,9 +383,23 @@ public class EditorViewModel {
             revision: 1
         )
         
+        // Pre-flight Credit Check: Check before processing starts
+        let requiredCredits = BillingManager.shared.costs.transcriptionCost
+        if BillingManager.shared.balance < requiredCredits {
+            BillingManager.shared.isStorePresented = true
+            self.state.project = project
+            self.state.messages = [
+                ChatMessage(
+                    text: "You need at least \(requiredCredits) credits to transcribe audio and start a new project. Please top up your credits to continue.",
+                    isUser: false
+                )
+            ]
+            self.state.isProcessing = false
+            return
+        }
+        
         self.state.project = project
         self.state.messages = [ChatMessage(text: "Extracting audio and transcribing video. This may take a few moments...", isUser: false)]
-        
         
         Task {
             await MainActor.run { state.isProcessing = true }
@@ -537,8 +551,12 @@ public class EditorViewModel {
                         self.state.errorMessage = "Transcription failed: \(error.localizedDescription)"
                         self.state.messages.removeAll { $0.text == "Extracting audio and transcribing video. This may take a few moments..." }
                         if (error as NSError).code == 402 {
-                            self.state.messages.append(ChatMessage(text: "You need more credits to continue.", isUser: false))
+                            BillingManager.shared.isStorePresented = true
+                            self.state.messages.append(ChatMessage(text: "You don't have enough credits to transcribe this video. Please top up your credits to continue.", isUser: false))
+                        } else {
+                            self.state.messages.append(ChatMessage(text: "Transcription failed: \(error.localizedDescription)", isUser: false))
                         }
+                        self.state.isProcessing = false
                     }
                 }
             }
@@ -567,6 +585,21 @@ public class EditorViewModel {
     
     public func reviseStory(request: String) {
         guard !request.isEmpty, !state.isProcessing, let project = state.project else { return }
+        
+        // Pre-flight Credit Check: Check before processing edit turn
+        let requiredCredits = BillingManager.shared.costs.chatCost
+        if BillingManager.shared.balance < requiredCredits {
+            BillingManager.shared.isStorePresented = true
+            let turnId = UUID().uuidString
+            state.messages.append(ChatMessage(text: request, isUser: true, turnId: turnId))
+            state.messages.append(ChatMessage(
+                text: "You need at least \(requiredCredits) credits to send an edit request. Please top up your credits to continue.",
+                isUser: false,
+                turnId: turnId
+            ))
+            state.isProcessing = false
+            return
+        }
         
         let turnId = UUID().uuidString
         state.isProcessing = true
@@ -688,9 +721,20 @@ public class EditorViewModel {
             } catch {
                 await MainActor.run {
                     self.state.messages.removeAll { $0.text == "Thinking…" || $0.text == "Editing…" }
-                    if let repoError = error as? ChatRepositoryError, repoError == .unauthorized {
+                    if let repoError = error as? ChatRepositoryError {
+                        switch repoError {
+                        case .unauthorized:
+                            self.state.jobMessage = nil
+                            self.state.messages.append(ChatMessage(text: "Please sign in to continue chat.", isUser: false))
+                        case .insufficientCredits:
+                            BillingManager.shared.isStorePresented = true
+                            self.state.jobMessage = nil
+                            self.state.messages.append(ChatMessage(text: "You don't have enough credits to run this AI edit. Please top up in the credit store.", isUser: false))
+                        }
+                    } else if (error as NSError).code == 402 {
+                        BillingManager.shared.isStorePresented = true
                         self.state.jobMessage = nil
-                        self.state.messages.append(ChatMessage(text: "Please sign in to continue chat.", isUser: false))
+                        self.state.messages.append(ChatMessage(text: "You don't have enough credits. Please top up to continue.", isUser: false))
                     } else {
                         self.state.jobMessage = "Failed: \(error.localizedDescription)"
                         self.state.messages.append(ChatMessage(text: "Error: \(error.localizedDescription)", isUser: false))

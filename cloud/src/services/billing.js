@@ -34,6 +34,26 @@ export class BillingService {
     return this._client;
   }
 
+  async executeWithRetry(operation) {
+    let lastError;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const client = this.getClient();
+        return await operation(client);
+      } catch (err) {
+        lastError = err;
+        const msg = String(err?.message || '') + ' ' + String(err?.details || '');
+        if (attempt === 0 && (msg.includes('fetch failed') || msg.includes('SocketError') || msg.includes('UND_ERR_SOCKET') || msg.includes('other side closed'))) {
+          console.warn('[billing] Supabase socket error, recreating client and retrying...', err.message);
+          this._client = null;
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastError;
+  }
+
   async getCredits(userId) {
     if (!userId) throw Object.assign(new Error('User ID is required.'), { status: 400 });
     if (String(userId).startsWith('development:')) {
@@ -45,24 +65,29 @@ export class BillingService {
         costs: CREDIT_COSTS,
       };
     }
-    const client = this.getClient();
 
-    const { data, error } = await client.rpc('get_or_create_user_credits', {
-      p_user_id: String(userId),
+    return await this.executeWithRetry(async (client) => {
+      const { data, error } = await client.rpc('get_or_create_user_credits', {
+        p_user_id: String(userId),
+      });
+
+      if (error) {
+        const msg = String(error.message || '') + ' ' + String(error.details || '');
+        if (msg.includes('fetch failed') || msg.includes('SocketError') || msg.includes('UND_ERR_SOCKET') || msg.includes('other side closed')) {
+          throw error;
+        }
+        console.error('[billing] get_or_create_user_credits failed:', error);
+        throw Object.assign(new Error('Failed to retrieve user credit balance.'), { status: 500 });
+      }
+
+      return {
+        userId: data.user_id,
+        balance: Number(data.balance ?? 0),
+        lifetimePurchased: Number(data.lifetime_purchased ?? 0),
+        lifetimeSpent: Number(data.lifetime_spent ?? 0),
+        costs: CREDIT_COSTS,
+      };
     });
-
-    if (error) {
-      console.error('[billing] get_or_create_user_credits failed:', error);
-      throw Object.assign(new Error('Failed to retrieve user credit balance.'), { status: 500 });
-    }
-
-    return {
-      userId: data.user_id,
-      balance: Number(data.balance ?? 0),
-      lifetimePurchased: Number(data.lifetime_purchased ?? 0),
-      lifetimeSpent: Number(data.lifetime_spent ?? 0),
-      costs: CREDIT_COSTS,
-    };
   }
 
   async checkCredits(userId, requiredAmount) {
@@ -81,75 +106,90 @@ export class BillingService {
     }
     if (amount <= 0) return { success: true, balance: 0, deducted: 0 };
 
-    const client = this.getClient();
-    const { data, error } = await client.rpc('deduct_user_credits', {
-      p_user_id: String(userId),
-      p_amount: Math.round(amount),
-      p_type: String(type),
-      p_description: String(description || ''),
-      p_reference_id: referenceId ? String(referenceId) : null,
+    return await this.executeWithRetry(async (client) => {
+      const { data, error } = await client.rpc('deduct_user_credits', {
+        p_user_id: String(userId),
+        p_amount: Math.round(amount),
+        p_type: String(type),
+        p_description: String(description || ''),
+        p_reference_id: referenceId ? String(referenceId) : null,
+      });
+
+      if (error) {
+        const msg = String(error.message || '') + ' ' + String(error.details || '');
+        if (msg.includes('fetch failed') || msg.includes('SocketError') || msg.includes('UND_ERR_SOCKET') || msg.includes('other side closed')) {
+          throw error;
+        }
+        console.error('[billing] deduct_user_credits error:', error);
+        throw Object.assign(new Error('Credit deduction failed.'), { status: 500 });
+      }
+
+      if (!data?.success) {
+        const err = new Error(
+          data?.error === 'insufficient_credits'
+            ? 'You need more credits to continue.'
+            : 'Credit deduction declined.'
+        );
+        err.status = 402;
+        err.code = data?.error || 'insufficient_credits';
+        err.balance = data?.balance ?? 0;
+        err.required = amount;
+        throw err;
+      }
+
+      return data;
     });
-
-    if (error) {
-      console.error('[billing] deduct_user_credits error:', error);
-      throw Object.assign(new Error('Credit deduction failed.'), { status: 500 });
-    }
-
-    if (!data?.success) {
-      const err = new Error(
-        data?.error === 'insufficient_credits'
-          ? 'You need more credits to continue.'
-          : 'Credit deduction declined.'
-      );
-      err.status = 402;
-      err.code = data?.error || 'insufficient_credits';
-      err.balance = data?.balance ?? 0;
-      err.required = amount;
-      throw err;
-    }
-
-    return data;
   }
 
   async addCredits(userId, amount, type, description, referenceId = null, metadata = {}) {
     if (!userId) throw Object.assign(new Error('User ID is required.'), { status: 400 });
     if (amount <= 0) return { success: true, balance: 0, added: 0 };
 
-    const client = this.getClient();
-    const { data, error } = await client.rpc('add_user_credits', {
-      p_user_id: String(userId),
-      p_amount: Math.round(amount),
-      p_type: String(type),
-      p_description: String(description || ''),
-      p_reference_id: referenceId ? String(referenceId) : null,
-      p_metadata: metadata || {},
+    return await this.executeWithRetry(async (client) => {
+      const { data, error } = await client.rpc('add_user_credits', {
+        p_user_id: String(userId),
+        p_amount: Math.round(amount),
+        p_type: String(type),
+        p_description: String(description || ''),
+        p_reference_id: referenceId ? String(referenceId) : null,
+        p_metadata: metadata || {},
+      });
+
+      if (error) {
+        const msg = String(error.message || '') + ' ' + String(error.details || '');
+        if (msg.includes('fetch failed') || msg.includes('SocketError') || msg.includes('UND_ERR_SOCKET') || msg.includes('other side closed')) {
+          throw error;
+        }
+        console.error('[billing] add_user_credits error:', error);
+        throw Object.assign(new Error('Adding credits failed.'), { status: 500 });
+      }
+
+      return data;
     });
-
-    if (error) {
-      console.error('[billing] add_user_credits error:', error);
-      throw Object.assign(new Error('Adding credits failed.'), { status: 500 });
-    }
-
-    return data;
   }
 
   async getHistory(userId, limit = 30) {
     if (!userId) throw Object.assign(new Error('User ID is required.'), { status: 400 });
-    const client = this.getClient();
 
-    const { data, error } = await client
-      .from('credit_transactions')
-      .select('id, amount, balance_after, type, description, reference_id, created_at')
-      .eq('user_id', String(userId))
-      .order('created_at', { ascending: false })
-      .limit(Math.min(limit, 100));
+    return await this.executeWithRetry(async (client) => {
+      const { data, error } = await client
+        .from('credit_transactions')
+        .select('id, amount, balance_after, type, description, reference_id, created_at')
+        .eq('user_id', String(userId))
+        .order('created_at', { ascending: false })
+        .limit(Math.min(limit, 100));
 
-    if (error) {
-      console.error('[billing] credit_transactions query error:', error);
-      throw Object.assign(new Error('Failed to retrieve credit history.'), { status: 500 });
-    }
+      if (error) {
+        const msg = String(error.message || '') + ' ' + String(error.details || '');
+        if (msg.includes('fetch failed') || msg.includes('SocketError') || msg.includes('UND_ERR_SOCKET') || msg.includes('other side closed')) {
+          throw error;
+        }
+        console.error('[billing] credit_transactions query error:', error);
+        throw Object.assign(new Error('Failed to retrieve credit history.'), { status: 500 });
+      }
 
-    return data || [];
+      return data || [];
+    });
   }
 
   resolveCreditPackage(productId) {

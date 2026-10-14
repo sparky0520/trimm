@@ -269,9 +269,10 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
 )
 @Serializable data class ExportSettings(val width: Int, val height: Int, val codec: String = "video/avc", val bitrate: Int = 16_000_000)
 @Serializable data class ProjectSnapshot(
-    val operations: List<EditInstruction>,
+    val operations: List<EditInstruction> = emptyList(),
     val sources: List<SourceMedia> = emptyList(),
-    val analysis: Analysis? = null
+    val analysis: Analysis? = null,
+    val schema: CompositionSchema? = null
 )
 @Serializable data class MobileProject(
     val schemaVersion: Int = 1,
@@ -314,8 +315,41 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
         return if (export == nextExport) this else copy(export = nextExport)
     }
 
-    private fun snapshot() = ProjectSnapshot(operations, orderedSources, analysis)
+    fun snapshot(schema: CompositionSchema? = null) = ProjectSnapshot(operations, orderedSources, analysis, schema)
     fun replaceEditInstructions(next: List<EditInstruction>) = copy(operations = next, undo = (undo + snapshot()).takeLast(30), redo = emptyList(), revision = revision + 1).withExportRatioRecomputed()
+    fun applyEditInstructions(
+        next: List<EditInstruction>,
+        removedOperations: List<String> = emptyList(),
+        activeTurnId: String? = null,
+        request: String? = null,
+        response: String? = null,
+        currentSchema: CompositionSchema? = null
+    ): MobileProject {
+        val currentTurnId = activeTurnId ?: UUID.randomUUID().toString()
+        val newHistory = if (request != null && response != null) {
+            (analysis.chatHistory + EditorialConversationTurn(
+                id = currentTurnId,
+                request = request,
+                response = response
+            )).takeLast(100)
+        } else {
+            analysis.chatHistory
+        }
+
+        val newAnalysis = analysis.copy(
+            activeTurnId = currentTurnId,
+            chatHistory = newHistory
+        )
+        val finalOperations = operations.filter { it.id !in removedOperations } + next
+        val newUndo = (undo + snapshot(currentSchema)).takeLast(30)
+        return copy(
+            analysis = newAnalysis,
+            operations = finalOperations,
+            undo = newUndo,
+            redo = emptyList(),
+            revision = revision + 1
+        ).withExportRatioRecomputed()
+    }
     fun applyEditInstructions(programId: String, next: List<EditInstruction>) =
         copy(
             operations = next,

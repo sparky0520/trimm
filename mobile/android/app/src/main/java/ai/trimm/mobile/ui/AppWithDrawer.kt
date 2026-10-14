@@ -1,7 +1,9 @@
 package ai.trimm.mobile.ui
 
 import ai.trimm.mobile.R
-
+import ai.trimm.mobile.billing.BillingManager
+import ai.trimm.mobile.billing.CreditStoreBottomSheet
+import androidx.compose.material.icons.filled.Bolt
 import ai.trimm.mobile.*
 import ai.trimm.mobile.domain.*
 import ai.trimm.mobile.media.ExportCoordinator
@@ -210,11 +212,48 @@ import kotlinx.serialization.json.jsonPrimitive
                         if (activity != null) {
                             AccountControl(activity)
                         }
+
+                        val balance by BillingManager.balance.collectAsStateWithLifecycle()
+                        Row(
+                            modifier = Modifier
+                                .clip(androidx.compose.foundation.shape.CircleShape)
+                                .background(Raised)
+                                .border(1.dp, Border.copy(alpha = 0.6f), androidx.compose.foundation.shape.CircleShape)
+                                .clickable {
+                                    BillingManager.setStorePresented(true)
+                                }
+                                .padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.Bolt,
+                                contentDescription = "Credits",
+                                tint = Color(0xFFFACC15),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "$balance",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Cream
+                            )
+                        }
                     }
                 }
             }
         }
     ) {
-        TrimmApp(vm, onOpenDrawer = { scope.launch { drawerState.open() } })
+        TrimmApp(vm, onOpenDrawer = { 
+            vm.refreshChats()
+            scope.launch { drawerState.open() } 
+        })
+
+        val isStorePresented by BillingManager.isStorePresented.collectAsStateWithLifecycle()
+        if (isStorePresented) {
+            CreditStoreBottomSheet(
+                onDismiss = { BillingManager.setStorePresented(false) }
+            )
+        }
     }
 }

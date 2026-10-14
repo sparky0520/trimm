@@ -22,6 +22,8 @@ import java.net.HttpURLConnection
 import java.net.URI
 import ai.trimm.mobile.planning.RequestShapedMediaIndex
 
+import ai.trimm.mobile.domain.CompositionSchema
+
 @Serializable
 data class ChatMessage(val role: String, val content: String)
 
@@ -36,10 +38,12 @@ data class AgentRunRequest(
     val history: List<ChatMessage> = emptyList(),
     val evidenceJobIds: List<String> = emptyList(),
     val existingOperations: List<JsonObject> = emptyList(),
+    val schema: CompositionSchema? = null,
     val uploadInitialVideoContext: Boolean = false,
     val budgets: AgentBudgets = AgentBudgets(),
     val mediaConsent: AgentMediaConsent = AgentMediaConsent(),
-    val supportedContractVersions: AgentContractVersions = AgentContractVersions()
+    val supportedContractVersions: AgentContractVersions = AgentContractVersions(),
+    val platform: String = "android"
 )
 
 fun sourceTranscript(words: List<TranscriptWord>, sources: List<SourceMedia>): List<AgentTranscriptWord> {

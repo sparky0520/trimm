@@ -210,6 +210,7 @@ struct ContentView: View {
     @State private var isDrawerOpen = false
     @State private var appleSignInNonce: String?
     @State private var billing = BillingManager.shared
+    @State private var isImportingMedia = false
     
     var body: some View {
         ZStack(alignment: .leading) {
@@ -284,25 +285,37 @@ struct ContentView: View {
                                 ProgressView().padding()
                             }
                         } else {
-                            if viewModel.state.isProcessing {
-                                ProgressView("Importing media...")
-                                    .padding()
-                                    .foregroundColor(.muted)
-                            }
                             PhotosPicker(selection: $selectedItem, matching: .videos) {
-                                Text("Select clips to edit")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(.darkText)
-                                    .padding()
-                                    .frame(maxWidth: .infinity)
-                                    .background(Color.coral)
-                                    .cornerRadius(10)
-                                    .padding(.horizontal, 40)
+                                HStack(spacing: 10) {
+                                    if isImportingMedia {
+                                        ProgressView()
+                                            .tint(.darkText)
+                                        Text("Preparing clips...")
+                                            .font(.system(size: 16, weight: .semibold))
+                                            .foregroundColor(.darkText)
+                                    } else {
+                                        Text("Select clips to edit")
+                                            .font(.system(size: 16, weight: .semibold))
+                                            .foregroundColor(.darkText)
+                                    }
+                                }
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(isImportingMedia ? Color.coral.opacity(0.6) : Color.coral)
+                                .cornerRadius(10)
+                                .padding(.horizontal, 40)
                             }
-                            .disabled(viewModel.state.isProcessing)
+                            .disabled(viewModel.state.isProcessing || isImportingMedia)
                             .onChange(of: selectedItem) { _, newValue in
                                 if let newValue = newValue {
                                     Task {
+                                        await MainActor.run { isImportingMedia = true }
+                                        defer {
+                                            Task { @MainActor in
+                                                isImportingMedia = false
+                                                selectedItem = nil
+                                            }
+                                        }
                                         if let movie = try? await newValue.loadTransferable(type: MovieFile.self) {
                                             await viewModel.importSources(urls: [movie.url])
                                             await MainActor.run {
@@ -384,6 +397,37 @@ struct ContentView: View {
                     )
                     .ignoresSafeArea(.all, edges: .bottom)
                     .zIndex(1)
+            }
+            if isImportingMedia {
+                Color.black.opacity(0.6)
+                    .ignoresSafeArea()
+                    .zIndex(2)
+                
+                VStack(spacing: 16) {
+                    ProgressView()
+                        .tint(.coral)
+                        .scaleEffect(1.3)
+                    
+                    Text("Preparing Clips…")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundColor(.cream)
+                    
+                    Text("Analyzing video metadata and setting up editor")
+                        .font(.system(size: 13))
+                        .foregroundColor(.muted)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 28)
+                .padding(.vertical, 24)
+                .background(Color.ink)
+                .cornerRadius(20)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(Color.border.opacity(0.6), lineWidth: 1)
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                .padding(.horizontal, 40)
+                .zIndex(3)
             }
         } // ZStack
         .preferredColorScheme(.dark)

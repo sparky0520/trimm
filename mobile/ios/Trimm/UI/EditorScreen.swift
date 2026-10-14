@@ -98,19 +98,51 @@ public struct EditorScreen: View {
                 }
             }
             
+            // Suggestion Chips Row
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach([
+                        "Make a clean, natural first cut",
+                        "Turn into vertical short with captions",
+                        "Keep best takes and remove mistakes",
+                        "Cut awkward silences and pauses"
+                    ], id: \.self) { suggestion in
+                        Button(action: {
+                            prompt = suggestion
+                        }) {
+                            Text(suggestion)
+                                .font(.system(size: 12))
+                                .foregroundColor(.creamRaised)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.workspace)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .stroke(Color.border.opacity(0.5), lineWidth: 1)
+                                )
+                                .cornerRadius(16)
+                        }
+                        .disabled(viewModel.state.isProcessing)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 4)
+            }
+            .background(Color.ink)
+            
             // Input Area
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 PhotosPicker(selection: $selectedNewItem, matching: .videos) {
                     Image(systemName: "plus")
-                        .font(.title2)
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.lavender)
+                        .frame(width: 32, height: 32)
                 }
                 .onChange(of: selectedNewItem) { _, newValue in
                     if let newValue = newValue {
                         Task {
                             if let movie = try? await newValue.loadTransferable(type: MovieFile.self) {
                                 await viewModel.importSources(urls: [movie.url])
-                                // Transcription and preprocessing is triggered during importSources
                             }
                             selectedNewItem = nil // Reset
                         }
@@ -119,11 +151,8 @@ public struct EditorScreen: View {
                 
                 TextField("Ask Trimm to change something...", text: $prompt)
                     .textFieldStyle(PlainTextFieldStyle())
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(Color.workspace)
+                    .font(.system(size: 14))
                     .foregroundColor(.creamRaised)
-                    .cornerRadius(20)
                     .disabled(viewModel.state.isProcessing || (viewModel.state.pendingClarification != nil && viewModel.state.pendingClarification?.allowWriteIn != true))
                 
                 Button(action: {
@@ -131,14 +160,25 @@ public struct EditorScreen: View {
                     viewModel.reviseStory(request: prompt)
                     prompt = ""
                 }) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.title)
-                        .foregroundColor(prompt.isEmpty ? .muted : .coral)
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(prompt.isEmpty ? .muted : .darkText)
+                        .frame(width: 30, height: 30)
+                        .background(prompt.isEmpty ? Color.raised : Color.coral)
+                        .clipShape(Circle())
                 }
                 .disabled(prompt.isEmpty || viewModel.state.isProcessing || (viewModel.state.pendingClarification != nil && viewModel.state.pendingClarification?.allowWriteIn != true))
             }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(Color.workspace)
+            .overlay(
+                RoundedRectangle(cornerRadius: 24)
+                    .stroke(Color.border.opacity(0.6), lineWidth: 1)
+            )
+            .cornerRadius(24)
             .padding(.horizontal, 16)
-            .padding(.top, 12)
+            .padding(.top, 4)
             .padding(.bottom, 8)
             .background(Color.ink)
         }

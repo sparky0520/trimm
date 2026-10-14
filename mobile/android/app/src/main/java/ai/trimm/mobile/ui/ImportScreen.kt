@@ -1,7 +1,7 @@
 package ai.trimm.mobile.ui
 
 import ai.trimm.mobile.R
-
+import androidx.compose.material.icons.filled.Bolt
 import ai.trimm.mobile.*
 import ai.trimm.mobile.domain.*
 import ai.trimm.mobile.media.ExportCoordinator
@@ -84,7 +84,13 @@ import kotlinx.serialization.json.jsonPrimitive
 
 
 @Composable fun ImportScreen(activity: Activity, onImport: (List<Uri>) -> Unit, isLoadingPastChats: Boolean = false, onOpenDrawer: (() -> Unit)? = null) {
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { if (it.isNotEmpty()) onImport(it) }
+    var isImporting by remember { mutableStateOf(false) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
+        if (uris.isNotEmpty()) {
+            isImporting = true
+            onImport(uris)
+        }
+    }
     val sessionStatus by supabase.auth.sessionStatus.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
@@ -98,6 +104,35 @@ import kotlinx.serialization.json.jsonPrimitive
                     .border(1.dp, Border, RoundedCornerShape(percent = 50))
             ) {
                 Text("☰", fontSize = 24.sp, color = Cream)
+            }
+        }
+
+        val balance by ai.trimm.mobile.billing.BillingManager.balance.collectAsStateWithLifecycle()
+        if (sessionStatus is SessionStatus.Authenticated) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(end = 16.dp, top = 8.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(Raised)
+                    .border(1.dp, Border.copy(alpha = 0.6f), androidx.compose.foundation.shape.CircleShape)
+                    .clickable { ai.trimm.mobile.billing.BillingManager.setStorePresented(true) }
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Default.Bolt,
+                    contentDescription = "Credits",
+                    tint = Color(0xFFFACC15),
+                    modifier = Modifier.size(13.dp)
+                )
+                Text(
+                    text = "$balance",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Cream
+                )
             }
         }
         Column(Modifier.align(Alignment.Center).padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -134,7 +169,7 @@ import kotlinx.serialization.json.jsonPrimitive
             } else {
                 Button(
                     onClick = { launcher.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)) },
-                    enabled = !isLoadingPastChats,
+                    enabled = !isLoadingPastChats && !isImporting,
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
@@ -144,12 +179,57 @@ import kotlinx.serialization.json.jsonPrimitive
                         disabledContentColor = DarkText.copy(alpha = 0.5f)
                     )
                 ) {
-                    if (isLoadingPastChats) {
+                    if (isImporting) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = DarkText, strokeWidth = 2.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Text("Preparing clips...", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    } else if (isLoadingPastChats) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp), color = DarkText, strokeWidth = 2.dp)
                         Spacer(Modifier.width(12.dp))
                         Text("Loading...", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                     } else {
                         Text("Select clips to edit", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    }
+                }
+            }
+        }
+
+        if (isImporting) {
+            Dialog(
+                onDismissRequest = {},
+                properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Ink)
+                        .border(1.dp, Border.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
+                        .padding(horizontal = 28.dp, vertical = 24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = Coral,
+                            modifier = Modifier.size(36.dp),
+                            strokeWidth = 3.dp
+                        )
+                        Spacer(Modifier.height(18.dp))
+                        Text(
+                            text = "Preparing Clips…",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Cream
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "Analyzing video metadata and setting up editor",
+                            fontSize = 13.sp,
+                            color = Muted,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
                     }
                 }
             }

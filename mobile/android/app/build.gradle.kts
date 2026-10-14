@@ -52,10 +52,14 @@ android {
         val googleWebClientId = providers.gradleProperty("GOOGLE_WEB_CLIENT_ID")
             .orElse(providers.environmentVariable("GOOGLE_WEB_CLIENT_ID"))
             .orElse(localProperties.getProperty("GOOGLE_WEB_CLIENT_ID") ?: "").get()
+        val revenueCatApiKey = providers.gradleProperty("REVENUECAT_API_KEY")
+            .orElse(providers.environmentVariable("REVENUECAT_API_KEY"))
+            .orElse(localProperties.getProperty("REVENUECAT_API_KEY") ?: "").get()
             
         buildConfigField("String", "SUPABASE_URL", "\"${supabaseUrl.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${supabasePublishableKey.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${googleWebClientId.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+        buildConfigField("String", "REVENUECAT_API_KEY", "\"${revenueCatApiKey.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
     }
     signingConfigs {
         create("release") {
@@ -133,6 +137,16 @@ dependencies {
     implementation("io.github.jan-tennert.supabase:realtime-kt")
     implementation("io.github.jan-tennert.supabase:storage-kt")
     implementation("io.ktor:ktor-client-okhttp:3.0.0")
+
+    // Icons Extended
+    implementation("androidx.compose.material:material-icons-extended")
+
+    // RevenueCat In-App Purchases
+    implementation("com.revenuecat.purchases:purchases:8.12.2")
+
+    // OkHttp & SSE
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp-sse:4.12.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
