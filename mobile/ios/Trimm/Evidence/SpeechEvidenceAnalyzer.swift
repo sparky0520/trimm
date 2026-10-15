@@ -5,8 +5,6 @@ public class SpeechEvidenceAnalyzer: EvidenceAnalyzer {
     
     private let words: [TranscriptWord]
     
-    private static let disfluencies: Set<String> = ["um", "uh", "erm", "hmm"]
-    
     public init(words: [TranscriptWord]) {
         self.words = words
     }
@@ -40,13 +38,6 @@ public class SpeechEvidenceAnalyzer: EvidenceAnalyzer {
             if b.range.startMs - a.range.endMs >= 350 {
                 let range = TimeRange(startMs: a.range.endMs, endMs: b.range.startMs)
                 result.append(.speech(speech(source: source, range: range, kind: .pause, confidence: 0.98, text: nil, speakerId: nil)))
-            }
-        }
-        
-        for word in valid {
-            let normalized = word.text.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ",.!?"))
-            if Self.disfluencies.contains(normalized) {
-                result.append(.speech(speech(source: source, range: word.range, kind: .disfluency, confidence: word.confidence, text: word.text, speakerId: nil)))
             }
         }
         

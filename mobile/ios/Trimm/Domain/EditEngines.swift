@@ -20,8 +20,6 @@ public struct RobustDistribution: Codable, Equatable {
 
 public enum EditEngines {
     public struct FumbleDetector {
-        private static let fillers: Set<String> = ["um", "uh", "erm", "hmm", "ah"]
-        
         public static func detect(words: [TranscriptWord], durationMs: Int64, pace: Pace, profile: EditorialProfile? = nil) -> [FumbleCandidate] {
             if words.isEmpty { return [] }
             var out: [FumbleCandidate] = []
@@ -56,16 +54,6 @@ public enum EditEngines {
                     if gap >= pauseLimit {
                         let conf = min(0.98, 0.82 + Float(gap) / 20_000.0)
                         out.append(hint(words: words, indexes: [i, i + 1], range: TimeRange(startMs: word.range.endMs + 180, endMs: nextWord.range.startMs - 180), confidence: conf, reason: "pause-candidate"))
-                    }
-                }
-                
-                let text = word.text.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "., "))
-                if fillers.contains(text) {
-                    let start = max(0, word.range.startMs - 70)
-                    let end = min(durationMs, word.range.endMs + 90)
-                    if end > start {
-                        let confReason = word.confidence < 0.75 ? "possible-filler-transcript-uncertain" : "possible-filler"
-                        out.append(hint(words: words, indexes: [i], range: TimeRange(startMs: start, endMs: end), confidence: word.confidence, reason: confReason))
                     }
                 }
                 

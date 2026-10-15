@@ -63,17 +63,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var activeTransformer: Transformer? = null
     private var exportProgressJob: Job? = null
     private var fetchChatsJob: Job? = null
-    private var proxyJob: Job? = null
-
-    fun computeVideoCutsHash(schema: CompositionSchema?): String {
-        if (schema == null) return "source"
-        val videoNodes = schema.timeline.filterIsInstance<TimelineNode.Video>().filter { (it.endMs - it.startMs) > 0 }
-        if (videoNodes.isEmpty()) return "source"
-        val signature = videoNodes.joinToString(";") {
-            "${it.src}:${it.sourceStartMs}:${it.startMs}:${it.endMs}"
-        }
-        return signature.hashCode().toString().replace("-", "n")
-    }
 
     private fun normalizeSchemaAspectRatio(project: MobileProject?, schema: CompositionSchema) {
         val firstSrc = project?.orderedSources?.firstOrNull() ?: project?.source
@@ -83,51 +72,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun updatePreviewProxy(project: MobileProject, schema: CompositionSchema?) {
-        val videoNodes = schema?.timeline?.filterIsInstance<TimelineNode.Video>()?.filter { (it.endMs - it.startMs) > 0 } ?: emptyList()
-        if (videoNodes.size <= 1) {
-            mutable.update { it.copy(previewUri = null) }
-            return
-        }
-
-        val hash = computeVideoCutsHash(schema)
-        val previewDir = File(getApplication<Application>().cacheDir, "previews").apply { mkdirs() }
-        val proxyFile = File(previewDir, "proxy_v6_${project.id}_$hash.mp4")
-
-        // Invalidate and delete any older proxy files that had legacy color shifts
-        previewDir.listFiles()?.forEach { f ->
-            if (f.name.startsWith("proxy_") && !f.name.startsWith("proxy_v6_")) {
-                f.delete()
-            }
-        }
-
-        if (proxyFile.exists() && proxyFile.length() > 0) {
-            val uriStr = Uri.fromFile(proxyFile).toString()
-            if (mutable.value.previewUri != uriStr) {
-                mutable.update { it.copy(previewUri = uriStr) }
-            }
-            return
-        }
-
-        proxyJob?.cancel()
-        proxyJob = viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val generated = ExportCoordinator.generatePreviewProxy(
-                    getApplication(),
-                    project,
-                    schema!!,
-                    proxyFile
-                )
-                if (generated.exists() && generated.length() > 0) {
-                    val uriStr = Uri.fromFile(generated).toString()
-                    withContext(Dispatchers.Main) {
-                        mutable.update { it.copy(previewUri = uriStr) }
-                    }
+    private fun sanitizeUnrequestedTransitions(messages: List<UiChatMessage>, schema: CompositionSchema): CompositionSchema {
+        val transitionRegex = Regex("\\b(transition|transitions|crossfade|cross-fade|dip\\s*to\\s*black|dip\\s*to\\s*white|wipe|slide|fade\\s*in|fade\\s*out)\\b", RegexOption.IGNORE_CASE)
+        val userAskedTransition = messages.any { it.isUser && it.text.contains(transitionRegex) }
+        if (!userAskedTransition && schema.timeline.any { it is TimelineNode.Video && it.transition != null }) {
+            val sanitizedTimeline = schema.timeline.map { node ->
+                if (node is TimelineNode.Video && node.transition != null) {
+                    node.copy(transition = null)
+                } else {
+                    node
                 }
-            } catch (e: Exception) {
-                Log.w("ChatViewModel", "Preview proxy generation failed, falling back to direct playlist", e)
             }
+            return schema.copy(timeline = sanitizedTimeline)
         }
+        return schema
     }
 
     init {
@@ -226,28 +184,29 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }.getOrNull()
             }
 
+            val sanitizedSchema = loadedSchema?.let { sanitizeUnrequestedTransitions(loadedMessages, it) }
+
             mutable.update {
                 it.copy(
                     project = project,
                     sources = project.orderedSources,
                     messages = loadedMessages,
-                    compositionSchema = loadedSchema,
+                    compositionSchema = sanitizedSchema,
                     errorMessage = null,
                     jobMessage = null,
                     isProcessing = false
                 )
             }
 
-            loadedSchema?.let { schema ->
+            sanitizedSchema?.let { schema ->
                 val prevRatio = schema.settings.aspectRatio
                 normalizeSchemaAspectRatio(project, schema)
-                if (schema.settings.aspectRatio != prevRatio) {
+                if (schema != loadedSchema || schema.settings.aspectRatio != prevRatio) {
                     runCatching {
                         val jsonStr = defaultJson.encodeToString(CompositionSchema.serializer(), schema)
                         File(getApplication<Application>().filesDir, "${id}_composition.json").writeText(jsonStr)
                     }
                 }
-                updatePreviewProxy(project, schema)
             }
         } catch (e: Exception) {
             mutable.update {
@@ -503,8 +462,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
 
-            updatePreviewProxy(projectWithSnapshot, schema)
-
             refreshChats()
         }
     }
@@ -621,10 +578,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     val previousSchema = mutable.value.compositionSchema
 
                     if (response.schema != null) {
-                        normalizeSchemaAspectRatio(project, response.schema)
-                        mutable.update { it.copy(compositionSchema = response.schema) }
+                        val allMessages = mutable.value.messages + UiChatMessage(text = text, isUser = true)
+                        val sanitized = sanitizeUnrequestedTransitions(allMessages, response.schema)
+                        normalizeSchemaAspectRatio(project, sanitized)
+                        mutable.update { it.copy(compositionSchema = sanitized) }
                         runCatching {
-                            val jsonStr = defaultJson.encodeToString(CompositionSchema.serializer(), response.schema)
+                            val jsonStr = defaultJson.encodeToString(CompositionSchema.serializer(), sanitized)
                             File(getApplication<Application>().filesDir, "${project.id}_composition.json").writeText(jsonStr)
                         }
                     }
@@ -651,9 +610,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             messages = filtered + UiChatMessage(text = replyText, isUser = false, turnId = turnId),
                             isProcessing = false
                         )
-                    }
-                    if (response.schema != null) {
-                        updatePreviewProxy(updatedProject, response.schema)
                     }
                     refreshChats()
                 } else if (response.type == "clarification") {
@@ -814,8 +770,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 isProcessing = false
             )
         }
-
-        updatePreviewProxy(restoredProject, restoredSchema ?: mutable.value.compositionSchema)
 
         viewModelScope.launch {
             runCatching {

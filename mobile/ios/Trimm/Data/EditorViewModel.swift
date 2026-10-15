@@ -64,7 +64,11 @@ public class EditorViewModel {
                 if let data = try? Data(contentsOf: fileUrl) {
                     let decoder = JSONDecoder()
                     if let schema = try? decoder.decode(CompositionSchema.self, from: data) {
-                        self.state.compositionSchema = schema
+                        let sanitized = sanitizeUnrequestedTransitions(messages: loadedMessages, schema: schema)
+                        self.state.compositionSchema = sanitized
+                        if let encoded = try? JSONEncoder().encode(sanitized) {
+                            try? encoded.write(to: fileUrl)
+                        }
                     }
                 }
             }
@@ -79,6 +83,30 @@ public class EditorViewModel {
     public var canUndo: Bool {
         guard let project = state.project else { return false }
         return !project.analysis.chatHistory.isEmpty || !project.undo.isEmpty
+    }
+    
+    private func sanitizeUnrequestedTransitions(messages: [ChatMessage], schema: CompositionSchema) -> CompositionSchema {
+        let keywords = ["transition", "transitions", "crossfade", "cross-fade", "dip to black", "dip to white", "wipe", "slide", "fade in", "fade out"]
+        let userAsked = messages.contains { msg in
+            msg.isUser && keywords.contains { msg.text.localizedCaseInsensitiveContains($0) }
+        }
+        let hasTransitions = schema.timeline.contains {
+            if case .video(let v) = $0, v.transition != nil { return true }
+            return false
+        }
+        if !userAsked && hasTransitions {
+            var newTimeline = [TimelineNode]()
+            for node in schema.timeline {
+                if case .video(var v) = node, v.transition != nil {
+                    v.transition = nil
+                    newTimeline.append(.video(v))
+                } else {
+                    newTimeline.append(node)
+                }
+            }
+            return CompositionSchema(settings: schema.settings, metadata: schema.metadata, timeline: newTimeline)
+        }
+        return schema
     }
     
     public func latestUndoTarget() -> UndoTarget? {
@@ -670,14 +698,16 @@ public class EditorViewModel {
                         
                         let previousSchema = self.state.compositionSchema
                         if let updatedSchema = response.schema {
-                            self.state.compositionSchema = updatedSchema
+                            let allMessages = self.state.messages + [ChatMessage(text: request, isUser: true)]
+                            let sanitized = self.sanitizeUnrequestedTransitions(messages: allMessages, schema: updatedSchema)
+                            self.state.compositionSchema = sanitized
                             
                             // Save schema locally
                             if let docDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
                                 let fileUrl = docDir.appendingPathComponent("\(project.id)_composition.json")
                                 let encoder = JSONEncoder()
                                 encoder.outputFormatting = .prettyPrinted
-                                if let data = try? encoder.encode(updatedSchema) {
+                                if let data = try? encoder.encode(sanitized) {
                                     try? data.write(to: fileUrl)
                                 }
                             }
@@ -730,6 +760,9 @@ public class EditorViewModel {
                             BillingManager.shared.isStorePresented = true
                             self.state.jobMessage = nil
                             self.state.messages.append(ChatMessage(text: "You don't have enough credits to run this AI edit. Please top up in the credit store.", isUser: false))
+                        case .badServerResponse:
+                            self.state.jobMessage = "Server communication error"
+                            self.state.messages.append(ChatMessage(text: "Server communication error. Please try again.", isUser: false))
                         }
                     } else if (error as NSError).code == 402 {
                         BillingManager.shared.isStorePresented = true

@@ -1,11 +1,6 @@
 # trimm Android Client
 
-Android-first conversational video editor. Import clips, describe the edit in chat, review the evidence-backed proposal, and preview or export the result locally.
-
-See [Android rendering](docs/RENDERING.md), [Perception](docs/PERCEPTION.md), and the [Mobile roadmap](docs/ROADMAP.md).
-
-Start with the [Android development guide](docs/DEVELOPMENT.md) before taking a
-ticket.
+Android-first conversational video editor. Import clips, describe the edit in chat, and preview and export the declarative CompositionSchema result locally via AndroidX Media3.
 
 ## Build
 
@@ -99,6 +94,4 @@ It should report version 17.
 
 ## Ownership
 
-This repository owns Android UI, on-device evidence, Layer 1 execution, Media3 preview/export, project persistence, and Google Play client flows. Cloud planning, transcription, derivatives, accounts, and billing live in `trimm-cloud`.
-
-Supported cloud wire versions are pinned in the test resources under `contracts/cloud-contract.lock.json` and checked by the Android test suite.
+This client owns Android UI (Jetpack Compose), Media3 preview/export execution, local project persistence, and Google Play client flows. Cloud planning, transcription, derivatives, accounts, and billing live in `cloud`.

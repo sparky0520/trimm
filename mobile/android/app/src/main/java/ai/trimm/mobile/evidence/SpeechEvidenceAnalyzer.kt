@@ -23,9 +23,6 @@ class SpeechEvidenceAnalyzer(
             val range = TimeRange(a.range.endMs, b.range.startMs)
             result += speech(source, range, SpeechKind.PAUSE, .98f)
         }
-        valid.filter { it.text.lowercase().trim(',', '.', '!', '?') in DISFLUENCIES }.forEach {
-            result += speech(source, it.range, SpeechKind.DISFLUENCY, it.confidence, it.text)
-        }
         speakerRegions(valid).forEach { (range, regionWords) ->
             val speakerId = requireNotNull(regionWords.first().speakerId)
             result += speech(source, range, SpeechKind.SPEAKER_REGION, regionWords.minOf { it.confidence }, speakerId = speakerId)
@@ -70,6 +67,4 @@ class SpeechEvidenceAnalyzer(
         if (current.isNotEmpty()) regions += current
         return regions.map { TimeRange(it.first().range.startMs, it.last().range.endMs) to it }
     }
-
-    companion object { private val DISFLUENCIES = setOf("um", "uh", "erm", "hmm") }
 }

@@ -76,7 +76,7 @@ class EvidencePipelineTest {
 
         assertEquals(first.map { it.id }, second.map { it.id })
         val kinds = first.filterIsInstance<SpeechEvidence>().map { it.kind }.toSet()
-        assertTrue(kinds.containsAll(setOf(SpeechKind.WORD, SpeechKind.SENTENCE, SpeechKind.PAUSE, SpeechKind.DISFLUENCY, SpeechKind.SPEAKER_REGION)))
+        assertTrue(kinds.containsAll(setOf(SpeechKind.WORD, SpeechKind.SENTENCE, SpeechKind.PAUSE, SpeechKind.SPEAKER_REGION)))
         assertTrue(first.all { it.provenance.analyzer.version == "1.0.0" })
         assertEquals(setOf("speaker-A", "speaker-B"), first.filterIsInstance<SpeechEvidence>().mapNotNull { it.speakerId }.toSet())
     }

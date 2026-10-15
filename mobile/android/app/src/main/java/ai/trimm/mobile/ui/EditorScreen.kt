@@ -45,7 +45,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.transformer.CompositionPlayer
 import androidx.media3.exoplayer.source.ConcatenatingMediaSource2
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -90,43 +90,15 @@ fun EditorScreen(
     var showAssetsModal by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var selectedUndoTarget by remember { mutableStateOf<UndoTarget?>(null) }
-    var playbackPositionMs by remember { mutableLongStateOf(0L) }
-
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
-    // Native hardware video player (zero color tint, direct SurfaceView output)
+    // Unified hardware video player using CompositionPlayer with identical pipeline as export
     val player = remember {
-        val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                /* minBufferMs = */ 15_000,
-                /* maxBufferMs = */ 50_000,
-                /* bufferForPlaybackMs = */ 100,
-                /* bufferForPlaybackAfterRebufferMs = */ 250
-            )
-            .setBufferDurationsMsForLocalPlayback(
-                /* minBufferForLocalPlaybackMs = */ 15_000,
-                /* maxBufferForLocalPlaybackMs = */ 50_000,
-                /* bufferForPlaybackForLocalPlaybackMs = */ 100,
-                /* bufferForPlaybackAfterRebufferForLocalPlaybackMs = */ 250
-            )
-            .setBackBuffer(5_000, true)
-            .setPrioritizeTimeOverSizeThresholds(true)
-            .setPrioritizeTimeOverSizeThresholdsForLocalPlayback(true)
-            .build()
-
-        val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(context)
-            .setEnableDecoderFallback(true)
-            .experimentalSetEnableMediaCodecVideoRendererPrewarming(true)
-
-        ExoPlayer.Builder(context, renderersFactory)
-            .setLoadControl(loadControl)
-            .setSeekBackIncrementMs(5000)
-            .setSeekForwardIncrementMs(15000)
-            .build().apply {
-                repeatMode = Player.REPEAT_MODE_ALL
-                playWhenReady = true
-            }
+        CompositionPlayer.Builder(context).build().apply {
+            repeatMode = Player.REPEAT_MODE_ALL
+            playWhenReady = true
+        }
     }
 
     DisposableEffect(player) {
@@ -135,101 +107,36 @@ fun EditorScreen(
         }
     }
 
-    // Continuously monitor playback position for synchronized overlay rendering
-    LaunchedEffect(player, state.compositionSchema, state.previewUri) {
-        while (true) {
-            val schema = state.compositionSchema
-            val vNodes = schema?.timeline?.filterIsInstance<TimelineNode.Video>()?.filter { (it.endMs - it.startMs) > 0 } ?: emptyList()
-            if (!state.previewUri.isNullOrEmpty()) {
-                // Preview proxy is a single continuous stitched video: player position matches timeline 1:1!
-                playbackPositionMs = player.currentPosition
-            } else if (vNodes.isNotEmpty()) {
-                val curIndex = player.currentMediaItemIndex
-                if (curIndex in vNodes.indices) {
-                    playbackPositionMs = vNodes[curIndex].startMs + player.currentPosition
-                }
-            } else {
-                playbackPositionMs = player.currentPosition
-            }
-            delay(33)
-        }
-    }
-
     var currentLoadedSignature by remember { mutableStateOf<String?>(null) }
 
-    // Refresh player media source when project, composition schema, or previewUri changes
-    LaunchedEffect(state.project, state.compositionSchema, state.previewUri) {
+    // Refresh player composition when project or composition schema changes
+    LaunchedEffect(state.project, state.compositionSchema) {
         val proj = state.project ?: return@LaunchedEffect
         val schema = state.compositionSchema
-        val sourceUri = state.source?.uri ?: proj.orderedSources.firstOrNull()?.uri
 
-        // Priority 1: Fast Local Preview Proxy (single continuous file, 0 transitions, 60fps scrub)
-        if (!state.previewUri.isNullOrEmpty()) {
-            val proxyUriStr = state.previewUri
-            if (currentLoadedSignature != proxyUriStr || player.mediaItemCount != 1) {
-                currentLoadedSignature = proxyUriStr
+        val signature = if (schema != null) {
+            val vSig = schema.timeline.filterIsInstance<TimelineNode.Video>()
+                .joinToString(";") { "${it.src}:${it.sourceStartMs}:${it.startMs}:${it.endMs}:${it.transition}" }
+            val tSig = schema.timeline.filterIsInstance<TimelineNode.Text>()
+                .joinToString(";") { "${it.id}:${it.text}:${it.startMs}:${it.endMs}:${it.isVisible}" }
+            "schema:$vSig|$tSig|${schema.settings.aspectRatio}|${schema.settings.autoEnhance}"
+        } else {
+            val cuts = proj.operations.filterIsInstance<RemoveRanges>().filter { it.enabled }.flatMap { it.ranges }.sortedBy { it.startMs }
+            "proj:${proj.id}:${proj.revision}:${cuts.joinToString { "${it.startMs}-${it.endMs}" }}"
+        }
+
+        if (currentLoadedSignature != signature) {
+            currentLoadedSignature = signature
+            try {
+                val composition = ExportCoordinator.composition(context, proj, isPreview = true, schema = schema)
                 val wasPlaying = player.isPlaying
                 val currentPos = player.currentPosition
-                player.setMediaItem(MediaItem.fromUri(Uri.parse(proxyUriStr)))
+                player.setComposition(composition)
                 player.prepare()
                 if (currentPos > 0) player.seekTo(currentPos)
                 if (wasPlaying) player.play()
-            }
-            return@LaunchedEffect
-        }
-
-        // Priority 2: Direct playlist of video cuts while proxy is rendering in background
-        val videoNodes = schema?.timeline?.filterIsInstance<TimelineNode.Video>()?.filter { (it.endMs - it.startMs) > 0 } ?: emptyList()
-        if (videoNodes.isNotEmpty()) {
-            val signature = "cuts:" + videoNodes.joinToString(";") { "${it.src}:${it.sourceStartMs}:${it.startMs}:${it.endMs}" }
-            if (currentLoadedSignature != signature || player.mediaItemCount != videoNodes.size) {
-                currentLoadedSignature = signature
-                val items = videoNodes.map { node ->
-                    val durationMs = node.endMs - node.startMs
-                    val clipping = MediaItem.ClippingConfiguration.Builder()
-                        .setStartPositionMs(node.sourceStartMs)
-                        .setEndPositionMs(node.sourceStartMs + durationMs)
-                        .build()
-                    val uriString = node.src.takeIf { it.isNotBlank() } ?: sourceUri ?: ""
-                    MediaItem.Builder()
-                        .setUri(Uri.parse(uriString))
-                        .setClippingConfiguration(clipping)
-                        .build()
-                }
-                player.setMediaItems(items)
-                player.prepare()
-            }
-        } else if (proj.operations.any { it is RemoveRanges && it.enabled }) {
-            val durationMs = proj.durationMs
-            val cuts = proj.operations.filterIsInstance<RemoveRanges>().filter { it.enabled }.flatMap { it.ranges }.sortedBy { it.startMs }
-            val retained = ExportCoordinator.retainedRanges(durationMs, cuts)
-            val signature = "ops:" + retained.joinToString(";") { "${it.startMs}:${it.endMs}" }
-            if (currentLoadedSignature != signature) {
-                currentLoadedSignature = signature
-                if (retained.isNotEmpty() && !sourceUri.isNullOrEmpty()) {
-                    val items = retained.map { r ->
-                        val clipping = MediaItem.ClippingConfiguration.Builder()
-                            .setStartPositionMs(r.startMs)
-                            .setEndPositionMs(r.endMs)
-                            .build()
-                        MediaItem.Builder()
-                            .setUri(Uri.parse(sourceUri))
-                            .setClippingConfiguration(clipping)
-                            .build()
-                    }
-                    player.setMediaItems(items)
-                    player.prepare()
-                } else if (!sourceUri.isNullOrEmpty()) {
-                    player.setMediaItem(MediaItem.fromUri(Uri.parse(sourceUri)))
-                    player.prepare()
-                }
-            }
-        } else if (!sourceUri.isNullOrEmpty()) {
-            val signature = "single:$sourceUri"
-            if (currentLoadedSignature != signature) {
-                currentLoadedSignature = signature
-                player.setMediaItem(MediaItem.fromUri(Uri.parse(sourceUri)))
-                player.prepare()
+            } catch (e: Exception) {
+                android.util.Log.e("EditorScreen", "Failed to update preview composition", e)
             }
         }
     }
@@ -461,144 +368,6 @@ fun EditorScreen(
                                 modifier = Modifier.fillMaxSize()
                             )
 
-                            // 2. On-screen subtitle/caption overlay:
-                            // Strictly bounded within the 9:16 portrait video frame (videoWidth x videoHeight),
-                            // and only visible when player controls are hidden so captions never display on top of or collide with controls.
-                            val activeCaption = remember(playbackPositionMs, state.compositionSchema) {
-                                val schema = state.compositionSchema
-                                schema?.timeline?.filterIsInstance<TimelineNode.Text>()
-                                    ?.firstOrNull { it.isVisible && playbackPositionMs in it.startMs..it.endMs }
-                            }
-
-                            if (!isControlsVisible && activeCaption != null) {
-                                val density = LocalDensity.current
-                                val scaleFactor = (videoWidth.value / 1000f)
-                                val rawFontSize = activeCaption.style?.fontSize ?: 60f
-                                val rawScale = activeCaption.style?.scale ?: 1f
-                                val effectiveFontSize = (rawFontSize * rawScale * scaleFactor).coerceAtLeast(12f)
-                                val fontSizeSp = effectiveFontSize.sp
-
-                                val rawStrokeWidth = activeCaption.style?.strokeWidth ?: 4f
-                                val strokeWidthPx = with(density) {
-                                    val swDp = (rawStrokeWidth * rawScale * scaleFactor).dp
-                                    swDp.toPx().coerceAtLeast(1.5f)
-                                }
-
-                                val defaultColorHex = activeCaption.style?.color ?: "#FFFFFF"
-                                val baseTextColor = remember(defaultColorHex) {
-                                    runCatching { Color(android.graphics.Color.parseColor(defaultColorHex)) }.getOrDefault(Color.White)
-                                }
-
-                                val strokeColorHex = activeCaption.style?.strokeColor ?: "#000000"
-                                val strokeColor = remember(strokeColorHex) {
-                                    runCatching { Color(android.graphics.Color.parseColor(strokeColorHex)) }.getOrDefault(Color.Black)
-                                }
-
-                                val annotatedText = remember(activeCaption.text, activeCaption.segments, baseTextColor) {
-                                    if (!activeCaption.segments.isNullOrEmpty()) {
-                                        buildAnnotatedString {
-                                            activeCaption.segments.forEach { seg ->
-                                                val segColor = seg.color?.let { c ->
-                                                    runCatching { Color(android.graphics.Color.parseColor(c)) }.getOrNull()
-                                                } ?: baseTextColor
-                                                withStyle(SpanStyle(color = segColor)) {
-                                                    append(seg.text)
-                                                }
-                                            }
-                                        }
-                                    } else null
-                                }
-
-                                val posX = (activeCaption.style?.posX ?: 0f).coerceIn(-1f, 1f)
-                                val posY = (activeCaption.style?.posY ?: -0.35f).coerceIn(-1f, 1f)
-
-                                val videoWidthPx = with(density) { videoWidth.toPx() }
-                                val videoHeightPx = with(density) { videoHeight.toPx() }
-
-                                // Exact 1:1 mathematical coordinate mapping matching TextGraphicOverlay (Android & iOS):
-                                // posX: normalized horizontal anchor (-1.0 left, 0.0 center, 1.0 right) -> cx = width * (0.5 + posX / 2)
-                                // posY: normalized vertical anchor (-1.0 bottom, 0.0 center, 1.0 top) -> cy = height * (0.5 - posY / 2)
-                                val targetCenterX = videoWidthPx * (0.5f + posX / 2f)
-                                val targetCenterY = videoHeightPx * (0.5f - posY / 2f)
-
-                                Box(
-                                    modifier = Modifier
-                                        .width(videoWidth)
-                                        .height(videoHeight)
-                                        .clipToBounds()
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .layout { measurable, constraints ->
-                                                val maxTextWidth = (videoWidthPx * 0.9f).roundToInt()
-                                                val childConstraints = constraints.copy(
-                                                    minWidth = 0,
-                                                    maxWidth = maxTextWidth.coerceAtMost(constraints.maxWidth)
-                                                )
-                                                val placeable = measurable.measure(childConstraints)
-                                                layout(constraints.maxWidth, constraints.maxHeight) {
-                                                    val x = (targetCenterX - placeable.width / 2f).roundToInt()
-                                                    val y = (targetCenterY - placeable.height / 2f).roundToInt()
-                                                    placeable.placeRelative(x, y)
-                                                }
-                                            },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            // Pass 1: Outline stroke (drawn behind)
-                                            if (strokeWidthPx > 0f) {
-                                                Text(
-                                                    text = activeCaption.text,
-                                                    color = strokeColor,
-                                                    fontSize = fontSizeSp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    textAlign = TextAlign.Center,
-                                                    style = TextStyle(
-                                                        drawStyle = Stroke(
-                                                            width = strokeWidthPx,
-                                                            join = StrokeJoin.Round
-                                                        )
-                                                    )
-                                                )
-                                            }
-                                            // Pass 2: Main fill text + drop shadow (drawn on top, NO translucent background box)
-                                            if (annotatedText != null) {
-                                                Text(
-                                                    text = annotatedText,
-                                                    fontSize = fontSizeSp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    textAlign = TextAlign.Center,
-                                                    style = TextStyle(
-                                                        drawStyle = Fill,
-                                                        shadow = Shadow(
-                                                            color = Color.Black.copy(alpha = 0.85f),
-                                                            offset = Offset(0f, 2f),
-                                                            blurRadius = 4f
-                                                        )
-                                                    )
-                                                )
-                                            } else {
-                                                Text(
-                                                    text = activeCaption.text,
-                                                    color = baseTextColor,
-                                                    fontSize = fontSizeSp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    textAlign = TextAlign.Center,
-                                                    style = TextStyle(
-                                                        drawStyle = Fill,
-                                                        shadow = Shadow(
-                                                            color = Color.Black.copy(alpha = 0.85f),
-                                                            offset = Offset(0f, 2f),
-                                                            blurRadius = 4f
-                                                        )
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
                         } else {
                             CircularProgressIndicator(color = Lavender)
                         }

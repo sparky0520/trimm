@@ -4,18 +4,17 @@ This directory contains the iOS native client for trimm.
 
 ## Architecture & Technology Stack
 
-- **UI Framework**: SwiftUI (using the latest declarative features)
-- **Local Database**: SwiftData (for local project persistence, chat history, and evidence caching)
-- **Dependency Manager**: Swift Package Manager (SPM)
-- **Target OS**: iOS 17+ (to leverage the latest AVFoundation and SwiftData APIs)
+- **UI Framework**: SwiftUI (using `@Observable` pattern)
+- **Local Persistence**: JSON document persistence for `MobileProject` and `CompositionSchema`
+- **Dependency Manager**: Swift Package Manager (SPM) via `project.yml`
+- **Target OS**: iOS 17+
 
 ### Core Modules
 
-- `Media`: Built on `AVFoundation` (`AVVideoComposition`, `AVMutableComposition`), replacing Android's Media3. `CoreImage` is used for shaders (`CIFilter`) and `AVVideoCompositing` for custom overlays.
-- `Evidence`: Uses the `Vision` framework for visual analysis (saliency, face detection), the `Speech` framework for transcription, and `CoreML` for custom ranking models.
-- `Network`: Utilizes the official `supabase-swift` package for backend communication and `URLSession` for derivative uploads.
-- `Domain`: Pure native Swift structs/classes mirroring the Android domain models (EditEngines, ConversationalRevision, EditorialPlan).
-- `Work`: Uses the `BackgroundTasks` framework (`BGProcessingTask`) to handle intensive media operations in the background.
+- `Media`: Built on `AVFoundation` (`AVMutableComposition`, `AVMutableVideoComposition`, `AVMutableAudioMix`). Utilizes `CoreImage` for filters (`CIFilter`) and video composition handler. Both preview (`AVPlayerItem`) and export (`AVAssetExportSession`) share the exact same raw composition builder.
+- `Network`: Utilizes `supabase-swift` for authentication and project cloud synchronization, and custom streaming client for LLM agent completion over SSE.
+- `Domain`: Native Swift structs/classes modeling `CompositionSchema`, `MobileProject`, `TimelineNode` (Video, Text, Effect, Audio), and undo/redo snapshots.
+- `Billing`: Built on `StoreKit 2` with balance tracking synced to Supabase.
 
 ## Getting Started
 

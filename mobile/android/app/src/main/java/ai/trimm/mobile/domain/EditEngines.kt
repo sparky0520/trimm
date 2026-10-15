@@ -5,7 +5,6 @@ import kotlin.math.max
 import kotlin.math.min
 
 object FumbleDetector {
-    private val fillers = setOf("um", "uh", "erm", "hmm", "ah")
     fun detect(words: List<TranscriptWord>, durationMs: Long, pace: Pace, profile: EditorialProfile? = null): List<FumbleCandidate> {
         if (words.isEmpty()) return emptyList()
         val out = mutableListOf<FumbleCandidate>()
@@ -29,13 +28,6 @@ object FumbleDetector {
             }
         }
         words.forEachIndexed { index, word ->
-            if (word.text.lowercase().trim('.', ',', ' ') in fillers) {
-                val start = max(0, word.range.startMs - 70); val end = min(durationMs, word.range.endMs + 90)
-                if (end > start) out += hint(
-                    words, listOf(index), TimeRange(start, end), word.confidence,
-                    if (word.confidence < .75f) "possible-filler-transcript-uncertain" else "possible-filler"
-                )
-            }
             if (word.confidence < .75f) {
                 out += hint(words, listOf(index), word.range, word.confidence, "transcript-uncertainty")
             }

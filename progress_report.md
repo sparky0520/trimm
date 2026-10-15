@@ -38,26 +38,30 @@ graph TD
 ## Current Progress & Features
 
 ### 1. Cross-Platform Mobile Clients
-- **iOS App**: Developed using SwiftUI and SwiftData. Features a custom `VideoDSL` for manipulating and trimming videos natively. 
-- **Android App**: Developed using Kotlin and Jetpack Compose, maintaining feature parity with the iOS counterpart.
-- **On-Device Processing**: Videos remain on the user's device for privacy and speed, applying edits locally rather than relying on expensive cloud rendering.
+- **iOS App**: Developed using Swift and SwiftUI (`@Observable`). Media pipeline built on AVFoundation (`AVMutableComposition`, `AVMutableVideoComposition`, `AVMutableAudioMix`) with CoreImage shader processing.
+- **Android App**: Developed using Kotlin and Jetpack Compose. Media pipeline built on AndroidX Media3 (`CompositionPlayer`, `Transformer`, and Media3 Effects) ensuring exact preview-to-export fidelity.
+- **On-Device Processing**: Video rendering, audio mixing, text overlays, and transitions remain strictly on-device for speed and privacy.
 
-### 2. User Authentication
+### 2. User Authentication & Billing
 - Integrated **Supabase Auth** for secure user management.
-- Supports **Sign in with Apple** and **Sign in with Google** directly from the mobile clients.
-- Custom authentication nonces and crypto implementations are used for enhanced security.
+- Supports **Sign in with Apple** (iOS) and **Sign in with Google** (via Credential Manager on Android and ASWebAuthenticationSession on iOS).
+- Native in-app purchases powered by **Google Play Billing** (Android) and **StoreKit 2** (iOS) synced to Supabase credit balances.
 
-### 3. AI-Powered Editing Pipeline
-- The Node.js backend handles complex AI logic to interpret the video content and user intents.
-- Users can view and manage their "Past Chats", indicating a conversational UI approach to video editing (e.g., instructing the AI to "remove all the pauses" or "cut to the product shot").
-- A **Planner** and **Evidence** system on the client parses AI instructions and maps them to actual video cuts and transitions.
+### 3. Declarative AI Editing Pipeline
+- The Node.js backend (`cloud/src/server.js`) interfaces with LLMs using structured function calling (`apply_schema_patch` tool).
+- Edits are communicated as declarative **`CompositionSchema`** patches via Server-Sent Events (SSE).
+- The schema directly specifies the video timeline (cuts, source offsets), subtitle/caption text nodes (styling, positions, visibility), audio nodes (background music, sound effects, auto-ducking), and transitions.
+- The mobile clients act as deterministic renderers for this schema, maintaining a snapshot-based undo/redo history for every conversational revision.
 
 ### 4. Cloud Infrastructure
 - **Supabase** handles relational data mapping for user projects, chat history, and metadata.
+- **Whisper/AI Transcription Service**: Handles word-level timestamped transcription during initial video ingestion.
 - **Migrations** are version-controlled within `cloud/supabase/migrations` to maintain consistent schema states across environments.
-- Environment variables and local development setups are streamlined via the Supabase CLI and npm scripts.
+
+### 5. Unified Rendering & Transitions
+- **Single-Engine Video Pipeline**: Both iOS and Android execute the identical rendering pipeline for real-time playback and final export. Android utilizes Media3's `CompositionPlayer` with OpenGL effect overlays (`TextGraphicOverlay`, `TransitionGraphicOverlay`), eliminating proxy transcode delays, 33ms polling loops, and text rendering divergence.
+- **Cross-Platform Video Transitions**: Native on-device transitions (`crossfade`, `dip_to_black`, `dip_to_white`, `wipe`, `slide`) execute smoothly at 60fps across clip boundaries on both iOS (`AVVideoComposition` custom compositor) and Android (`BitmapOverlay` GL texture shaders).
 
 ## Next Steps
-- Finalize the generative AI prompts to improve the accuracy of edit decisions.
-- Enhance the VideoDSL to support multi-track editing and more complex transitions.
-- Conduct beta testing for both Android and iOS platforms to gather user feedback on the conversational editing experience.
+- Expand automated visual regression tests for transitions and overlays across both platforms.
+- Conduct real-world user testing across varying Android GPU drivers and older iOS hardware.

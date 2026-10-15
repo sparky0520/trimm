@@ -200,6 +200,8 @@ Represents a playable segment of video footage.
 - transition: Optional transition string applied at the beginning of this clip.
   Supported values: "crossfade", "dip_to_black", "dip_to_white", "wipe", "slide".
   (Natively animates a smooth 500ms transition between this clip and the preceding clip).
+  * DEFAULT: null.
+  * CRITICAL TRANSITION RULE: NEVER add transitions between clips unless the user EXPLICITLY asks for them (e.g. "add a crossfade", "use dip to black", "put transitions between clips"). For standard cuts, silence removals, trims, and clip rearrangements, transition MUST ALWAYS be null (or omitted). Hard cuts without transitions are the standard in professional video editing.
 
 * HOW TO CUT OR TRIM SILENCES / MISTAKES:
 When removing a time range [cutStartMs, cutEndMs] from the source video:
@@ -432,7 +434,7 @@ function sliceVideoNodesBySilences(baseSchema, silences, sourceUri, originalDura
       startMs: timelineMs,
       endMs: timelineMs + dur,
       sourceStartMs: r.sourceStartMs,
-      transition: i > 0 ? 'crossfade' : null
+      transition: null
     };
     timelineMs += dur;
     return node;
@@ -519,6 +521,24 @@ function sliceVideoNodesBySilences(baseSchema, silences, sourceUri, originalDura
             finalPatchSchema = sliceVideoNodesBySilences(finalPatchSchema, detectedSilences, vNode.src || sources[0]?.uri, primaryDuration);
           }
         }
+      }
+
+      // Sanitize unrequested transitions: strip any transition that was not explicitly requested
+      const userAskedTransition = /\b(transition|transitions|crossfade|cross-fade|dip\s*to\s*black|dip\s*to\s*white|wipe|slide|fade\s*in|fade\s*out)\b/i.test(lastUserMsg);
+      const prevTransitionNodeIds = new Set(
+        (schema?.timeline || [])
+          .filter(n => n.type === 'video' && n.transition)
+          .map(n => n.id)
+      );
+
+      if (!userAskedTransition && Array.isArray(finalPatchSchema.timeline)) {
+        finalPatchSchema.timeline = finalPatchSchema.timeline.map(node => {
+          if (node.type === 'video' && node.transition && !prevTransitionNodeIds.has(node.id)) {
+            const { transition, ...rest } = node;
+            return rest;
+          }
+          return node;
+        });
       }
 
       // Enforce immutability of metadata

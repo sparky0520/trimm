@@ -24,7 +24,6 @@ class FumbleDetectorTest {
 
         assertTrue(hints.any { it.reason == "repeated-phrase-candidate" })
         assertTrue(hints.any { it.reason == "pause-candidate" })
-        assertTrue(hints.any { it.reason == "possible-filler" })
         assertTrue(hints.all { it.provenance == "local-transcript-timing" })
         assertTrue(hints.all { it.context.isNotBlank() })
         assertTrue(hints.any { it.contextBefore.isNotBlank() || it.contextAfter.isNotBlank() })
@@ -45,15 +44,14 @@ class FumbleDetectorTest {
         assertFalse(natural.any { it.reason == "pause-candidate" })
     }
 
-    @Test fun `transcription uncertainty is preserved even for a possible filler`() {
+    @Test fun `transcription uncertainty is preserved`() {
         val hints = FumbleDetector.detect(
-            listOf(word("we", 0, 200), word("um", 250, 450, .42f), word("ship", 500, 800)),
+            listOf(word("we", 0, 200), word("word", 250, 450, .42f), word("ship", 500, 800)),
             1_000, Pace.NATURAL
         )
-        assertTrue(hints.any { it.reason == "possible-filler-transcript-uncertain" })
         val uncertain = hints.single { it.reason == "transcript-uncertainty" }
         assertEquals(.42f, uncertain.transcriptConfidence)
-        assertEquals("um", uncertain.context)
+        assertEquals("word", uncertain.context)
     }
 
     @Test fun `repeated wording never crosses explicit speaker boundaries`() {

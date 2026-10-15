@@ -1,5 +1,19 @@
 import Foundation
 
+public struct AnalyzerContext {
+    public let source: SourceMedia
+    public let artifactDirectory: URL
+    public init(source: SourceMedia, artifactDirectory: URL) {
+        self.source = source
+        self.artifactDirectory = artifactDirectory
+    }
+}
+
+public protocol EvidenceAnalyzer {
+    var identity: AnalyzerIdentity { get }
+    func analyze(context: AnalyzerContext) async throws -> [AnyEvidenceObservation]
+}
+
 public struct AnalyzerResult {
     public let observations: [AnyEvidenceObservation]
     public let run: AnalyzerRun

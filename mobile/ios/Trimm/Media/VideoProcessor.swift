@@ -510,20 +510,19 @@ public class VideoProcessor {
                 var translationX: CGFloat = 0.0
                 var cropRatio: CGFloat = 1.0
                 
-                for v in videoNodes where timeMs >= v.startMs && timeMs <= v.endMs {
-                    if let transition = v.transition {
+                for (index, v) in videoNodes.enumerated() where timeMs >= v.startMs && timeMs <= v.endMs {
+                    if let rawTransition = v.transition, index > 0 {
+                        let transition = rawTransition.lowercased().replacingOccurrences(of: "-", with: "_").trimmingCharacters(in: .whitespacesAndNewlines)
                         let fadeMs: Int64 = 500
                         var progress: CGFloat = 1.0
                         
                         if timeMs < v.startMs + fadeMs {
                             progress = CGFloat(timeMs - v.startMs) / CGFloat(fadeMs)
-                        } else if timeMs > v.endMs - fadeMs {
-                            progress = CGFloat(v.endMs - timeMs) / CGFloat(fadeMs)
                         }
                         
                         if progress < 1.0 {
                             switch transition {
-                            case "crossfade", "dip_to_black":
+                            case "crossfade", "dip_to_black", "fade_in":
                                 opacity = progress
                             case "dip_to_white":
                                 opacity = progress
@@ -531,9 +530,9 @@ public class VideoProcessor {
                             case "wipe":
                                 cropRatio = progress
                             case "slide":
-                                translationX = (timeMs < v.startMs + fadeMs) ? request.renderSize.width * (1.0 - progress) : -request.renderSize.width * (1.0 - progress)
+                                translationX = request.renderSize.width * (1.0 - progress)
                             default:
-                                break
+                                opacity = progress
                             }
                         }
                     }
@@ -545,8 +544,7 @@ public class VideoProcessor {
                 
                 if cropRatio < 1.0 {
                     let cropWidth = request.renderSize.width * cropRatio
-                    let cropX = (request.renderSize.width - cropWidth) / 2.0
-                    let cropRect = CGRect(x: cropX, y: 0, width: cropWidth, height: request.renderSize.height)
+                    let cropRect = CGRect(x: 0, y: 0, width: cropWidth, height: request.renderSize.height)
                     image = image.cropped(to: cropRect)
                 }
                 

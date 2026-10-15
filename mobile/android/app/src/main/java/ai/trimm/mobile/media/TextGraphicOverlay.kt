@@ -43,12 +43,16 @@ class TextGraphicOverlay(
         return try { Color.parseColor(colorString) } catch (e: Exception) { defaultColor }
     }
 
+    private val emptyBitmap: Bitmap by lazy {
+        val empty = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        empty.eraseColor(Color.TRANSPARENT)
+        empty
+    }
+
     override fun getBitmap(presentationTimeUs: Long): Bitmap {
         val timeMs = presentationTimeUs / 1000
         if (timeMs < startMs || timeMs > endMs) {
-            val empty = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
-            empty.eraseColor(Color.TRANSPARENT)
-            return empty
+            return emptyBitmap
         }
         return cachedBitmap
     }
