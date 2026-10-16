@@ -156,13 +156,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun loadProject(id: String) = viewModelScope.launch {
-        mutable.update { it.copy(isProcessing = true, errorMessage = null) }
+        mutable.update { it.copy(isProcessing = true, errorMessage = null, isSchemaCorrupted = false) }
         try {
-            val project = runCatching {
-                ChatRepository.shared.getProject(getApplication(), id)
-            }.getOrElse {
-                store.load(id)
-            }
+            val project = ChatRepository.shared.getProject(getApplication(), id)
 
             val loadedMessages = mutableListOf<UiChatMessage>()
             loadedMessages.add(
@@ -177,21 +173,98 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             var loadedSchema: CompositionSchema? = null
-            val schemaFile = File(getApplication<Application>().filesDir, "${id}_composition.json")
+            var isCorrupted = false
+            var autoRecovered = false
+            val context = getApplication<Application>()
+            val schemaFile = File(context.filesDir, "${id}_composition.json")
+            val initialSchemaFile = File(context.filesDir, "${id}_initial_composition.json")
+
             if (schemaFile.exists()) {
                 loadedSchema = runCatching {
                     defaultJson.decodeFromString<CompositionSchema>(schemaFile.readText())
                 }.getOrNull()
+                if (loadedSchema == null) {
+                    // Schema on disk failed to decode! Auto-undo: Recover the most recent valid schema from undo snapshots
+                    val lastGoodSnapshot = project.undo.lastOrNull { it.schema != null }
+                    if (lastGoodSnapshot?.schema != null) {
+                        loadedSchema = lastGoodSnapshot.schema
+                        autoRecovered = true
+                    } else if (initialSchemaFile.exists()) {
+                        loadedSchema = runCatching {
+                            defaultJson.decodeFromString<CompositionSchema>(initialSchemaFile.readText())
+                        }.getOrNull()
+                        if (loadedSchema != null) {
+                            autoRecovered = true
+                        }
+                    }
+                    if (loadedSchema == null) {
+                        isCorrupted = true
+                    }
+                }
+            } else if (initialSchemaFile.exists()) {
+                loadedSchema = runCatching {
+                    defaultJson.decodeFromString<CompositionSchema>(initialSchemaFile.readText())
+                }.getOrNull()
+            }
+
+            var activeProject = project
+            if (autoRecovered && loadedSchema != null) {
+                // Auto-healing: Overwrite the damaged file with the valid recovered schema
+                runCatching {
+                    val jsonStr = defaultJson.encodeToString(CompositionSchema.serializer(), loadedSchema)
+                    schemaFile.writeText(jsonStr)
+                }
+
+                // If recovered from undo snapshot, align project state and chat history
+                val lastGoodSnapshot = project.undo.lastOrNull { it.schema != null }
+                if (lastGoodSnapshot != null) {
+                    val remainingTurns = lastGoodSnapshot.analysis?.chatHistory ?: project.analysis.chatHistory.dropLast(1)
+                    activeProject = project.copy(
+                        analysis = project.analysis.copy(
+                            chatHistory = remainingTurns,
+                            activeTurnId = remainingTurns.lastOrNull()?.id
+                        ),
+                        operations = lastGoodSnapshot.operations,
+                        undo = project.undo.dropLast(1)
+                    )
+                    runCatching { store.save(activeProject) }
+                }
+
+                loadedMessages.clear()
+                loadedMessages.add(
+                    UiChatMessage(
+                        text = "Transcription complete. What would you like to edit?",
+                        isUser = false
+                    )
+                )
+                for (turn in activeProject.analysis.chatHistory) {
+                    loadedMessages.add(UiChatMessage(text = turn.request, isUser = true, turnId = turn.id))
+                    loadedMessages.add(UiChatMessage(text = turn.response, isUser = false, turnId = turn.id))
+                }
+                loadedMessages.add(
+                    UiChatMessage(
+                        text = "⚠️ A previous edit encountered a decoding error. Your project was automatically restored to the last working version.",
+                        isUser = false
+                    )
+                )
+            } else if (isCorrupted) {
+                loadedMessages.add(
+                    UiChatMessage(
+                        text = "⚠️ Warning: This project's edit data is corrupted and could not be loaded.",
+                        isUser = false
+                    )
+                )
             }
 
             val sanitizedSchema = loadedSchema?.let { sanitizeUnrequestedTransitions(loadedMessages, it) }
 
             mutable.update {
                 it.copy(
-                    project = project,
-                    sources = project.orderedSources,
+                    project = activeProject,
+                    sources = activeProject.orderedSources,
                     messages = loadedMessages,
                     compositionSchema = sanitizedSchema,
+                    isSchemaCorrupted = isCorrupted,
                     errorMessage = null,
                     jobMessage = null,
                     isProcessing = false
@@ -200,7 +273,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
             sanitizedSchema?.let { schema ->
                 val prevRatio = schema.settings.aspectRatio
-                normalizeSchemaAspectRatio(project, schema)
+                normalizeSchemaAspectRatio(activeProject, schema)
                 if (schema != loadedSchema || schema.settings.aspectRatio != prevRatio) {
                     runCatching {
                         val jsonStr = defaultJson.encodeToString(CompositionSchema.serializer(), schema)
@@ -338,7 +411,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     BillingManager.fetchCredits()
                     transcriptionError = "You need more credits to complete transcription. Please top up your credits to continue."
                 } else {
-                    transcriptionError = "Transcription could not be completed (${e.localizedMessage ?: "Network error"}). You can still edit using chat."
+                    transcriptionError = "Error: Transcription failed (${e.localizedMessage ?: "Network error"}). Your credits were not deducted. You can still edit using chat."
                 }
             }
 
@@ -578,12 +651,22 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     val previousSchema = mutable.value.compositionSchema
 
                     if (response.schema != null) {
+                        val hasVideoNodes = response.schema.timeline.any { it is TimelineNode.Video }
+                        val isVideoRequired = project.orderedSources.isNotEmpty()
+                        if (isVideoRequired && !hasVideoNodes) {
+                            throw kotlinx.serialization.SerializationException("Schema returned by agent is missing required video timeline nodes.")
+                        }
+
                         val allMessages = mutable.value.messages + UiChatMessage(text = text, isUser = true)
                         val sanitized = sanitizeUnrequestedTransitions(allMessages, response.schema)
                         normalizeSchemaAspectRatio(project, sanitized)
+
+                        // Validate that the sanitized schema cleanly serializes and deserializes
+                        val jsonStr = defaultJson.encodeToString(CompositionSchema.serializer(), sanitized)
+                        defaultJson.decodeFromString<CompositionSchema>(jsonStr)
+
                         mutable.update { it.copy(compositionSchema = sanitized) }
                         runCatching {
-                            val jsonStr = defaultJson.encodeToString(CompositionSchema.serializer(), sanitized)
                             File(getApplication<Application>().filesDir, "${project.id}_composition.json").writeText(jsonStr)
                         }
                     }
@@ -598,7 +681,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     )
 
                     runCatching {
-                        ChatRepository.shared.syncProject(getApplication(), updatedProject, response.schema)
                         store.save(updatedProject)
                     }
 
@@ -625,6 +707,38 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } catch (e: Exception) {
                 Log.e("ChatViewModel", "executeAgentTask error: ${e.message}", e)
+                val isSchemaError = e is kotlinx.serialization.SerializationException ||
+                    (e is IllegalArgumentException && e.message?.contains("schema", ignoreCase = true) == true)
+
+                if (isSchemaError) {
+                    // Auto-undo the prompt internally:
+                    // Restore previous working schema to disk and ensure clean state
+                    val fallbackSchema = mutable.value.compositionSchema
+                    if (fallbackSchema != null) {
+                        runCatching {
+                            val jsonStr = defaultJson.encodeToString(CompositionSchema.serializer(), fallbackSchema)
+                            File(getApplication<Application>().filesDir, "${project.id}_composition.json").writeText(jsonStr)
+                        }
+                    }
+                    runCatching {
+                        store.save(project)
+                    }
+                    mutable.update { state ->
+                        val cleanedMessages = state.messages.filter { it.turnId != turnId && it.text != "Thinking…" && it.text != "Editing…" }
+                        state.copy(
+                            isProcessing = false,
+                            jobMessage = null,
+                            compositionSchema = fallbackSchema ?: state.compositionSchema,
+                            isSchemaCorrupted = false,
+                            messages = cleanedMessages + UiChatMessage(
+                                text = "⚠️ This edit encountered a schema decoding error and was automatically undone. Your previous video edits are preserved.",
+                                isUser = false
+                            )
+                        )
+                    }
+                    return@launch
+                }
+
                 mutable.update { state ->
                     val filtered = state.messages.filter { it.text != "Thinking…" && it.text != "Editing…" }
                     val errorMsg = when (e) {

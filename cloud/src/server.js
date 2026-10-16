@@ -197,9 +197,9 @@ const server = http.createServer(async (request, response) => {
   }
   if (uploadMatch && request.method === 'POST' && uploadMatch[2]) {
     try {
-      await billingService.deductCredits(principal.id, CREDIT_COSTS.TRANSCRIPTION, 'transcription', 'Audio transcription upload', requestId);
       const upload = transcriptionUploads.complete(uploadMatch[1], principal.id);
       const result = await transcriptionCore.transcribe(upload.stream);
+      await billingService.deductCredits(principal.id, CREDIT_COSTS.TRANSCRIPTION, 'transcription', 'Audio transcription upload', requestId);
       return json(response, 200, result);
     } catch (error) {
       console.error('[transcribe-upload] request failed', { message: error?.message, status: error?.status });
@@ -216,9 +216,10 @@ const server = http.createServer(async (request, response) => {
   }
   if (request.method === 'POST' && requestUrl.pathname === '/v1/transcribe') {
     try {
-      await billingService.deductCredits(principal.id, CREDIT_COSTS.TRANSCRIPTION, 'transcription', 'Audio transcription', requestId);
       transcriptionCore.validateUpload(request.headers);
-      return json(response, 200, await transcriptionCore.transcribe(request));
+      const result = await transcriptionCore.transcribe(request);
+      await billingService.deductCredits(principal.id, CREDIT_COSTS.TRANSCRIPTION, 'transcription', 'Audio transcription', requestId);
+      return json(response, 200, result);
     } catch (error) {
       console.error('[transcribe] request failed', { message: error?.message, status: error?.status });
       return json(response, error?.status && Number.isInteger(error.status) ? error.status : 502, {

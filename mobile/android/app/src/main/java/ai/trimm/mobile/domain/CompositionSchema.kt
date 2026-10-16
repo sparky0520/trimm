@@ -51,7 +51,7 @@ sealed class TimelineNode {
     @SerialName("video")
     data class Video(
         val id: String = UUID.randomUUID().toString(),
-        val src: String,
+        val src: String = "",
         val startMs: Long,
         val endMs: Long,
         val sourceStartMs: Long = 0L,
@@ -86,7 +86,7 @@ sealed class TimelineNode {
     @SerialName("audio")
     data class Audio(
         val id: String = UUID.randomUUID().toString(),
-        val src: String,
+        val src: String = "",
         val startMs: Long,
         val endMs: Long,
         val autoDuck: Boolean? = null,

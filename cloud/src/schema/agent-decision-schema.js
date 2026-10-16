@@ -10,13 +10,18 @@ const targetRangeProperties = {
 
 const APPLY_SCHEMA_PATCH_TOOL = Object.freeze({
   name: 'apply_schema_patch',
-  description: 'Apply a patch to the video project by directly providing the new CompositionSchema. The CompositionSchema has a timeline array containing video, text, and effect nodes. You should modify this array to implement cuts (by splitting/removing video nodes), captions (by modifying text nodes), and visual effects.',
+  description: 'Apply a patch to the video project by providing the updated CompositionSchema or modified timeline nodes. To save tokens and preserve precision, you only need to return the nodes or properties you are modifying or adding; unchanged nodes and fields (such as video src or unchanged clips) are automatically preserved from the previous schema. DO NOT use this tool for conversational, editorial, script analysis, or script improvement requests—for those, reply directly with text.',
   parameters: {
     type: 'object',
     additionalProperties: false,
     required: ['reason', 'schema'],
     properties: {
       reason: { type: 'string', description: 'Explanation of the edits you made.' },
+      removedNodeIds: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Optional list of node IDs to explicitly remove/delete from the timeline (e.g. when removing background audio, an effect filter, or a custom graphic).'
+      },
       schema: {
         type: 'object',
         additionalProperties: false,
@@ -31,7 +36,7 @@ const APPLY_SCHEMA_PATCH_TOOL = Object.freeze({
           },
           timeline: {
             type: 'array',
-            description: 'The visual timeline of the video. Nodes are rendered bottom-to-top (video -> effect -> text). All nodes MUST have type, id, startMs, endMs.',
+            description: 'The visual timeline of the video. Nodes are rendered bottom-to-top (video -> effect -> text). To save tokens, you can return only the modified nodes (e.g., only styled text nodes), and unchanged nodes will be retained automatically.',
             items: {
               type: 'object',
               required: ['type', 'id', 'startMs', 'endMs'],
@@ -40,9 +45,9 @@ const APPLY_SCHEMA_PATCH_TOOL = Object.freeze({
                 id: { type: 'string' },
                 startMs: { type: 'integer', description: 'The absolute start time in milliseconds on the final exported video timeline. INCREASING this moves the element later in the video; DECREASING this moves it earlier.' },
                 endMs: { type: 'integer', description: 'The absolute end time in milliseconds on the final exported video timeline. INCREASING this makes the element stay on screen longer (extends end); DECREASING this cuts it off sooner (shortens duration).' },
-                src: { type: 'string' },
+                src: { type: 'string', description: 'Source media URI for video/audio. When modifying existing nodes, src is automatically preserved if omitted.' },
                 sourceStartMs: { type: 'integer', description: '(Video/Audio only) The start time in milliseconds relative to the original raw source media file. INCREASING this trims/skips more of the beginning of the raw clip (starts playing from later in the source); DECREASING this reveals earlier footage from the raw source.' },
-                transition: { type: 'string' },
+                transition: { type: 'string', description: 'Transition effect (e.g. "crossfade", "dip_to_black"). CRITICAL: MUST BE NULL or omitted unless the user explicitly requested transitions using words like "transition" or "crossfade". Hard cuts are standard.' },
                 text: { type: 'string' },
                 visible: { type: 'boolean', description: 'Controls on-screen visibility of text/caption nodes. true to display, false to hide. Transcribed caption cues default to visible: false on import until user explicitly asks to add/show captions.' },
                 style: {

@@ -22,6 +22,7 @@ data class ChatState(
     val exportProgress: Float = 0.0f,
     val pastChats: List<ChatSummary> = emptyList(),
     val isLoadingPastChats: Boolean = false,
+    val isSchemaCorrupted: Boolean = false,
     val messages: List<UiChatMessage> = emptyList()
 ) {
     val source: SourceMedia? get() = sources.firstOrNull()

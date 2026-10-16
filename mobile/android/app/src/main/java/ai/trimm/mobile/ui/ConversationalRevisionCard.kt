@@ -114,7 +114,7 @@ import kotlinx.serialization.json.jsonPrimitive
                     }
                 }
             }
-            Text(turn.response, color = Muted, fontSize = 11.sp)
+            MarkdownText(markdown = turn.response, color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
             Spacer(Modifier.height(6.dp))
         }
         OutlinedTextField(

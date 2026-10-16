@@ -134,7 +134,16 @@ import kotlinx.serialization.json.jsonPrimitive
                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("YOUR VIDEO", color = Coral, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                        Text(if (state.compositionSchema == null) "Original clips" else "Current edit", color = CreamRaised, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text(
+                            when {
+                                state.isSchemaCorrupted -> "Project Corrupted"
+                                state.compositionSchema == null -> "Original clips"
+                                else -> "Current edit"
+                            },
+                            color = if (state.isSchemaCorrupted) Color(0xFFEF4444) else CreamRaised,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
                     }
                     SmallAction("Expand") { fullscreen = true }
                 }

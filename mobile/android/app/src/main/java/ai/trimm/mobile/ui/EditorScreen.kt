@@ -24,7 +24,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.*
@@ -342,7 +346,36 @@ fun EditorScreen(
                             containerWidth to (containerWidth / effectiveAspectRatio)
                         }
 
-                        if (state.source != null) {
+                        if (state.isSchemaCorrupted) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = "Corrupted Project",
+                                    tint = Color(0xFFEF4444),
+                                    modifier = Modifier.size(44.dp)
+                                )
+                                Spacer(Modifier.height(10.dp))
+                                Text(
+                                    "Project Edit Corrupted",
+                                    color = Color(0xFFEF4444),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 17.sp
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "The timeline edits could not be loaded. Showing unedited preview.",
+                                    color = Muted,
+                                    fontSize = 12.sp,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+                        } else if (state.source != null) {
                             // 1. PlayerView fills the entire container so ExoPlayer controls have full width.
                             // This ensures PlayerControlView has adequate width (>240dp), completely preventing
                             // minimal mode from hiding the rewind button, fast-forward button, and the bottom bar (time elapsed / total duration).
@@ -522,15 +555,19 @@ fun EditorScreen(
                         }
 
                         // Input Capsule
+                        val isInputEnabled = !state.isProcessing &&
+                            (state.pendingClarification == null || state.pendingClarification?.allowWriteIn == true)
+                        val canSend = prompt.isNotBlank() && isInputEnabled
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp, vertical = 4.dp)
-                                .clip(RoundedCornerShape(26.dp))
+                                .clip(RoundedCornerShape(24.dp))
                                 .background(Workspace)
-                                .border(1.dp, Border.copy(alpha = 0.6f), RoundedCornerShape(26.dp))
+                                .border(1.dp, Border.copy(alpha = 0.6f), RoundedCornerShape(24.dp))
                                 .padding(horizontal = 6.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.Bottom
                         ) {
                             // Plus button inside capsule
                             IconButton(
@@ -549,34 +586,48 @@ fun EditorScreen(
                                 )
                             }
 
-                            // Text input field inside capsule
+                            // Text input field inside capsule (up to 3-line text area)
                             BasicTextField(
                                 value = prompt,
-                                onValueChange = { prompt = it },
+                                onValueChange = { prompt = it.take(2_000) },
                                 modifier = Modifier
                                     .weight(1f)
-                                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                                    .padding(start = 6.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
                                 textStyle = TextStyle(
                                     color = CreamRaised,
-                                    fontSize = 14.sp
+                                    fontSize = 14.sp,
+                                    lineHeight = 20.sp
                                 ),
-                                enabled = !state.isProcessing &&
-                                    (state.pendingClarification == null || state.pendingClarification?.allowWriteIn == true),
-                                singleLine = true,
+                                cursorBrush = SolidColor(Coral),
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.Sentences,
+                                    imeAction = ImeAction.Default
+                                ),
+                                enabled = isInputEnabled,
+                                minLines = 1,
+                                maxLines = 3,
                                 decorationBox = { innerTextField ->
-                                    if (prompt.isEmpty()) {
-                                        Text(
-                                            text = "Ask Trimm to change something...",
-                                            color = Muted,
-                                            fontSize = 14.sp
-                                        )
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentAlignment = Alignment.CenterStart
+                                    ) {
+                                        if (prompt.isEmpty()) {
+                                            Text(
+                                                text = "Ask Trimm to change something...",
+                                                color = Muted,
+                                                fontSize = 14.sp,
+                                                lineHeight = 20.sp
+                                            )
+                                        }
+                                        innerTextField()
                                     }
-                                    innerTextField()
                                 }
                             )
 
+                            // Spacer to provide clear breathing room between cursor/text and send button
+                            Spacer(modifier = Modifier.width(6.dp))
+
                             // Send up-arrow button inside capsule
-                            val canSend = prompt.isNotBlank() && !state.isProcessing
                             IconButton(
                                 onClick = {
                                     val text = prompt.trim()
@@ -585,7 +636,7 @@ fun EditorScreen(
                                 },
                                 enabled = canSend,
                                 modifier = Modifier
-                                    .size(34.dp)
+                                    .size(36.dp)
                                     .clip(CircleShape)
                                     .background(if (canSend) Coral else Raised)
                             ) {
@@ -593,7 +644,7 @@ fun EditorScreen(
                                     imageVector = Icons.Default.ArrowUpward,
                                     contentDescription = "Send",
                                     tint = if (canSend) DarkText else Muted,
-                                    modifier = Modifier.size(17.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
@@ -834,7 +885,7 @@ fun ChatBubbleItem(
         } else {
             Box(
                 modifier = Modifier
-                    .widthIn(max = 280.dp)
+                    .widthIn(max = 330.dp)
                     .clip(RoundedCornerShape(16.dp))
                     .background(Workspace)
                     .combinedClickable(

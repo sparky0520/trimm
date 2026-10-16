@@ -7,9 +7,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -17,54 +17,52 @@ import java.nio.file.StandardCopyOption
 data class ChatSummary(val id: String, val title: String)
 
 class ProjectStore(context: Context) {
-    private val root = File(context.filesDir, "projects").apply { mkdirs() }
+    private val root = File(context.filesDir, "Projects").apply {
+        if (!exists()) {
+            val legacy = File(context.filesDir, "projects")
+            if (legacy.exists() && legacy.isDirectory) legacy.renameTo(this)
+            if (!exists()) mkdirs()
+        }
+    }
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true; classDiscriminator = "type" }
     private val creatorProfile = File(context.filesDir, "creator-preferences.json")
 
-    private val apiService by lazy { ai.trimm.mobile.network.ChatApiService.create() }
-
     suspend fun save(project: MobileProject) = withContext(Dispatchers.IO) {
-        try {
-            val projectJsonStr = json.encodeToString(MobileProject.serializer(), project)
-            val token = ai.trimm.mobile.auth.AuthTokenProvider.currentToken()
-            val requestBody = projectJsonStr.toRequestBody("application/json".toMediaType())
-            apiService.syncProject("Bearer $token", requestBody)
-        } catch (e: Exception) {
-            e.printStackTrace()
+        runCatching {
+            val file = File(root, "${project.id}.json")
+            val content = json.encodeToString(MobileProject.serializer(), project)
+            val tmp = File(root, "${file.name}.tmp")
+            tmp.writeText(content)
+            tmp.renameTo(file)
         }
         Unit
     }
 
     suspend fun load(id: String): MobileProject = withContext(Dispatchers.IO) {
-        val token = ai.trimm.mobile.auth.AuthTokenProvider.currentToken()
-        val response = apiService.getProject("Bearer $token", id)
-        json.decodeFromString(MobileProject.serializer(), response.toString())
+        val file = File(root, "$id.json")
+        json.decodeFromString(MobileProject.serializer(), file.readText())
     }
 
     suspend fun delete(id: String) = withContext(Dispatchers.IO) {
-        try {
-            val token = ai.trimm.mobile.auth.AuthTokenProvider.currentToken()
-            apiService.deleteProject("Bearer $token", id)
-        } catch (e: Exception) {
-            e.printStackTrace()
+        runCatching {
+            File(root, "$id.json").delete()
+            File(root.parentFile, "${id}_composition.json").delete()
+            File(root.parentFile, "${id}_initial_composition.json").delete()
         }
+        Unit
     }
 
     suspend fun listAll(): List<ChatSummary> = withContext(Dispatchers.IO) {
-        val summaries = mutableListOf<ChatSummary>()
-        try {
-            val token = ai.trimm.mobile.auth.AuthTokenProvider.currentToken()
-            val response = apiService.getProjects("Bearer $token")
-            val projectsArray = response.getAsJsonArray("projects")
-            projectsArray.forEach { projectJson ->
-                val id = projectJson.asJsonObject.get("id").asString
-                val title = projectJson.asJsonObject.get("title").asString
-                summaries.add(ChatSummary(id, title))
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
+        val files = root.listFiles { _, name -> name.endsWith(".json") && !name.endsWith(".tmp") } ?: emptyArray()
+        files.sortedByDescending { it.lastModified() }.mapNotNull { file ->
+            runCatching {
+                val text = file.readText()
+                val obj = json.parseToJsonElement(text).jsonObject
+                val id = obj["id"]?.jsonPrimitive?.content ?: file.nameWithoutExtension
+                val title = obj["title"]?.jsonPrimitive?.content ?: "Untitled Chat"
+                ChatSummary(id = id, title = title)
+            }.getOrNull()
         }
-        summaries
     }
 
     suspend fun saveCreatorPreferences(profile: CreatorPreferenceProfile) = withContext(Dispatchers.IO) {
