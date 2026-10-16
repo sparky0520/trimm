@@ -191,3 +191,97 @@ test('chatCompletion fallback auto-slices video when user explicitly asks for ti
   const videoNodes = result.schema.timeline.filter(n => n.type === 'video');
   assert.ok(videoNodes.length > 1, 'Video must be sliced to omit the silence');
 });
+
+test('chatCompletion executes forced apply_schema_patch retry when model returns plain text claiming edits without tool call', async () => {
+  let callCount = 0;
+  let forcedPayloadCaptured = null;
+
+  const mockOpenAIClient = {
+    chat: {
+      completions: {
+        create: async (payload) => {
+          callCount++;
+          if (callCount === 1) {
+            // First call: model hallucinates by returning plain text claiming edits
+            return (async function* () {
+              yield {
+                choices: [{
+                  delta: {
+                    content: 'Fixed three things: (1) set ALL captions to posY 0.7, (2) corrected "Dream" to "Trimm" in caption.'
+                  }
+                }]
+              };
+            })();
+          } else {
+            // Second call: forced apply_schema_patch tool call
+            forcedPayloadCaptured = payload;
+            return (async function* () {
+              yield {
+                choices: [{
+                  delta: {
+                    tool_calls: [{
+                      index: 0,
+                      id: 'call_forced_1',
+                      type: 'function',
+                      function: {
+                        name: 'apply_schema_patch',
+                        arguments: JSON.stringify({
+                          reason: 'Set posY to 0.7 and corrected caption to Trimm',
+                          schema: {
+                            timeline: [
+                              {
+                                type: 'text',
+                                id: 'txt1',
+                                text: 'Trimm in June',
+                                style: { posY: 0.7 }
+                              }
+                            ]
+                          }
+                        })
+                      }
+                    }]
+                  }
+                }]
+              };
+            })();
+          }
+        }
+      }
+    }
+  };
+
+  const provider = createOpenAIDecisionProvider({
+    apiKey: 'mock-key',
+    openaiClient: mockOpenAIClient
+  });
+
+  const sources = [{ uri: 'file://raw.mp4', durationMs: 10000 }];
+  const schema = {
+    settings: { aspectRatio: '9:16', backgroundColor: '#000000', autoEnhance: false },
+    timeline: [
+      { type: 'video', id: 'v1', src: 'file://raw.mp4', startMs: 0, endMs: 10000, sourceStartMs: 0 },
+      { type: 'text', id: 'txt1', text: 'Dream in June', startMs: 1000, endMs: 3000, isVisible: true, style: { posY: -0.35, color: '#FFFFFF' } }
+    ]
+  };
+
+  const result = await provider.chatCompletion({
+    history: [{ role: 'user', content: 'Set caption posY to 0.7 and correct Dream to Trimm' }],
+    sources,
+    transcript: [{ text: 'Dream', startMs: 1000, endMs: 2000 }],
+    schema
+  });
+
+  assert.equal(callCount, 2, 'Must have executed a forced tool call retry');
+  assert.ok(forcedPayloadCaptured?.tool_choice, 'Must specify tool_choice for apply_schema_patch');
+  assert.equal(forcedPayloadCaptured.tool_choice.function.name, 'apply_schema_patch');
+
+  assert.equal(result.type, 'schema_patch');
+  assert.ok(result.schema, 'Must return patched schema');
+  const patchedText = result.schema.timeline.find(t => t.id === 'txt1');
+  assert.ok(patchedText);
+  assert.equal(patchedText.text, 'Trimm in June');
+  assert.equal(patchedText.style.posY, 0.7);
+  assert.equal(patchedText.style.color, '#FFFFFF', 'Should preserve unaffected style color');
+  assert.match(result.summary, /Fixed three things/);
+});
+

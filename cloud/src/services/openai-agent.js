@@ -236,7 +236,7 @@ function createOpenAIDecisionProvider({
 
   async function generate({
     systemPolicy, contents, temperature, purpose = 'planning',
-    responseFormat = null, tools = true, onStatus
+    responseFormat = null, tools = true, toolChoice = null, onStatus
   }) {
     if (!apiKey && !openaiClient) throw Object.assign(new Error('API key is not configured'), { status: 503, code: 'provider_unconfigured' });
 
@@ -259,6 +259,7 @@ function createOpenAIDecisionProvider({
       messages,
       ...(responseFormat ? { response_format: responseFormat } : {}),
       ...(Array.isArray(toolsArray) && toolsArray.length > 0 ? { tools: toolsArray.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })) } : {}),
+      ...(toolChoice ? { tool_choice: toolChoice } : {}),
       stream: true,
     };
 
@@ -624,7 +625,7 @@ Use this reference table whenever modifying any numeric value in the schema:
    - Any omitted fields on existing nodes (such as video 'src' or 'sourceStartMs') are automatically preserved.
 3. STRICT NEGATIVE CONSTRAINTS:
    - NO UNREQUESTED TRANSITIONS: NEVER add 'transition: "crossfade"' or any transition unless the user explicitly asked for them using words like "transition" or "crossfade". Hard cuts with null transition are standard.
-   - NO FAKE CUTS IN TEXT: When the user asks to cut silences or trim video, you MUST invoke 'apply_schema_patch'. Never claim in plain text that you cut or trimmed the video without calling the tool!
+   - NO FAKE CUTS OR FAKE EDITS IN TEXT: Whenever the user asks to modify the video or captions (trimming fumbles, silence cuts, repositioning text, replacing caption words, or styling), you MUST invoke 'apply_schema_patch'! NEVER claim in plain text that you fixed, cut, trimmed, moved, or styled something without invoking apply_schema_patch! Plain text responses are STRICTLY reserved for script doctor consultations where the user only asks for advice or critique.
 4. Maintain timeline integrity: timeline startMs and endMs must be sequential, non-negative, and contiguous for main video clips.
 5. Respect user intent: If the user asks for trims only, DO NOT activate captions. If the user asks for captions, activate them.
 6. Only call finish_without_proposal as a last resort if the request cannot be fulfilled by any tool or edit.
@@ -980,6 +981,41 @@ ${readableTranscriptChunks.length > 0 ? readableTranscriptChunks.join('\n') : '(
             };
           }
         }
+        // If not a pure script consultation, and the model claimed to have fixed/cut/styled something or user asked for an edit:
+        const modelClaimedEdits = /(fixed|cut|trimmed|removed|set|changed|updated|adjusted|applied|moved|corrected|positioned|styled)\b/i.test(rawLower);
+        const userAskedEdits = /(cut|trim|remove|delete|caption|captions|subtitles?|style|color|posy|posx|font|size|volume|music|video|clip|make|turn into|edit|fumble|silence|audio|filter)/i.test(lastUserMsg);
+
+        if (schema && (modelClaimedEdits || userAskedEdits) && !isScriptConsultation) {
+          console.log('[openai-agent] Model returned text claiming edits without tool call. Forcing apply_schema_patch retry...');
+          try {
+            const forcedResponse = await generate({
+              systemPolicy,
+              contents: [
+                ...contents,
+                { role: 'assistant', content: response.rawText },
+                { role: 'user', content: 'You described the changes in text, but did not execute the apply_schema_patch tool call. You must now invoke apply_schema_patch to apply those exact modifications (caption styling, text corrections, and cuts) to the composition schema.' }
+              ],
+              temperature: 0.1,
+              purpose: 'execution',
+              tools: true,
+              toolChoice: { type: 'function', function: { name: 'apply_schema_patch' } },
+              onStatus
+            });
+
+            const forcedPatch = forcedResponse.toolCalls?.find(tc => tc.name === 'apply_schema_patch');
+            if (forcedPatch) {
+              const finalPatchSchema = mergeSchemaPatch(schema, forcedPatch.args.schema, sources, forcedPatch.args.removedNodeIds);
+              return {
+                type: "schema_patch",
+                schema: finalPatchSchema,
+                summary: response.rawText || forcedPatch.args.reason || "Applied requested edits"
+              };
+            }
+          } catch (forcedErr) {
+            console.error('[openai-agent] Error during forced apply_schema_patch retry:', forcedErr);
+          }
+        }
+
         return { type: "edit_program", operations: [], summary: response.rawText };
       }
       throw Object.assign(new Error("Agent did not return any operations or text response."), { code: 'worker_execution_error' });

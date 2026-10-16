@@ -213,6 +213,7 @@ object ExportCoordinator {
         
 
         // Add Native Text Overlays
+        val legacyTextOverlays = mutableListOf<androidx.media3.effect.TextureOverlay>()
         project.operations.filterIsInstance<AddTextOverlay>().filter { it.enabled }.forEach { textOverlay ->
             val range = textOverlay.target?.let { target -> 
                 val offset = sourceOffsets[target.sourceId] ?: sourceOffsets[target.sourceId.substringBeforeLast("-")] ?: 0L
@@ -222,20 +223,21 @@ object ExportCoordinator {
             val outputStart = timelineMapper.sourceToOutput(range.startMs)
             val outputEnd = timelineMapper.sourceToOutput(range.endMs)
             if (outputEnd > outputStart) {
-                    videoEffects += OverlayEffect(
-                        listOf(
-                            TextGraphicOverlay(
-                                context = context,
-                                text = textOverlay.text,
-                                blueprintJson = textOverlay.designBlueprint,
-                                startMs = outputStart,
-                                endMs = outputEnd,
-                                videoWidth = project.export.width,
-                                videoHeight = project.export.height
-                            )
-                        )
+                legacyTextOverlays.add(
+                    TextGraphicOverlay(
+                        context = context,
+                        text = textOverlay.text,
+                        blueprintJson = textOverlay.designBlueprint,
+                        startMs = outputStart,
+                        endMs = outputEnd,
+                        videoWidth = project.export.width,
+                        videoHeight = project.export.height
                     )
-                }
+                )
+            }
+        }
+        if (legacyTextOverlays.isNotEmpty()) {
+            videoEffects += OverlayEffect(legacyTextOverlays)
         }
 
         // Add Callouts and Spotlights
@@ -517,21 +519,21 @@ private fun targets(itemId: String, exactId: String, legacyId: String, startMs: 
             Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP
         )
 
+        val overlays = mutableListOf<androidx.media3.effect.TextureOverlay>()
+
         // Clip transitions (crossfade, dip_to_black, dip_to_white, wipe, slide)
         videoNodes.forEachIndexed { index, node ->
             val transition = node.transition
             if (!transition.isNullOrBlank() && index > 0) {
                 val transitionDurationMs = 500L
-                videoEffects += OverlayEffect(
-                    listOf(
-                        TransitionGraphicOverlay(
-                            preset = transition,
-                            blueprintJson = "",
-                            startMs = node.startMs,
-                            endMs = node.startMs + transitionDurationMs,
-                            videoWidth = targetWidth,
-                            videoHeight = targetHeight
-                        )
+                overlays.add(
+                    TransitionGraphicOverlay(
+                        preset = transition,
+                        blueprintJson = "",
+                        startMs = node.startMs,
+                        endMs = node.startMs + transitionDurationMs,
+                        videoWidth = targetWidth,
+                        videoHeight = targetHeight
                     )
                 )
             }
@@ -539,21 +541,28 @@ private fun targets(itemId: String, exactId: String, legacyId: String, startMs: 
 
         // Text / Caption overlays (1:1 identical in both preview and export)
         val textNodes = schema.timeline.filterIsInstance<TimelineNode.Text>().filter { it.isVisible }
-        textNodes.forEach { textNode ->
-            val blueprintJson = buildBlueprintJson(textNode)
-            videoEffects += OverlayEffect(
-                listOf(
-                    TextGraphicOverlay(
-                        context = context,
-                        text = textNode.text,
-                        blueprintJson = blueprintJson,
-                        startMs = textNode.startMs,
-                        endMs = textNode.endMs,
-                        videoWidth = targetWidth,
-                        videoHeight = targetHeight
-                    )
+        if (textNodes.isNotEmpty()) {
+            val cues = textNodes.map { textNode ->
+                CaptionCue(
+                    id = textNode.id,
+                    text = textNode.text,
+                    startMs = textNode.startMs,
+                    endMs = textNode.endMs,
+                    blueprintJson = buildBlueprintJson(textNode)
+                )
+            }
+            overlays.add(
+                TimelineCaptionsOverlay(
+                    context = context,
+                    cues = cues,
+                    videoWidth = targetWidth,
+                    videoHeight = targetHeight
                 )
             )
+        }
+
+        if (overlays.isNotEmpty()) {
+            videoEffects += OverlayEffect(overlays)
         }
 
         val sequences = mutableListOf(sequence)
