@@ -932,7 +932,10 @@ ${readableTranscriptChunks.length > 0 ? readableTranscriptChunks.join('\n') : '(
 
 ======================================================================`;
 
-    const contents = history.map(msg => ({ role: msg.role, content: msg.content }));
+    // Bound history to the most recent 20 messages (~10 turns) to prevent latency/token inflation
+    // in long chat sessions, while full timeline state is continuously preserved via CURRENT COMPOSITION SCHEMA.
+    const recentHistory = Array.isArray(history) && history.length > 20 ? history.slice(-20) : (history || []);
+    const contents = recentHistory.map(msg => ({ role: msg.role, content: msg.content }));
 
     const response = await generate({
       systemPolicy,
