@@ -10,7 +10,7 @@ const targetRangeProperties = {
 
 const APPLY_SCHEMA_PATCH_TOOL = Object.freeze({
   name: 'apply_schema_patch',
-  description: 'Apply a patch to the video project by providing the updated CompositionSchema or modified timeline nodes. To save tokens and preserve precision, you only need to return the nodes or properties you are modifying or adding; unchanged nodes and fields (such as video src or unchanged clips) are automatically preserved from the previous schema. DO NOT use this tool for conversational, editorial, script analysis, or script improvement requests—for those, reply directly with text.',
+  description: 'Apply a patch to the video project by providing the updated CompositionSchema or modified timeline nodes. To save tokens and preserve precision, you only need to return the nodes or properties you are modifying or adding; unchanged nodes and fields (such as video src or unchanged clips) are automatically preserved from the previous schema. Every edit, cut, trim, caption styling, or timeline change MUST be executed via this tool. For script analysis, suggestions, or critique without timeline changes, use provide_script_advice.',
   parameters: {
     type: 'object',
     additionalProperties: false,
@@ -87,6 +87,22 @@ const APPLY_SCHEMA_PATCH_TOOL = Object.freeze({
   }
 });
 
+const PROVIDE_SCRIPT_ADVICE_TOOL = Object.freeze({
+  name: 'provide_script_advice',
+  description: 'Provide script consultation, video critique, pacing analysis, structured script rewrites, or feedback when NO modifications are being made to the video timeline or captions. You have not modified the timeline or captions, so you must NEVER claim or imply that you edited the timeline or applied changes.',
+  parameters: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['adviceMarkdown'],
+    properties: {
+      adviceMarkdown: {
+        type: 'string',
+        description: 'Comprehensive markdown response containing video/narrative analysis, script recommendations, and polished script.'
+      }
+    }
+  }
+});
+
 const ASK_USER_QUESTION_TOOL = Object.freeze({
   name: 'ask_user_question',
   description: 'Pause and ask the user a question if the request is vague, needs additional direction, or involves an unresolved consequential choice. Use this only when absolutely necessary.',
@@ -121,6 +137,7 @@ const FINISH_WITHOUT_PROPOSAL_TOOL = Object.freeze({
 const getAgentTools = () => {
   return Object.freeze([
     APPLY_SCHEMA_PATCH_TOOL,
+    PROVIDE_SCRIPT_ADVICE_TOOL,
     ASK_USER_QUESTION_TOOL, 
     FINISH_WITHOUT_PROPOSAL_TOOL,
   ]);
@@ -129,4 +146,7 @@ const getAgentTools = () => {
 export { 
   getAgentTools,
   APPLY_SCHEMA_PATCH_TOOL,
+  PROVIDE_SCRIPT_ADVICE_TOOL,
+  ASK_USER_QUESTION_TOOL,
+  FINISH_WITHOUT_PROPOSAL_TOOL,
 };

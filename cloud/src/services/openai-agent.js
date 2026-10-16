@@ -405,7 +405,7 @@ function createOpenAIDecisionProvider({
     const systemPolicy = `You are an expert AI Video Editor and Creative Director / Script Doctor for Trimm.
 
 You operate across two integrated roles:
-1. SCRIPT DOCTOR & CONTENT CONSULTANT (Direct Markdown Response):
+1. SCRIPT DOCTOR & CONTENT CONSULTANT (provide_script_advice Tool):
    Analyze the creator's rough video recording, diagnose hook/pacing/structure strengths and weaknesses, suggest high-retention script improvements, and deliver a polished, structured script ready for performance or re-recording.
 2. PRECISION VIDEO EDITOR (apply_schema_patch Tool):
    Execute timeline modifications with surgical precision (cutting dead air/silences, trimming clips, adding/styling captions, applying visual shaders, adjusting aspect ratio) by modifying the project's CompositionSchema.
@@ -615,9 +615,9 @@ Use this reference table whenever modifying any numeric value in the schema:
    - TIMELINE EDIT REQUESTS (cutting silences/mistakes, trimming, captions, visual effects, aspect ratio, audio levels):
      Always call apply_schema_patch. Modify the existing schema and return the patch with a concise reason.
    - SCRIPT DOCTOR / SCRIPT IMPROVEMENT / VIDEO ANALYSIS REQUESTS (analyzing speech, suggesting improvements in the script, structuring rough takes into polished scripts):
-     Respond DIRECTLY in rich Markdown text. DO NOT call apply_schema_patch (unless the user explicitly asked to cut/edit the video clips in the same request). DO NOT call finish_without_proposal.
+     Call provide_script_advice with the rich Markdown analysis and structured script.
    - HYBRID REQUESTS (e.g. "Cut out the silences and also suggest script improvements"):
-     Call apply_schema_patch to execute the timeline edits, AND include the comprehensive script analysis, suggestions, and polished script in the reason parameter and text response!
+     Call apply_schema_patch to execute the timeline edits, AND include the comprehensive script analysis, suggestions, and polished script in the reason parameter!
 2. TOKEN-SAVING PARTIAL PATCHING (DELTA UPDATES):
    - You DO NOT need to rewrite unchanged video clips or full timelines! To save tokens and avoid dropping fields:
    - When modifying or styling captions only: Return ONLY the text nodes being styled or toggled. Unchanged video clips, audio tracks, and effects are automatically preserved from the previous schema.
@@ -625,7 +625,7 @@ Use this reference table whenever modifying any numeric value in the schema:
    - Any omitted fields on existing nodes (such as video 'src' or 'sourceStartMs') are automatically preserved.
 3. STRICT NEGATIVE CONSTRAINTS:
    - NO UNREQUESTED TRANSITIONS: NEVER add 'transition: "crossfade"' or any transition unless the user explicitly asked for them using words like "transition" or "crossfade". Hard cuts with null transition are standard.
-   - NO FAKE CUTS OR FAKE EDITS IN TEXT: Whenever the user asks to modify the video or captions (trimming fumbles, silence cuts, repositioning text, replacing caption words, or styling), you MUST invoke 'apply_schema_patch'! NEVER claim in plain text that you fixed, cut, trimmed, moved, or styled something without invoking apply_schema_patch! Plain text responses are STRICTLY reserved for script doctor consultations where the user only asks for advice or critique.
+   - TEXTUAL UNFULFILLED CLAIMS OF ANYTHING ARE FORBIDDEN: Whenever the user asks to modify the video or captions (trimming fumbles, silence cuts, repositioning text, replacing caption words, or styling), you MUST invoke 'apply_schema_patch'! NEVER claim, describe, or imply in plain text that you fixed, cut, trimmed, moved, or styled something without invoking apply_schema_patch with the corresponding schema changes. If you are providing creative advice without editing the timeline, call provide_script_advice.
 4. Maintain timeline integrity: timeline startMs and endMs must be sequential, non-negative, and contiguous for main video clips.
 5. Respect user intent: If the user asks for trims only, DO NOT activate captions. If the user asks for captions, activate them.
 6. Only call finish_without_proposal as a last resort if the request cannot be fulfilled by any tool or edit.
@@ -827,6 +827,11 @@ Action:
 1. Treat spoken transcript as the raw thought process / rough take.
 2. DO NOT simply output raw transcript divided into paragraphs with timestamps!
 3. Reorganize, refine, and elevate the creator's ideas into a clear, compelling script with structured sections alongside key improvements and delivery cues.
+4. Call provide_script_advice with the full structured markdown.
+Tool Call:
+provide_script_advice({
+  "adviceMarkdown": "### 🎯 Video & Narrative Analysis\n- **Core Intent & Message**: Introducing faster video editing.\n- **Hook & First 3 Seconds**: Cut the rambling intro.\n\n### 💡 Key Script Improvement Recommendations\n- **Hook Strategy**: Open with a relatable problem.\n\n### 📝 Structured & Polished Script (Ready to Deliver)\n- **[01. Hook (0:00 - 0:03)]**: Stop editing videos the hard way.\n- **[02. Core Value]**: Trimm lets you cut dead air instantly.\n- **[03. Call to Action]**: Try it on your next video.\n\n### 🔄 Before vs. After (Side-by-Side Polish)\n- **Rough Take**: \"Hey guys so today I want to talk about editing.\"\n- **Polished Line**: \"Editing mobile video just changed forever.\"\n\n### ✂️ Next Steps in Trimm\n- Ready for take 2 with this script, or reply to edit current footage!"
+})
 
 ### Example 12: Hybrid Request (Timeline Cut + Script Suggestions)
 User: "Cut out the awkward pauses and also suggest improvements to my script."
@@ -952,121 +957,23 @@ ${readableTranscriptChunks.length > 0 ? readableTranscriptChunks.join('\n') : '(
       return { type: "edit_program", operations: [], summary: failure.args.reason };
     }
 
-    if (!response.toolCalls || response.toolCalls.length === 0) {
-      if (response.rawText) {
-        const rawLower = response.rawText.toLowerCase();
-        const lastUserMsg = (history[history.length - 1]?.content || '').toLowerCase();
-        
-        // Detect if user is asking for script analysis, script improvement, or script structuring
-        const isScriptConsultation = /\b(script|scripts|transcript|improve|improvements?|suggest|suggestions?|critique|review|analyse|analyze|analysis|structure|rough record|first record|feedback|what i said|rewrite)\b/i.test(lastUserMsg);
-        
-        // Precise silence cut checks - avoid triggering on casual text mentions of 'pause' or 'trim the fluff'
-        const userExplicitlyAskedTimelineCut = /(cut|trim|remove|delete)\s+(out\s+)?(the\s+)?(video|timeline|clip|clips|footage)/i.test(lastUserMsg) ||
-          /(cut|trim|remove|delete)\s+(out\s+)?(the\s+)?(awkward\s+)?(silences?|dead\s*air|pauses?)/i.test(lastUserMsg);
-        const modelClaimedSilenceCut = /(cut|trimmed|removed)\s+(out\s+)?(the\s+)?(awkward\s+)?(silences?|dead\s*air|pauses?)\s+(from|in)\s+(the\s+)?(video|timeline|clip)/i.test(rawLower);
-
-        const shouldAutoSlice = userExplicitlyAskedTimelineCut || (!isScriptConsultation && modelClaimedSilenceCut);
-
-        if (schema && shouldAutoSlice) {
-          const silencesToUse = (schema?.metadata?.silences && schema.metadata.silences.length > 0)
-            ? schema.metadata.silences
-            : preprocessedTranscript.filter(t => t.type === 'silence');
-          const primaryDuration = sources[0]?.durationMs || 0;
-          if (silencesToUse.length > 0 && primaryDuration > 0) {
-            const sliced = sliceVideoNodesBySilences(schema, silencesToUse, sources[0]?.uri || '', primaryDuration);
-            return {
-              type: "schema_patch",
-              schema: sliced,
-              summary: response.rawText
-            };
-          }
-        }
-        // If not a pure script consultation, and the model claimed to have fixed/cut/styled something or user asked for an edit:
-        const modelClaimedEdits = /(fixed|cut|trimmed|removed|set|changed|updated|adjusted|applied|moved|corrected|positioned|styled)\b/i.test(rawLower);
-        const userAskedEdits = /(cut|trim|remove|delete|caption|captions|subtitles?|style|color|posy|posx|font|size|volume|music|video|clip|make|turn into|edit|fumble|silence|audio|filter)/i.test(lastUserMsg);
-
-        if (schema && (modelClaimedEdits || userAskedEdits) && !isScriptConsultation) {
-          console.log('[openai-agent] Model returned text claiming edits without tool call. Forcing apply_schema_patch retry...');
-          try {
-            const forcedResponse = await generate({
-              systemPolicy,
-              contents: [
-                ...contents,
-                { role: 'assistant', content: response.rawText },
-                { role: 'user', content: 'You described the changes in text, but did not execute the apply_schema_patch tool call. You must now invoke apply_schema_patch to apply those exact modifications (caption styling, text corrections, and cuts) to the composition schema.' }
-              ],
-              temperature: 0.1,
-              purpose: 'execution',
-              tools: true,
-              toolChoice: { type: 'function', function: { name: 'apply_schema_patch' } },
-              onStatus
-            });
-
-            const forcedPatch = forcedResponse.toolCalls?.find(tc => tc.name === 'apply_schema_patch');
-            if (forcedPatch) {
-              const finalPatchSchema = mergeSchemaPatch(schema, forcedPatch.args.schema, sources, forcedPatch.args.removedNodeIds);
-              return {
-                type: "schema_patch",
-                schema: finalPatchSchema,
-                summary: response.rawText || forcedPatch.args.reason || "Applied requested edits"
-              };
-            }
-          } catch (forcedErr) {
-            console.error('[openai-agent] Error during forced apply_schema_patch retry:', forcedErr);
-          }
-        }
-
-        return { type: "edit_program", operations: [], summary: response.rawText };
-      }
-      throw Object.assign(new Error("Agent did not return any operations or text response."), { code: 'worker_execution_error' });
-    }
-
     const clarification = response.toolCalls.find(tc => tc.name === 'ask_user_question');
     if (clarification) {
       return { type: "clarification", questions: clarification.args.questions };
     }
 
+    const scriptAdvice = response.toolCalls.find(tc => tc.name === 'provide_script_advice');
+    if (scriptAdvice) {
+      return {
+        type: "edit_program",
+        operations: [],
+        summary: scriptAdvice.args.adviceMarkdown
+      };
+    }
+
     const schemaPatch = response.toolCalls.find(tc => tc.name === 'apply_schema_patch');
     if (schemaPatch) {
-      let finalPatchSchema = mergeSchemaPatch(schema, schemaPatch.args.schema, sources, schemaPatch.args.removedNodeIds);
-      const videoNodes = (finalPatchSchema.timeline || []).filter(tc => tc.type === 'video');
-      const reasonText = (schemaPatch.args.reason || response.rawText || '').toLowerCase();
-      const lastUserMsg = (history[history.length - 1]?.content || '').toLowerCase();
-      const userAskedSilenceCut = /(cut|trim|remove|delete)\s+(out\s+)?(the\s+)?(video|timeline|clip|clips|footage)/i.test(lastUserMsg) ||
-        /(cut|trim|remove|delete)\s+(out\s+)?(the\s+)?(awkward\s+)?(silences?|dead\s*air|pauses?)/i.test(lastUserMsg);
-      const modelClaimedSilenceCut = /(cut|trimmed|removed)\s+(out\s+)?(the\s+)?(awkward\s+)?(silences?|dead\s*air|pauses?)/i.test(reasonText);
-
-      // If silence cut was claimed/requested, but videoNodes were returned unsliced (single node spanning entire duration)
-      const primaryDuration = sources[0]?.durationMs || 0;
-      if ((userAskedSilenceCut || modelClaimedSilenceCut) && videoNodes.length === 1 && primaryDuration > 0) {
-        const vNode = videoNodes[0];
-        if (vNode.sourceStartMs === 0 && (vNode.endMs - vNode.startMs) >= (primaryDuration - 250)) {
-          const detectedSilences = (schema?.metadata?.silences && schema.metadata.silences.length > 0)
-            ? schema.metadata.silences
-            : preprocessedTranscript.filter(t => t.type === 'silence');
-          if (detectedSilences.length > 0) {
-            finalPatchSchema = sliceVideoNodesBySilences(finalPatchSchema, detectedSilences, vNode.src || sources[0]?.uri, primaryDuration);
-          }
-        }
-      }
-
-      // Sanitize unrequested transitions: strip any transition that was not explicitly requested
-      const userAskedTransition = /\b(transition|transitions|crossfade|cross-fade|dip\s*to\s*black|dip\s*to\s*white|wipe|slide|fade\s*in|fade\s*out)\b/i.test(lastUserMsg);
-      const prevTransitionNodeIds = new Set(
-        (schema?.timeline || [])
-          .filter(n => n.type === 'video' && n.transition)
-          .map(n => n.id)
-      );
-
-      if (!userAskedTransition && Array.isArray(finalPatchSchema.timeline)) {
-        finalPatchSchema.timeline = finalPatchSchema.timeline.map(node => {
-          if (node.type === 'video' && node.transition && !prevTransitionNodeIds.has(node.id)) {
-            const { transition, ...rest } = node;
-            return rest;
-          }
-          return node;
-        });
-      }
+      const finalPatchSchema = mergeSchemaPatch(schema, schemaPatch.args.schema, sources, schemaPatch.args.removedNodeIds);
 
       // Enforce immutability of metadata
       if (schema && schema.metadata) {
@@ -1077,6 +984,61 @@ ${readableTranscriptChunks.length > 0 ? readableTranscriptChunks.join('\n') : '(
         schema: finalPatchSchema,
         summary: schemaPatch.args.reason || response.rawText || "Proposed edit"
       };
+    }
+
+    if (!response.toolCalls || response.toolCalls.length === 0) {
+      if (response.rawText) {
+        console.log('[openai-agent] Model returned text without tool call. Executing tool invocation follow-up retry...');
+        try {
+          const retryResponse = await generate({
+            systemPolicy,
+            contents: [
+              ...contents,
+              { role: 'assistant', content: response.rawText },
+              { role: 'user', content: 'You responded in text without invoking a tool. Textual unfulfilled claims of anything are forbidden. You must invoke one of the available tools: apply_schema_patch to apply timeline edits/styles/cuts to the composition schema, or provide_script_advice to provide creative script consultation or advice.' }
+            ],
+            temperature: 0.1,
+            purpose: 'execution',
+            tools: true,
+            onStatus
+          });
+
+          const retryPatch = retryResponse.toolCalls?.find(tc => tc.name === 'apply_schema_patch');
+          if (retryPatch) {
+            const finalPatchSchema = mergeSchemaPatch(schema, retryPatch.args.schema, sources, retryPatch.args.removedNodeIds);
+            if (schema && schema.metadata) finalPatchSchema.metadata = schema.metadata;
+            return {
+              type: "schema_patch",
+              schema: finalPatchSchema,
+              summary: response.rawText || retryPatch.args.reason || "Applied requested edits"
+            };
+          }
+
+          const retryAdvice = retryResponse.toolCalls?.find(tc => tc.name === 'provide_script_advice');
+          if (retryAdvice) {
+            return {
+              type: "edit_program",
+              operations: [],
+              summary: retryAdvice.args.adviceMarkdown
+            };
+          }
+
+          const retryClarification = retryResponse.toolCalls?.find(tc => tc.name === 'ask_user_question');
+          if (retryClarification) {
+            return { type: "clarification", questions: retryClarification.args.questions };
+          }
+
+          const retryFailure = retryResponse.toolCalls?.find(tc => tc.name === 'finish_without_proposal');
+          if (retryFailure) {
+            return { type: "edit_program", operations: [], summary: retryFailure.args.reason };
+          }
+        } catch (retryErr) {
+          console.error('[openai-agent] Error during tool invocation retry:', retryErr);
+        }
+
+        return { type: "edit_program", operations: [], summary: response.rawText };
+      }
+      throw Object.assign(new Error("Agent did not return any operations or text response."), { code: 'worker_execution_error' });
     }
 
     const validOperations = response.toolCalls.filter(tc => tc.name.startsWith('propose_') || !['ask_user_question', 'finalize_edit_program', 'finish_without_proposal', 'remove_draft_operation'].includes(tc.name));

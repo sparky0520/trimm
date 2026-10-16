@@ -3,14 +3,21 @@ import assert from 'node:assert/strict';
 import { getAgentTools } from '../schema/agent-decision-schema.js';
 import { createOpenAIDecisionProvider } from '../services/openai-agent.js';
 
-test('apply_schema_patch tool description instructs direct text for script analysis and improvements', () => {
+test('apply_schema_patch and provide_script_advice tools exist and separate editing from script consultation', () => {
   const tools = getAgentTools();
   const patchTool = tools.find(t => t.name === 'apply_schema_patch');
+  const adviceTool = tools.find(t => t.name === 'provide_script_advice');
   assert.ok(patchTool, 'apply_schema_patch tool must exist');
+  assert.ok(adviceTool, 'provide_script_advice tool must exist');
   assert.match(
     patchTool.description,
-    /DO NOT use this tool for conversational, editorial, script analysis, or script improvement requests/i,
-    'Tool description must explicitly guide script requests to direct text'
+    /For script analysis, suggestions, or critique without timeline changes, use provide_script_advice/i,
+    'Tool description must explicitly guide script requests to provide_script_advice'
+  );
+  assert.match(
+    adviceTool.description,
+    /when NO modifications are being made to the video timeline or captions/i,
+    'Advice tool description must forbid timeline modifications'
   );
 });
 
@@ -146,15 +153,36 @@ test('chatCompletion handles script consultation text response without slicing t
   assert.equal(result.schema, undefined);
 });
 
-test('chatCompletion fallback auto-slices video when user explicitly asks for timeline silence removal without tool call', async () => {
-  const modelTextResponse = 'I have removed the awkward pauses and dead air from the video clips.';
+test('chatCompletion routes provide_script_advice tool call as script consultation without modifying schema', async () => {
+  const scriptAdviceMarkdown = `### 🎯 Video & Narrative Analysis
+- **Core Intent & Message**: Introducing video editing with Trimm.
+
+### 💡 Key Script Improvement Recommendations
+- **Hook Strategy**: Open with a relatable problem.
+
+### 📝 Structured & Polished Script (Ready to Deliver)
+- **[01. Hook]**: Editing mobile video just changed forever.`;
 
   const mockOpenAIClient = {
     chat: {
       completions: {
         create: async () => {
           return (async function* () {
-            yield { choices: [{ delta: { content: modelTextResponse } }] };
+            yield {
+              choices: [{
+                delta: {
+                  tool_calls: [{
+                    index: 0,
+                    id: 'call_advice_1',
+                    type: 'function',
+                    function: {
+                      name: 'provide_script_advice',
+                      arguments: JSON.stringify({ adviceMarkdown: scriptAdviceMarkdown })
+                    }
+                  }]
+                }
+              }]
+            };
           })();
         }
       }
@@ -166,12 +194,6 @@ test('chatCompletion fallback auto-slices video when user explicitly asks for ti
     openaiClient: mockOpenAIClient
   });
 
-  const mockTranscript = [
-    { text: 'Hey', startMs: 100, endMs: 500 },
-    // 1500ms silence between 500ms and 2000ms
-    { text: 'guys', startMs: 2000, endMs: 4000 }
-  ];
-
   const sources = [{ uri: 'file://raw.mp4', durationMs: 5000 }];
   const schema = {
     settings: { aspectRatio: '9:16', backgroundColor: '#000000', autoEnhance: true },
@@ -179,22 +201,20 @@ test('chatCompletion fallback auto-slices video when user explicitly asks for ti
   };
 
   const result = await provider.chatCompletion({
-    history: [{ role: 'user', content: 'cut out the awkward pauses in the video' }],
+    history: [{ role: 'user', content: 'analyse my video and give me script improvements' }],
     sources,
-    transcript: mockTranscript,
+    transcript: [{ text: 'Hey', startMs: 0, endMs: 500 }],
     schema
   });
 
-  // For explicit video cut requests, auto-slice kicks in when no tool is called
-  assert.equal(result.type, 'schema_patch');
-  assert.ok(result.schema, 'Schema must be returned with sliced video clips');
-  const videoNodes = result.schema.timeline.filter(n => n.type === 'video');
-  assert.ok(videoNodes.length > 1, 'Video must be sliced to omit the silence');
+  assert.equal(result.type, 'edit_program');
+  assert.equal(result.summary, scriptAdviceMarkdown);
+  assert.equal(result.schema, undefined);
 });
 
-test('chatCompletion executes forced apply_schema_patch retry when model returns plain text claiming edits without tool call', async () => {
+test('chatCompletion executes tool invocation follow-up retry when model returns plain text without a tool call', async () => {
   let callCount = 0;
-  let forcedPayloadCaptured = null;
+  let retryPayloadCaptured = null;
 
   const mockOpenAIClient = {
     chat: {
@@ -202,7 +222,7 @@ test('chatCompletion executes forced apply_schema_patch retry when model returns
         create: async (payload) => {
           callCount++;
           if (callCount === 1) {
-            // First call: model hallucinates by returning plain text claiming edits
+            // First call: model returns plain text claiming edits without tool call
             return (async function* () {
               yield {
                 choices: [{
@@ -213,15 +233,15 @@ test('chatCompletion executes forced apply_schema_patch retry when model returns
               };
             })();
           } else {
-            // Second call: forced apply_schema_patch tool call
-            forcedPayloadCaptured = payload;
+            // Second call: retry triggers apply_schema_patch tool call
+            retryPayloadCaptured = payload;
             return (async function* () {
               yield {
                 choices: [{
                   delta: {
                     tool_calls: [{
                       index: 0,
-                      id: 'call_forced_1',
+                      id: 'call_retry_1',
                       type: 'function',
                       function: {
                         name: 'apply_schema_patch',
@@ -271,9 +291,10 @@ test('chatCompletion executes forced apply_schema_patch retry when model returns
     schema
   });
 
-  assert.equal(callCount, 2, 'Must have executed a forced tool call retry');
-  assert.ok(forcedPayloadCaptured?.tool_choice, 'Must specify tool_choice for apply_schema_patch');
-  assert.equal(forcedPayloadCaptured.tool_choice.function.name, 'apply_schema_patch');
+  assert.equal(callCount, 2, 'Must have executed a tool invocation follow-up retry');
+  assert.equal(retryPayloadCaptured?.tool_choice, undefined, 'Must not force invalid tool_choice that crashes models with thinking enabled');
+  const retryLastMsg = retryPayloadCaptured.messages[retryPayloadCaptured.messages.length - 1];
+  assert.match(retryLastMsg.content, /Textual unfulfilled claims of anything are forbidden/i);
 
   assert.equal(result.type, 'schema_patch');
   assert.ok(result.schema, 'Must return patched schema');
