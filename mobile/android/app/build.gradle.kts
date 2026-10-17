@@ -37,7 +37,7 @@ android {
         applicationId = "ai.ctrlb.mobile"
         minSdk = 31
         targetSdk = 37
-        versionCode = 27
+        versionCode = 28
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         val backendUrl = providers.gradleProperty("TRIMM_BACKEND_URL")
@@ -154,7 +154,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
 
     // RevenueCat In-App Purchases
-    implementation("com.revenuecat.purchases:purchases:8.12.2")
+    implementation("com.revenuecat.purchases:purchases:9.22.0")
 
     // OkHttp & SSE
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
