@@ -74,8 +74,8 @@ const SFX_KEYWORDS = {
 
 class AudioCatalogueService {
   constructor(options = {}) {
-    const defaultOrigin = process.env.BACKEND_URL || (process.env.NODE_ENV === 'production' ? 'https://trimm.fly.dev' : 'https://trimm.fly.dev');
-    this.baseUrl = (options.baseUrl || process.env.AUDIO_BASE_URL || `${defaultOrigin}/v1/audio/assets`).replace(/\/+$/, '');
+    const defaultCdn = 'https://gahrfsmpnakrjmvhikzf.supabase.co/storage/v1/object/public/trimm-audio-catalogue';
+    this.baseUrl = (options.baseUrl || process.env.AUDIO_BASE_URL || defaultCdn).replace(/\/+$/, '');
     this.assetsDir = this._resolveAssetsDir(options.assetsDir);
     this.cataloguePath = this._resolveCataloguePath(options.cataloguePath);
 
@@ -384,13 +384,13 @@ class AudioCatalogueService {
       return searchResults[0]?.url || null;
     }
 
-    // If starts with /v1/audio/assets or /assets/audio, prepend origin if baseUrl is absolute
+    // If starts with /v1/audio/assets or /assets/audio, map to canonical baseUrl
     if (src.startsWith('/')) {
-      if (this.baseUrl.startsWith('http://') || this.baseUrl.startsWith('https://')) {
-        const origin = new URL(this.baseUrl).origin;
-        return `${origin}${src}`;
-      }
-      return src;
+      const cleanRel = src
+        .replace(/^\/v1\/audio\/assets\/?/, '')
+        .replace(/^\/assets\/audio\/?/, '')
+        .replace(/^\//, '');
+      return `${this.baseUrl}/${cleanRel}`;
     }
 
     // Fallback: check if src is a known mood or category
