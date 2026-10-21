@@ -74,7 +74,8 @@ const SFX_KEYWORDS = {
 
 class AudioCatalogueService {
   constructor(options = {}) {
-    this.baseUrl = (options.baseUrl || process.env.AUDIO_BASE_URL || '/v1/audio/assets').replace(/\/+$/, '');
+    const defaultOrigin = process.env.BACKEND_URL || (process.env.NODE_ENV === 'production' ? 'https://trimm.fly.dev' : 'https://trimm.fly.dev');
+    this.baseUrl = (options.baseUrl || process.env.AUDIO_BASE_URL || `${defaultOrigin}/v1/audio/assets`).replace(/\/+$/, '');
     this.assetsDir = this._resolveAssetsDir(options.assetsDir);
     this.cataloguePath = this._resolveCataloguePath(options.cataloguePath);
 
@@ -383,8 +384,12 @@ class AudioCatalogueService {
       return searchResults[0]?.url || null;
     }
 
-    // If starts with /v1/audio/assets or /assets/audio, prepend host if needed or return
+    // If starts with /v1/audio/assets or /assets/audio, prepend origin if baseUrl is absolute
     if (src.startsWith('/')) {
+      if (this.baseUrl.startsWith('http://') || this.baseUrl.startsWith('https://')) {
+        const origin = new URL(this.baseUrl).origin;
+        return `${origin}${src}`;
+      }
       return src;
     }
 
