@@ -14,7 +14,7 @@ import { TranscriptionUploads } from './services/transcription-uploads.js';
 import { fromEnvironment as authenticationFromEnvironment } from './middleware/authentication.js';
 import { IdentityRateLimiter, auditEvent, correlationId, requireScope } from './middleware/authorization.js';
 import { createOpenAIDecisionProvider } from './services/openai-agent.js';
-import { AudioGeneration } from './services/audio-generation.js';
+import { AudioCatalogueService } from './services/audio-catalogue.js';
 import { billingService, CREDIT_COSTS } from './services/billing.js';
 
 const port = Number(process.env.PORT || 8787);
@@ -30,10 +30,11 @@ const authentication = authenticationFromEnvironment();
 const rateLimiter = new IdentityRateLimiter({ limit: Number(process.env.TRIMM_RATE_LIMIT_PER_MINUTE) || 120 });
 const agentDecisionProvider = createOpenAIDecisionProvider();
 
-const audioGeneration = new AudioGeneration();
+const audioCatalogue = new AudioCatalogueService();
 authentication.assertProductionConfigured();
 
 function policyFor(request, pathname) {
+  if (pathname.startsWith('/v1/audio/assets/')) return null;
   if (pathname.startsWith('/v1/transcribe')) return { scope: 'transcribe:create', action: request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'update' : 'create', resourceType: 'transcription' };
   if (pathname.startsWith('/v1/audio') || pathname === '/v1/chat/completion') {
     return { scope: 'plan:create', action: 'create', resourceType: 'plan' };
@@ -111,8 +112,9 @@ const server = http.createServer(async (request, response) => {
   let principal;
   const requestId = correlationId(request);
   const isWebhook = requestUrl.pathname === '/v1/billing/revenuecat-webhook';
+  const isAudioAsset = requestUrl.pathname.startsWith('/v1/audio/assets/');
 
-  if (requestUrl.pathname.startsWith('/v1/') && !isWebhook) {
+  if (requestUrl.pathname.startsWith('/v1/') && !isWebhook && !isAudioAsset) {
     const policy = policyFor(request, requestUrl.pathname);
     try {
       principal = await authentication.authenticate(request);
@@ -231,13 +233,26 @@ const server = http.createServer(async (request, response) => {
     }
   }
 
+  if (request.method === 'GET' && requestUrl.pathname.startsWith('/v1/audio/assets/')) {
+    const relPath = decodeURIComponent(requestUrl.pathname.replace(/^\/v1\/audio\/assets\//, ''));
+    return audioCatalogue.serveAudioFile(relPath, request, response);
+  }
+
+  if (request.method === 'GET' && requestUrl.pathname === '/v1/audio/search') {
+    const query = requestUrl.searchParams.get('query') || '';
+    const type = requestUrl.searchParams.get('type') || undefined;
+    const mood = requestUrl.searchParams.get('mood') || undefined;
+    const category = requestUrl.searchParams.get('category') || undefined;
+    const limit = Number(requestUrl.searchParams.get('limit')) || 5;
+    return json(response, 200, audioCatalogue.search({ query, type, mood, category, limit }));
+  }
+
   if (request.method === 'POST' && requestUrl.pathname === '/v1/audio/generate-bgm') {
     try {
       const { prompt, durationSecs, beats, isEffect, chatId } = await collect(request);
-      if (!chatId) throw Object.assign(new Error('chatId is strictly required to securely track and cleanup generated background music.'), { status: 400 });
       if (!prompt || !durationSecs) throw Object.assign(new Error('Missing prompt or durationSecs'), { status: 400 });
       await billingService.deductCredits(principal.id, CREDIT_COSTS.BGM_GENERATION, 'bgm_generation', `AI Background Music (${durationSecs}s)`, requestId);
-      return json(response, 200, await audioGeneration.generateBgm(prompt, durationSecs, isEffect, chatId));
+      return json(response, 200, await audioCatalogue.generateBgm(prompt, durationSecs, isEffect, chatId));
     } catch (error) {
       console.error('[audio-generate-bgm] request failed', { message: error?.message });
       return json(response, Number.isInteger(error?.status) ? error.status : 500, {
@@ -254,7 +269,7 @@ const server = http.createServer(async (request, response) => {
       const { prompt } = await collect(request);
       if (!prompt) throw Object.assign(new Error('Missing prompt'), { status: 400 });
       await billingService.deductCredits(principal.id, CREDIT_COSTS.SFX_FETCH, 'sfx_fetch', `Fetch SFX: ${prompt.slice(0, 30)}`, requestId);
-      return json(response, 200, await audioGeneration.fetchSfx(prompt));
+      return json(response, 200, await audioCatalogue.fetchSfx(prompt));
     } catch (error) {
       console.error('[audio-fetch-sfx] request failed', { message: error?.message });
       return json(response, Number.isInteger(error?.status) ? error.status : 500, {

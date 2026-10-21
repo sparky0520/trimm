@@ -1,9 +1,12 @@
 
 import { openaiUsage } from '../schema/model-usage.js';
 import { getAgentTools } from '../schema/agent-decision-schema.js';
+import { AudioCatalogueService } from './audio-catalogue.js';
 import OpenAI from 'openai';
 
-function mergeSchemaPatch(baseSchema, patchSchema, sources = [], removedNodeIds = []) {
+const defaultAudioCatalogue = new AudioCatalogueService();
+
+function mergeSchemaPatch(baseSchema, patchSchema, sources = [], removedNodeIds = [], audioCatalogue = defaultAudioCatalogue) {
   if (!baseSchema && !patchSchema) return null;
   const defaultSrc = sources[0]?.uri || '';
 
@@ -18,8 +21,15 @@ function mergeSchemaPatch(baseSchema, patchSchema, sources = [], removedNodeIds 
       s.timeline = s.timeline
         .filter(n => !removalSet.has(n.id))
         .map(n => {
-          if ((n.type === 'video' || n.type === 'audio') && !n.src) {
+          if (n.type === 'video' && !n.src) {
             return { ...n, src: defaultSrc };
+          }
+          if (n.type === 'audio') {
+            const durMs = (n.endMs && n.startMs) ? (n.endMs - n.startMs) : 30000;
+            const src = audioCatalogue.resolveAudioSource(n.src || 'chill_lofi', { durationMs: durMs }) || n.src;
+            const volume = n.volume ?? (durMs > 8000 ? 0.25 : 0.8);
+            const autoDuck = n.autoDuck ?? (durMs > 8000 ? true : false);
+            return { ...n, src, volume, autoDuck };
           }
           return n;
         });
@@ -84,9 +94,22 @@ function mergeSchemaPatch(baseSchema, patchSchema, sources = [], removedNodeIds 
       ...pNode,
     };
 
-    if (node.type === 'video' || node.type === 'audio') {
+    if (node.type === 'video') {
       if (!node.src) {
         node.src = prevNode.src || defaultSrc;
+      }
+    } else if (node.type === 'audio') {
+      const durMs = (node.endMs && node.startMs) ? (node.endMs - node.startMs) : 30000;
+      if (!node.src) {
+        node.src = prevNode.src || audioCatalogue.resolveAudioSource('chill_lofi', { durationMs: durMs });
+      } else {
+        node.src = audioCatalogue.resolveAudioSource(node.src, { durationMs: durMs }) || node.src;
+      }
+      if (node.volume === undefined || node.volume === null) {
+        node.volume = prevNode.volume ?? (durMs > 8000 ? 0.25 : 0.8);
+      }
+      if (node.autoDuck === undefined || node.autoDuck === null) {
+        node.autoDuck = prevNode.autoDuck ?? (durMs > 8000 ? true : false);
       }
     }
 
@@ -581,13 +604,40 @@ Applies real-time visual shader filters to the underlying video over a specific 
 - startMs & endMs: Output timeline interval where the effect is active.
 
 #### D. AudioNode (type: "audio")
-Adds background music tracks or sound effect stingers.
-- src: Audio asset URI or identifier.
-- volume: Float multiplier (1.0 = standard 100%, 0.5 = half volume, 0.2 = quiet background, 0.0 = muted, 1.5 = boosted).
-  * INCREASING volume makes the audio louder.
-  * DECREASING volume makes the audio quieter.
-- autoDuck: Boolean (true/false). When true, automatically and smoothly attenuates the background audio whenever dialogue is spoken on the main video track.
+Adds background music tracks or sound effect stingers from the built-in 531-item royalty-free CC0 catalogue.
+- src: The audio asset URI, catalogue ID (e.g. "fs659451"), shorthand ("catalogue:music:chill_lofi", "catalogue:sfx:whoosh"), or CDN URL.
+  * Always use assets from the built-in catalogue or the RECOMMENDED AUDIO ASSETS listed in project context.
+  * You can call search_audio_catalogue to find specific tracks by query, mood, category, or duration.
+- volume: Float multiplier.
+  * Background Music (BGM): Keep between 0.20 and 0.35 (default 0.25) so it sits comfortably beneath spoken dialogue.
+  * Sound Effects (SFX): Keep between 0.70 and 1.0 (default 0.80) for crisp, punchy accents.
+  * INCREASING volume makes the audio louder; DECREASING makes it quieter.
+- autoDuck: Boolean (true/false). ALWAYS set to true for background music tracks when dialogue or speech is present on the main video track.
 - startMs & endMs: Playback interval on output timeline.
+  * Background Music: Span the video timeline (startMs: 0, endMs: total duration).
+  * Sound Effects: Align startMs with visual cut points, caption entrances, punchlines, or transitions.
+
+AUDIO CATALOGUE TAXONOMY (531 CC0 MASTERED ASSETS):
+- 14 Music Moods:
+  * chill_lofi: relaxing, study, vinyl crackle, warm rhodes, mellow social video bed.
+  * upbeat_pop: bright, energetic, sunny, feel-good, modern claps and synths.
+  * cinematic_epic: orchestral trailer, building strings, dramatic percussion.
+  * emotional_piano: heartfelt, slow, tender, reflective piano and strings.
+  * energetic_electronic: EDM, future bass, synthwave, fast workout tempo.
+  * happy_playful: quirky ukulele, kids, comedy, whistle, lighthearted.
+  * corporate_inspiring: clean, motivational, business, modern presentation.
+  * vlog_acoustic: warm guitar, travel, breezy folk, easygoing afternoon.
+  * dark_moody: trap, 808s, eerie, suspense, brooding atmospheric drones.
+  * romantic_soft: wedding, intimate, delicate, tender love theme.
+  * funky_groove: funk bass, disco, stylish, danceable rhythm.
+  * ambient_calm: meditation, peaceful drone, gentle pads, serene aesthetic.
+  * indian_fusion: sitar, tabla, desi beat, modern fusion.
+  * festive_celebration: dhol drums, brass, carnival, joyful triumph.
+- 29 SFX Categories:
+  * Transitions: whoosh, swipe, riser, page_turn
+  * Hits & Impacts: impact, bass_drop, explosion, stinger
+  * UI & Feedback: click, pop, ding, shutter, typing, tick, cash, success, buzzer
+  * Emotion & Atmosphere: laugh, gasp, crowd, cartoon, sci_fi, glitch, sparkle, knock, heartbeat, splash, alarm
 
 ---
 
@@ -935,6 +985,16 @@ RECONSTRUCTED SPOKEN TEXT (WHAT THE CREATOR SAID IN THIS ROUGH TAKE):
 
 CHRONOLOGICAL SPEECH & SILENCE TIMINGS:
 ${readableTranscriptChunks.length > 0 ? readableTranscriptChunks.join('\n') : '(No speech chunks)'}
+${(() => {
+  const lastUserMsg = [...(history || [])].reverse().find(m => m.role === 'user')?.content || '';
+  const candidates = defaultAudioCatalogue.getPreflightCandidates(lastUserMsg, totalDurationMs);
+  if (!candidates || candidates.length === 0) return '';
+  return `
+RECOMMENDED AUDIO ASSETS FROM CATALOGUE (MATCHING THIS REQUEST):
+${candidates.map(c => `- [ID: ${c.id}] "${c.name}" | Type: ${c.type} | ${c.type === 'music' ? `Mood: ${c.mood}` : `Category: ${c.category}`} | Duration: ${c.duration_s}s | URL: "${c.url}"`).join('\n')}
+
+INSTRUCTION: When adding audio, call apply_schema_patch with an AudioNode setting 'src' to one of the URLs or IDs above, 'volume' (0.25 for music, 0.8 for sfx), and 'autoDuck: true' for music beds over speech.`;
+})()}
 
 ======================================================================`;
 
@@ -951,6 +1011,67 @@ ${readableTranscriptChunks.length > 0 ? readableTranscriptChunks.join('\n') : '(
       tools: true,
       onStatus
     });
+
+    const searchAudioCall = response.toolCalls.find(tc => tc.name === 'search_audio_catalogue');
+    if (searchAudioCall) {
+      const searchResults = defaultAudioCatalogue.search(searchAudioCall.args || {});
+      const searchContent = JSON.stringify(searchResults.map(r => ({
+        id: r.id,
+        name: r.name,
+        type: r.type,
+        mood: r.mood,
+        category: r.category,
+        duration_s: r.duration_s,
+        tags: r.tags,
+        url: r.url
+      })));
+
+      try {
+        const toolTurnResponse = await generate({
+          systemPolicy,
+          contents: [
+            ...contents,
+            {
+              role: 'assistant',
+              content: response.rawText || '',
+              tool_calls: [
+                {
+                  id: searchAudioCall.id,
+                  type: 'function',
+                  function: {
+                    name: 'search_audio_catalogue',
+                    arguments: JSON.stringify(searchAudioCall.args || {})
+                  }
+                }
+              ]
+            },
+            {
+              role: 'tool',
+              tool_call_id: searchAudioCall.id,
+              name: 'search_audio_catalogue',
+              content: searchContent
+            }
+          ],
+          temperature: 0.1,
+          purpose: 'execution',
+          tools: true,
+          onStatus
+        });
+
+        const followUpPatch = toolTurnResponse.toolCalls?.find(tc => tc.name === 'apply_schema_patch');
+        if (followUpPatch) {
+          const finalPatchSchema = mergeSchemaPatch(schema, followUpPatch.args.schema, sources, followUpPatch.args.removedNodeIds, defaultAudioCatalogue);
+          if (schema && schema.metadata) finalPatchSchema.metadata = schema.metadata;
+          return {
+            type: "schema_patch",
+            schema: finalPatchSchema,
+            summary: followUpPatch.args.reason || toolTurnResponse.rawText || "Applied requested audio edits"
+          };
+        }
+      } catch (searchErr) {
+        console.error('[openai-agent] Error during search_audio_catalogue tool follow-up:', searchErr);
+      }
+    }
 
     const failure = response.toolCalls.find(tc => tc.name === 'finish_without_proposal');
     if (failure) {

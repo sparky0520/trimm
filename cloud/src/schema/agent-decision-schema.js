@@ -134,10 +134,48 @@ const FINISH_WITHOUT_PROPOSAL_TOOL = Object.freeze({
   parameters: { type: 'object', additionalProperties: false, required: ['reason'], properties: { reason: { type: 'string' } } },
 });
 
+const SEARCH_AUDIO_CATALOGUE_TOOL = Object.freeze({
+  name: 'search_audio_catalogue',
+  description: 'Search the built-in library of 531 CC0 music tracks and sound effects by mood, category, duration, tags, or descriptive keywords. Use this to find the best background music beds or sound effects to place on the video timeline.',
+  parameters: {
+    type: 'object',
+    required: ['type'],
+    additionalProperties: false,
+    properties: {
+      type: { type: 'string', enum: ['music', 'sfx'], description: '"music" for background music beds, or "sfx" for sound effects.' },
+      mood: {
+        type: 'string',
+        enum: [
+          'ambient_calm', 'chill_lofi', 'cinematic_epic', 'corporate_inspiring',
+          'dark_moody', 'emotional_piano', 'energetic_electronic', 'festive_celebration',
+          'funky_groove', 'happy_playful', 'indian_fusion', 'romantic_soft',
+          'upbeat_pop', 'vlog_acoustic'
+        ],
+        description: 'For music: specific mood category.'
+      },
+      category: {
+        type: 'string',
+        enum: [
+          'whoosh', 'swipe', 'riser', 'page_turn',
+          'impact', 'bass_drop', 'explosion', 'stinger',
+          'click', 'pop', 'ding', 'shutter', 'typing', 'tick', 'cash', 'success', 'buzzer',
+          'laugh', 'gasp', 'crowd', 'cartoon', 'sci_fi', 'glitch', 'sparkle',
+          'knock', 'heartbeat', 'splash', 'alarm'
+        ],
+        description: 'For sfx: specific sound effect category.'
+      },
+      query: { type: 'string', description: 'Search keywords or description (e.g. "warm guitar", "camera shutter", "punchy bass").' },
+      maxDurationS: { type: 'number', description: 'Optional maximum duration in seconds.' },
+      limit: { type: 'integer', description: 'Maximum number of items to return (1-10, default 5).' }
+    }
+  }
+});
+
 const getAgentTools = () => {
   return Object.freeze([
     APPLY_SCHEMA_PATCH_TOOL,
     PROVIDE_SCRIPT_ADVICE_TOOL,
+    SEARCH_AUDIO_CATALOGUE_TOOL,
     ASK_USER_QUESTION_TOOL, 
     FINISH_WITHOUT_PROPOSAL_TOOL,
   ]);
@@ -147,6 +185,7 @@ export {
   getAgentTools,
   APPLY_SCHEMA_PATCH_TOOL,
   PROVIDE_SCRIPT_ADVICE_TOOL,
+  SEARCH_AUDIO_CATALOGUE_TOOL,
   ASK_USER_QUESTION_TOOL,
   FINISH_WITHOUT_PROPOSAL_TOOL,
 };
