@@ -88,6 +88,29 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return schema
     }
 
+    private fun healCompositionSchema(project: MobileProject, schema: CompositionSchema): Pair<CompositionSchema, Boolean> {
+        var modified = false
+        val ordered = project.orderedSources
+        if (ordered.isEmpty()) return schema to false
+
+        val updatedTimeline = schema.timeline.mapIndexed { index, node ->
+            if (node is TimelineNode.Video && node.src.isBlank()) {
+                modified = true
+                val videoIndex = schema.timeline.take(index + 1).count { it is TimelineNode.Video } - 1
+                val assignedSrc = ordered.getOrNull(videoIndex % ordered.size)?.uri ?: project.source.uri
+                node.copy(src = assignedSrc)
+            } else {
+                node
+            }
+        }
+
+        return if (modified) {
+            schema.copy(timeline = updatedTimeline) to true
+        } else {
+            schema to false
+        }
+    }
+
     init {
         viewModelScope.launch {
             val prefs = store.loadCreatorPreferences()
@@ -257,13 +280,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             val sanitizedSchema = loadedSchema?.let { sanitizeUnrequestedTransitions(loadedMessages, it) }
+            val healedSchema = sanitizedSchema?.let { healCompositionSchema(activeProject, it).first }
 
             mutable.update {
                 it.copy(
                     project = activeProject,
                     sources = activeProject.orderedSources,
                     messages = loadedMessages,
-                    compositionSchema = sanitizedSchema,
+                    compositionSchema = healedSchema,
                     isSchemaCorrupted = isCorrupted,
                     errorMessage = null,
                     jobMessage = null,
@@ -271,7 +295,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
 
-            sanitizedSchema?.let { schema ->
+            healedSchema?.let { schema ->
                 val prevRatio = schema.settings.aspectRatio
                 normalizeSchemaAspectRatio(activeProject, schema)
                 if (schema != loadedSchema || schema.settings.aspectRatio != prevRatio) {
@@ -378,30 +402,59 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 if (BuildConfig.TRANSCRIPTION_URL.isNotBlank()) {
                     val client = TranscriptionClient(BuildConfig.TRANSCRIPTION_URL, AuthTokenProvider::currentToken)
                     val transcriptionRoot = File(context.cacheDir, "transcription").apply { mkdirs() }
-                    val audioFile = File(transcriptionRoot, "${firstSource.fingerprint}.mp4")
-                    try {
-                        if (firstSource.hasAudio) {
-                            mutable.update { it.copy(jobMessage = "Extracting audio…") }
-                            runCatching {
-                                AndroidDerivativeWriter(context).write(
-                                    SelectiveDerivativeType.AUDIO,
-                                    firstSource,
-                                    TimeRange(0, firstSource.durationMs),
-                                    null,
-                                    "audio/mp4",
-                                    audioFile
-                                )
+                    val allTranscribedWords = mutableListOf<TranscriptWord>()
+                    var currentOffset = 0L
+
+                    for ((idx, source) in project.orderedSources.withIndex()) {
+                        val audioFile = File(transcriptionRoot, "${source.fingerprint}.mp4")
+                        try {
+                            if (source.hasAudio) {
+                                val extractMsg = if (project.orderedSources.size > 1) {
+                                    "Extracting audio (${idx + 1}/${project.orderedSources.size})…"
+                                } else {
+                                    "Extracting audio…"
+                                }
+                                mutable.update { it.copy(jobMessage = extractMsg) }
+                                runCatching {
+                                    AndroidDerivativeWriter(context).write(
+                                        SelectiveDerivativeType.AUDIO,
+                                        source,
+                                        TimeRange(0, source.durationMs),
+                                        null,
+                                        "audio/mp4",
+                                        audioFile
+                                    )
+                                }
                             }
+                            val transcribeMsg = if (project.orderedSources.size > 1) {
+                                "Transcribing audio (${idx + 1}/${project.orderedSources.size})…"
+                            } else {
+                                "Transcribing audio…"
+                            }
+                            mutable.update { it.copy(jobMessage = transcribeMsg) }
+                            val words = if (audioFile.exists() && audioFile.length() > 0) {
+                                client.transcribe(audioFile)
+                            } else {
+                                client.transcribe(context, Uri.parse(source.uri))
+                            }
+                            allTranscribedWords.addAll(words.map { word ->
+                                word.copy(range = TimeRange(word.range.startMs + currentOffset, word.range.endMs + currentOffset))
+                            })
+                        } catch (sourceError: Exception) {
+                            Log.w("ChatViewModel", "Transcription failed for source ${source.fingerprint}: ${sourceError.message}", sourceError)
+                            val is402 = sourceError.message?.contains("402") == true || sourceError.message?.contains("insufficient_credits") == true
+                            if (is402) {
+                                BillingManager.setStorePresented(true)
+                                BillingManager.fetchCredits()
+                                transcriptionError = "You need more credits to complete transcription. Please top up your credits to continue."
+                                break
+                            }
+                        } finally {
+                            audioFile.delete()
                         }
-                        mutable.update { it.copy(jobMessage = "Transcribing audio…") }
-                        if (audioFile.exists() && audioFile.length() > 0) {
-                            transcribedWords = client.transcribe(audioFile)
-                        } else {
-                            transcribedWords = client.transcribe(context, Uri.parse(firstSource.uri))
-                        }
-                    } finally {
-                        audioFile.delete()
+                        currentOffset += source.durationMs
                     }
+                    transcribedWords = allTranscribedWords
                 }
             } catch (e: Exception) {
                 Log.w("ChatViewModel", "Transcription failed: ${e.message}", e)
@@ -427,22 +480,27 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 lastEnd = word.range.endMs
             }
-            val durationMs = firstSource.durationMs
-            if (durationMs - lastEnd > 500L) {
-                silences.add(TimeRangeNode(startMs = lastEnd, endMs = durationMs))
+            val totalDurationMs = project.orderedSources.sumOf { it.durationMs }
+            if (totalDurationMs - lastEnd > 500L) {
+                silences.add(TimeRangeNode(startMs = lastEnd, endMs = totalDurationMs))
             }
 
             val metadata = CompositionMetadata(transcripts = transcripts, silences = silences)
             val timeline = mutableListOf<TimelineNode>()
-            timeline.add(
-                TimelineNode.Video(
-                    id = UUID.randomUUID().toString(),
-                    src = firstSource.uri,
-                    startMs = 0L,
-                    endMs = durationMs,
-                    sourceStartMs = 0L
+            var clipTimelineStart = 0L
+            for (source in project.orderedSources) {
+                val clipTimelineEnd = clipTimelineStart + source.durationMs
+                timeline.add(
+                    TimelineNode.Video(
+                        id = UUID.randomUUID().toString(),
+                        src = source.uri,
+                        startMs = clipTimelineStart,
+                        endMs = clipTimelineEnd,
+                        sourceStartMs = 0L
+                    )
                 )
-            )
+                clipTimelineStart = clipTimelineEnd
+            }
 
             var currentCaptionText = ""
             var currentCaptionStart = 0L
@@ -659,13 +717,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                         val allMessages = mutable.value.messages + UiChatMessage(text = text, isUser = true)
                         val sanitized = sanitizeUnrequestedTransitions(allMessages, response.schema)
-                        normalizeSchemaAspectRatio(project, sanitized)
+                        val (healed, _) = healCompositionSchema(project, sanitized)
+                        normalizeSchemaAspectRatio(project, healed)
 
                         // Validate that the sanitized schema cleanly serializes and deserializes
-                        val jsonStr = defaultJson.encodeToString(CompositionSchema.serializer(), sanitized)
+                        val jsonStr = defaultJson.encodeToString(CompositionSchema.serializer(), healed)
                         defaultJson.decodeFromString<CompositionSchema>(jsonStr)
 
-                        mutable.update { it.copy(compositionSchema = sanitized) }
+                        mutable.update { it.copy(compositionSchema = healed) }
                         runCatching {
                             File(getApplication<Application>().filesDir, "${project.id}_composition.json").writeText(jsonStr)
                         }

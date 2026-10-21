@@ -45,7 +45,7 @@ const APPLY_SCHEMA_PATCH_TOOL = Object.freeze({
                 id: { type: 'string' },
                 startMs: { type: 'integer', description: 'The absolute start time in milliseconds on the final exported video timeline. INCREASING this moves the element later in the video; DECREASING this moves it earlier.' },
                 endMs: { type: 'integer', description: 'The absolute end time in milliseconds on the final exported video timeline. INCREASING this makes the element stay on screen longer (extends end); DECREASING this cuts it off sooner (shortens duration).' },
-                src: { type: 'string', description: 'Source media URI for video/audio. When modifying existing nodes, src is automatically preserved if omitted.' },
+                src: { type: 'string', description: 'Source media URI/id (matching a source in AVAILABLE SOURCES). When creating nodes in multi-clip compilations or adding new clips, src is required. For existing clips, src is preserved if omitted.' },
                 sourceStartMs: { type: 'integer', description: '(Video/Audio only) The start time in milliseconds relative to the original raw source media file. INCREASING this trims/skips more of the beginning of the raw clip (starts playing from later in the source); DECREASING this reveals earlier footage from the raw source.' },
                 transition: { type: 'string', description: 'Transition effect (e.g. "crossfade", "dip_to_black"). CRITICAL: MUST BE NULL or omitted unless the user explicitly requested transitions using words like "transition" or "crossfade". Hard cuts are standard.' },
                 text: { type: 'string' },

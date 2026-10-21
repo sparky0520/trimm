@@ -230,4 +230,36 @@ test('mergeSchemaPatch: removes nodes via removedNodeIds and deleted: true', asy
   assert.equal(merged.timeline.find(n => n.id === 'fx-1'), undefined);
 });
 
+test('mergeSchemaPatch: heals multiple video nodes without src by mapping to sources inventory', async () => {
+  const { mergeSchemaPatch } = await import('../services/openai-agent.js');
+  const baseSchema = {
+    settings: { aspectRatio: '9:16', backgroundColor: '#000000', autoEnhance: false },
+    timeline: [
+      { type: 'video', id: 'clip-0', src: 'content://media/clip1.mp4', startMs: 0, endMs: 5000 }
+    ]
+  };
+
+  const sources = [
+    { id: 'content://media/clip1.mp4', durationMs: 5000 },
+    { id: 'content://media/clip2.mp4', durationMs: 5000 },
+    { id: 'content://media/clip3.mp4', durationMs: 5000 }
+  ];
+
+  // Model emits montage of 3 clips with no src on newly added clips
+  const patchSchema = {
+    timeline: [
+      { type: 'video', id: 'v1', startMs: 0, endMs: 4000 },
+      { type: 'video', id: 'v2', startMs: 4000, endMs: 8000 },
+      { type: 'video', id: 'v3', startMs: 8000, endMs: 12000 }
+    ]
+  };
+
+  const merged = mergeSchemaPatch(baseSchema, patchSchema, sources);
+  assert.equal(merged.timeline.length, 3);
+  assert.equal(merged.timeline[0].src, 'content://media/clip1.mp4');
+  assert.equal(merged.timeline[1].src, 'content://media/clip2.mp4');
+  assert.equal(merged.timeline[2].src, 'content://media/clip3.mp4');
+});
+
+
 

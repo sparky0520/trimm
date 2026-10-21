@@ -480,7 +480,9 @@ private fun targets(itemId: String, exactId: String, legacyId: String, startMs: 
                 .setEndPositionMs(node.sourceStartMs + durationMs)
                 .build()
 
+            val nodeIndex = videoNodes.indexOf(node).takeIf { it >= 0 } ?: 0
             val uriString = node.src.takeIf { it.isNotBlank() }
+                ?: project.orderedSources.getOrNull(nodeIndex % project.orderedSources.size.coerceAtLeast(1))?.uri
                 ?: project.source?.uri
                 ?: project.orderedSources.firstOrNull()?.uri
                 ?: ""

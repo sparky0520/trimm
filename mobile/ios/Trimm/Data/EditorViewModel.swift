@@ -493,14 +493,19 @@ public class EditorViewModel {
                                 }
                                 lastEnd = word.range.endMs
                             }
-                            let durationMs = firstSource.durationMs
-                            if durationMs - lastEnd > 500 {
-                                silences.append(TimeRangeNode(startMs: lastEnd, endMs: durationMs))
+                            let totalDurationMs = updatedProject.orderedSources.reduce(0) { $0 + $1.durationMs }
+                            if totalDurationMs - lastEnd > 500 {
+                                silences.append(TimeRangeNode(startMs: lastEnd, endMs: totalDurationMs))
                             }
                             
                             let metadata = CompositionMetadata(transcripts: transcripts, silences: silences)
                             var timeline: [TimelineNode] = []
-                            timeline.append(.video(VideoNode(id: UUID().uuidString, src: firstSource.uri, startMs: 0, endMs: durationMs, sourceStartMs: 0)))
+                            var currentTimelineMs: Int64 = 0
+                            for src in updatedProject.orderedSources {
+                                let srcEndMs = currentTimelineMs + src.durationMs
+                                timeline.append(.video(VideoNode(id: UUID().uuidString, src: src.uri, startMs: currentTimelineMs, endMs: srcEndMs, sourceStartMs: 0)))
+                                currentTimelineMs = srcEndMs
+                            }
                             
                             var currentCaptionText = ""
                             var currentCaptionStart: Int64 = 0

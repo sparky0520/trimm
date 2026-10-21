@@ -6,9 +6,13 @@ import OpenAI from 'openai';
 
 const defaultAudioCatalogue = new AudioCatalogueService();
 
+function getSourceUri(source) {
+  return source?.id || source?.uri || '';
+}
+
 function mergeSchemaPatch(baseSchema, patchSchema, sources = [], removedNodeIds = [], audioCatalogue = defaultAudioCatalogue) {
   if (!baseSchema && !patchSchema) return null;
-  const defaultSrc = sources[0]?.uri || '';
+  const defaultSrc = getSourceUri(sources[0]);
 
   const removalSet = new Set([
     ...(Array.isArray(removedNodeIds) ? removedNodeIds : []),
@@ -18,11 +22,14 @@ function mergeSchemaPatch(baseSchema, patchSchema, sources = [], removedNodeIds 
   if (!baseSchema) {
     const s = patchSchema ? JSON.parse(JSON.stringify(patchSchema)) : {};
     if (Array.isArray(s.timeline)) {
+      let vidIdx = 0;
       s.timeline = s.timeline
         .filter(n => !removalSet.has(n.id))
         .map(n => {
-          if (n.type === 'video' && !n.src) {
-            return { ...n, src: defaultSrc };
+          if (n.type === 'video') {
+            const fallback = getSourceUri(sources[vidIdx]) || defaultSrc;
+            vidIdx++;
+            return { ...n, src: n.src || fallback };
           }
           if (n.type === 'audio') {
             const durMs = (n.endMs && n.startMs) ? (n.endMs - n.startMs) : 30000;
@@ -95,8 +102,20 @@ function mergeSchemaPatch(baseSchema, patchSchema, sources = [], removedNodeIds 
     };
 
     if (node.type === 'video') {
+      const videoNodeIndex = patchTimeline.slice(0, idx + 1).filter(n => n.type === 'video').length - 1;
       if (!node.src) {
-        node.src = prevNode.src || defaultSrc;
+        node.src = prevNode.src || getSourceUri(sources[videoNodeIndex]) || defaultSrc;
+      } else {
+        const matched = sources.find(s => s.id === node.src || s.fingerprint === node.src || s.uri === node.src);
+        if (matched) {
+          node.src = getSourceUri(matched);
+        } else {
+          const numMatch = typeof node.src === 'string' && node.src.match(/\b([1-9])\b/);
+          if (numMatch) {
+            const sIdx = parseInt(numMatch[1], 10) - 1;
+            if (sources[sIdx]) node.src = getSourceUri(sources[sIdx]);
+          }
+        }
       }
     } else if (node.type === 'audio') {
       const durMs = (node.endMs && node.startMs) ? (node.endMs - node.startMs) : 30000;
@@ -415,7 +434,8 @@ function createOpenAIDecisionProvider({
       readableTranscriptChunks.push(`[${startSec}s - ${endSec}s]: "${currentChunkWords.join(' ')}"`);
     }
 
-    const totalDurationMs = sources[0]?.durationMs || lastEndMs || 0;
+    const totalSourcesDurationMs = sources.reduce((acc, s) => acc + (s.durationMs || 0), 0);
+    const totalDurationMs = totalSourcesDurationMs || lastEndMs || 0;
     const totalDurationSec = (totalDurationMs / 1000).toFixed(1);
     const detectedSilences = preprocessedTranscript.filter(t => t.type === 'silence');
     const totalSilenceMs = detectedSilences.reduce((acc, s) => acc + (s.durationMs || 0), 0);
@@ -538,7 +558,8 @@ All timeline nodes MUST include:
 
 #### A. VideoNode (type: "video")
 Represents a playable segment of video footage.
-- src: The source media URI (must match one of the available sources).
+- src: The source media URI (must match the "id" or URI of one of the available sources in AVAILABLE SOURCES).
+  * CRITICAL FOR MULTI-CLIP COMPILATIONS / MONTAGES: When creating a montage or compilation from multiple clips, you MUST explicitly provide the src property on EVERY video node matching the source's id from AVAILABLE SOURCES. NEVER leave src empty or omitted when creating nodes for different sources!
 - sourceStartMs: Integer start time in milliseconds within the ORIGINAL raw source media file.
 - startMs & endMs: The playback span on the final exported output timeline.
   * Note: The duration on output (endMs - startMs) corresponds directly to the source duration played from sourceStartMs.
@@ -961,6 +982,32 @@ apply_schema_patch({
         "endMs": 2000,
         "style": { "strokeWidth": 0, "strokeColor": null, "scale": 1.3 }
       }
+    ]
+  }
+})
+
+### Example 16: Multi-Clip Compilation / Montage
+User: "Turn these three clips into a cohesive 15-second vertical montage."
+AVAILABLE SOURCES:
+[
+  { "id": "content://media/clip1.mp4", "durationMs": 6000 },
+  { "id": "content://media/clip2.mp4", "durationMs": 7000 },
+  { "id": "content://media/clip3.mp4", "durationMs": 8000 }
+]
+Action:
+1. Divide 15 seconds equally across all 3 clips (5 seconds each).
+2. Set "aspectRatio" to "9:16" for vertical.
+3. CRITICAL: Provide src for EACH VideoNode matching the source's id from AVAILABLE SOURCES.
+4. Set sequential contiguous timeline startMs and endMs without gaps.
+Tool Call:
+apply_schema_patch({
+  "reason": "Built a 15-second 9:16 vertical montage from all three clips with clean 5-second scenes.",
+  "schema": {
+    "settings": { "aspectRatio": "9:16", "backgroundColor": "#000000", "autoEnhance": false },
+    "timeline": [
+      { "type": "video", "id": "v1", "src": "content://media/clip1.mp4", "startMs": 0, "endMs": 5000, "sourceStartMs": 0, "transition": null },
+      { "type": "video", "id": "v2", "src": "content://media/clip2.mp4", "startMs": 5000, "endMs": 10000, "sourceStartMs": 500, "transition": null },
+      { "type": "video", "id": "v3", "src": "content://media/clip3.mp4", "startMs": 10000, "endMs": 15000, "sourceStartMs": 500, "transition": null }
     ]
   }
 })
