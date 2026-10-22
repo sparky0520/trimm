@@ -52,7 +52,7 @@ public class EditorViewModel {
             self.state.project = project
             self.state.sources = project.sources
             var loadedMessages: [ChatMessage] = [
-                ChatMessage(text: "Transcription complete. What would you like to edit?", isUser: false)
+                ChatMessage(text: "Analysis complete. What would you like to edit?", isUser: false)
             ]
             for turn in project.analysis.chatHistory {
                 loadedMessages.append(ChatMessage(text: turn.request, isUser: true, turnId: turn.id))
@@ -272,7 +272,7 @@ public class EditorViewModel {
         }
         
         var updatedMessages: [ChatMessage] = [
-            ChatMessage(text: "Transcription complete. What would you like to edit?", isUser: false)
+            ChatMessage(text: "Analysis complete. What would you like to edit?", isUser: false)
         ]
         for turn in remainingTurns {
             updatedMessages.append(ChatMessage(text: turn.request, isUser: true, turnId: turn.id))
@@ -549,7 +549,7 @@ public class EditorViewModel {
                             )
                             
                             self.state.messages.removeAll { $0.text.starts(with: "Analyzing video footage") || $0.text.starts(with: "Extracting audio") }
-                            self.state.messages.append(ChatMessage(text: "Video analysis complete. What would you like to edit?", isUser: false))
+                            self.state.messages.append(ChatMessage(text: "Analysis complete. What would you like to edit?", isUser: false))
                             self.state.jobMessage = nil
                             
                             let newTitle: String

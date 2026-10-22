@@ -374,6 +374,9 @@ public class VideoProcessor {
                     if let fontSize = style.fontSize { textStyle["fontSize"] = fontSize }
                     if let strokeColor = style.strokeColor { textStyle["strokeColor"] = strokeColor }
                     if let strokeWidth = style.strokeWidth { textStyle["strokeWidth"] = strokeWidth }
+                    if let backgroundColor = style.backgroundColor { textStyle["backgroundColor"] = backgroundColor }
+                    if let backgroundPadding = style.backgroundPadding { textStyle["backgroundPadding"] = backgroundPadding }
+                    if let backgroundCornerRadius = style.backgroundCornerRadius { textStyle["backgroundCornerRadius"] = backgroundCornerRadius }
                     
                     if let posX = style.posX { layout["posX"] = posX }
                     if let posY = style.posY { layout["posY"] = posY }

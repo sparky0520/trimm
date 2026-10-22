@@ -122,7 +122,7 @@ fun EditorScreen(
             val vSig = schema.timeline.filterIsInstance<TimelineNode.Video>()
                 .joinToString(";") { "${it.src}:${it.sourceStartMs}:${it.startMs}:${it.endMs}:${it.transition}" }
             val tSig = schema.timeline.filterIsInstance<TimelineNode.Text>()
-                .joinToString(";") { "${it.id}:${it.text}:${it.startMs}:${it.endMs}:${it.isVisible}:${it.style?.posY}:${it.style?.posX}:${it.style?.color}:${it.style?.fontSize}:${it.style?.strokeColor}:${it.style?.strokeWidth}:${it.style?.scale}" }
+                .joinToString(";") { "${it.id}:${it.text}:${it.startMs}:${it.endMs}:${it.isVisible}:${it.style?.posY}:${it.style?.posX}:${it.style?.color}:${it.style?.fontSize}:${it.style?.strokeColor}:${it.style?.strokeWidth}:${it.style?.scale}:${it.style?.backgroundColor}:${it.style?.backgroundPadding}:${it.style?.backgroundCornerRadius}" }
             "schema:$vSig|$tSig|${schema.settings.aspectRatio}|${schema.settings.autoEnhance}"
         } else {
             val cuts = proj.operations.filterIsInstance<RemoveRanges>().filter { it.enabled }.flatMap { it.ranges }.sortedBy { it.startMs }

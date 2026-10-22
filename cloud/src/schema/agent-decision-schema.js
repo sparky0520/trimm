@@ -59,7 +59,10 @@ const APPLY_SCHEMA_PATCH_TOOL = Object.freeze({
                     posX: { type: 'number', description: 'Normalized horizontal position from -1.0 (left) to 1.0 (right). 0.0 is center. INCREASING moves text RIGHT (towards right edge); DECREASING moves text LEFT (towards left edge).' },
                     scale: { type: 'number', description: 'Scaling multiplier for text elements. 1.0 is standard normal size. INCREASING (e.g. 1.5) enlarges/zooms in; DECREASING (e.g. 0.8) shrinks/zooms out.' },
                     strokeColor: { type: 'string' },
-                    strokeWidth: { type: 'number', description: 'Outline border stroke thickness in points. 0 is no outline; 2-4 is standard outline; 6-8 is heavy outline. INCREASING makes outline thicker; DECREASING makes outline thinner.' }
+                    strokeWidth: { type: 'number', description: 'Outline border stroke thickness in points. 0 is no outline; 2-4 is standard outline; 6-8 is heavy outline. INCREASING makes outline thicker; DECREASING makes outline thinner.' },
+                    backgroundColor: { type: 'string', description: 'Background container/badge fill color hex (e.g. "#FFFFFF" for white background, "#000000" for black box). When set, a solid rounded background rectangle is rendered behind the text. For black text inside a white background box, set color: "#000000" and backgroundColor: "#FFFFFF".' },
+                    backgroundPadding: { type: 'number', description: 'Optional padding around text inside background rectangle in points (default 24).' },
+                    backgroundCornerRadius: { type: 'number', description: 'Optional corner radius for background box in points (default 16 for rounded pill, 0 for sharp rectangular box).' }
                   }
                 },
                 segments: {

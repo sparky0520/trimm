@@ -110,23 +110,27 @@ class TextGraphicOverlay: @unchecked Sendable {
             let strokeWidth = (textStyle["strokeWidth"] as? CGFloat ?? 0.0) * scaleFactor
             let rawFontSize = textStyle["fontSize"] as? CGFloat ?? 100.0 // Default size expected by AI
             let fontSize = rawFontSize * scaleFactor
+            let bgColor = parseColor(textStyle["backgroundColor"] as? String, defaultColor: .clear)
             
             let paragraphStyle = NSMutableParagraphStyle()
             paragraphStyle.alignment = .center
             
             let font = UIFont.systemFont(ofSize: fontSize, weight: .bold)
             
-            let shadow = NSShadow()
-            shadow.shadowColor = UIColor.black
-            shadow.shadowOffset = .zero
-            shadow.shadowBlurRadius = 4.0
-            
             var attributes: [NSAttributedString.Key: Any] = [
                 .font: font,
                 .foregroundColor: textColor,
-                .shadow: shadow,
                 .paragraphStyle: paragraphStyle
             ]
+            
+            // Only add dark blur shadow if no solid background fill is present
+            if bgColor == .clear {
+                let shadow = NSShadow()
+                shadow.shadowColor = UIColor.black
+                shadow.shadowOffset = .zero
+                shadow.shadowBlurRadius = 4.0
+                attributes[.shadow] = shadow
+            }
             
             if strokeWidth > 0 {
                 attributes[.strokeColor] = strokeColor
@@ -152,6 +156,23 @@ class TextGraphicOverlay: @unchecked Sendable {
             // Allow wrapping with 40px padding
             let maxTextWidth = width - 40
             let textSize = attributedText.boundingRect(with: CGSize(width: maxTextWidth, height: .greatestFiniteMagnitude), options: .usesLineFragmentOrigin, context: nil).size
+            
+            // --- Draw Background Badge (if backgroundColor is specified) ---
+            if bgColor != .clear {
+                context.saveGState()
+                let rawPadding = textStyle["backgroundPadding"] as? CGFloat ?? 24.0
+                let padX = rawPadding * scaleFactor
+                let padY = padX * 0.6
+                let rawCorner = textStyle["backgroundCornerRadius"] as? CGFloat ?? 16.0
+                let cornerRadius = rawCorner * scaleFactor
+                let rw = textSize.width + (padX * 2)
+                let rh = textSize.height + (padY * 2)
+                let bgRect = CGRect(x: -rw / 2, y: -rh / 2, width: rw, height: rh)
+                let path = UIBezierPath(roundedRect: bgRect, cornerRadius: cornerRadius)
+                bgColor.setFill()
+                path.fill()
+                context.restoreGState()
+            }
             
             // --- Draw Background Shapes ---
             if let shapes = blueprint["backgroundShapes"] as? [[String: Any]] {

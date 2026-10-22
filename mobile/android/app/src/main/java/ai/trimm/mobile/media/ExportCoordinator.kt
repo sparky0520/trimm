@@ -609,6 +609,9 @@ private fun targets(itemId: String, exactId: String, legacyId: String, startMs: 
             s.fontSize?.let { textStyle.put("fontSize", it.toDouble()) }
             s.strokeColor?.let { textStyle.put("strokeColor", it) }
             s.strokeWidth?.let { textStyle.put("strokeWidth", it.toDouble()) }
+            s.backgroundColor?.let { textStyle.put("backgroundColor", it) }
+            s.backgroundPadding?.let { textStyle.put("backgroundPadding", it.toDouble()) }
+            s.backgroundCornerRadius?.let { textStyle.put("backgroundCornerRadius", it.toDouble()) }
             s.posX?.let { layout.put("posX", it.toDouble()) }
             s.posY?.let { layout.put("posY", it.toDouble()) }
             s.scale?.let { layout.put("scale", it.toDouble()) }

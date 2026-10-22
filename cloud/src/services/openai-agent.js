@@ -609,6 +609,10 @@ Represents on-screen subtitles, captions, lower-thirds, or title graphics.
   - strokeWidth: Outline stroke thickness in points (e.g. 0 = none, 2-4 = standard, 6-8 = heavy).
     * INCREASING strokeWidth makes the outline border thicker and punchier.
     * DECREASING strokeWidth makes the outline border thinner or removes it (0).
+  - backgroundColor: Background container fill color hex (e.g. "#FFFFFF" for white badge/box, "#000000" for black block).
+    * CRITICAL: When the user asks for a background behind text (e.g. "white background with black text", "put a white box behind the words", "black badge"), set backgroundColor (e.g. backgroundColor: "#FFFFFF") and use a high-contrast text color (e.g. color: "#000000").
+  - backgroundPadding: Optional padding around text inside background rectangle in points (default 24).
+  - backgroundCornerRadius: Optional corner radius for background box in points (default 16 for rounded pill/badge, 0 for sharp rectangular box).
 - segments: Optional array of rich text segments for highlighting individual words (e.g. karaoke style, emphasis words):
   [ { "text": "This is ", "color": "#FFFFFF" }, { "text": "INCREDIBLE", "color": "#FFFF00" } ]
 
@@ -860,7 +864,31 @@ apply_schema_patch({
   }
 })
 
-### Example 8: Trimming The Beginning of Raw Video (Increasing sourceStartMs)
+### Example 8: Adding Text with a White Background & Black Text (or Highlighting Subtitles)
+User: "Put a title saying 'IMPORTANT TIP' with a white background and black text."
+Action:
+1. Add a new TextNode with visible: true.
+2. In style, set color: "#000000" (black text), backgroundColor: "#FFFFFF" (white background container box), backgroundPadding: 24, and backgroundCornerRadius: 16.
+Tool Call:
+apply_schema_patch({
+  "reason": "Added 'IMPORTANT TIP' title overlay with a white background badge and black text.",
+  "schema": {
+    "settings": { "aspectRatio": "9:16", "backgroundColor": "#000000", "autoEnhance": false },
+    "timeline": [
+      {
+        "type": "text",
+        "id": "title-badge-1",
+        "text": "IMPORTANT TIP",
+        "startMs": 0,
+        "endMs": 3000,
+        "visible": true,
+        "style": { "color": "#000000", "backgroundColor": "#FFFFFF", "fontSize": 85, "posY": 0.25, "backgroundPadding": 24, "backgroundCornerRadius": 16 }
+      }
+    ]
+  }
+})
+
+### Example 9: Trimming The Beginning of Raw Video (Increasing sourceStartMs)
 User: "Cut off the first 2 seconds of the video, it was just dead air before I started talking."
 Action:
 1. Set sourceStartMs: 2000 on VideoNode 1 (skipping the first 2000ms of raw media).
@@ -876,7 +904,7 @@ apply_schema_patch({
   }
 })
 
-### Example 9: Adjusting Audio Volume & Softening Filter Intensity
+### Example 10: Adjusting Audio Volume & Softening Filter Intensity
 User: "The background music is way too loud, turn it down so you can hear my voice, and make the vintage filter subtle."
 Action:
 1. Set volume: 0.25 on background audio node.
@@ -893,7 +921,7 @@ apply_schema_patch({
   }
 })
 
-### Example 10: Video Analysis & Script Improvement (Consultation / Direct Response)
+### Example 11: Video Analysis & Script Improvement (Consultation / Direct Response)
 User: "Analyse my video and suggest me improvements in the script. This is just a rough first record of what I want to say, so give me a structured script based on what I said."
 Action:
 1. Recognize this as a Script Doctor & Video Content Consultation request.
@@ -905,7 +933,7 @@ Action:
    - 🔄 Before vs. After (Side-by-Side Polish)
    - ✂️ Next Steps in Trimm
 
-### Example 11: Direct Request for Structured Script from Spoken Content
+### Example 12: Direct Request for Structured Script from Spoken Content
 User: "Check the transcript and give me a structured script based on what I said in the video."
 Action:
 1. Treat spoken transcript as the raw thought process / rough take.
@@ -917,7 +945,7 @@ provide_script_advice({
   "adviceMarkdown": "### 🎯 Video & Narrative Analysis\n- **Core Intent & Message**: Introducing faster video editing.\n- **Hook & First 3 Seconds**: Cut the rambling intro.\n\n### 💡 Key Script Improvement Recommendations\n- **Hook Strategy**: Open with a relatable problem.\n\n### 📝 Structured & Polished Script (Ready to Deliver)\n- **[01. Hook (0:00 - 0:03)]**: Stop editing videos the hard way.\n- **[02. Core Value]**: Trimm lets you cut dead air instantly.\n- **[03. Call to Action]**: Try it on your next video.\n\n### 🔄 Before vs. After (Side-by-Side Polish)\n- **Rough Take**: \"Hey guys so today I want to talk about editing.\"\n- **Polished Line**: \"Editing mobile video just changed forever.\"\n\n### ✂️ Next Steps in Trimm\n- Ready for take 2 with this script, or reply to edit current footage!"
 })
 
-### Example 12: Hybrid Request (Timeline Cut + Script Suggestions)
+### Example 13: Hybrid Request (Timeline Cut + Script Suggestions)
 User: "Cut out the awkward pauses and also suggest improvements to my script."
 Action:
 1. Call apply_schema_patch to slice the video timeline and remove silences.

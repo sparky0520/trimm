@@ -74,8 +74,9 @@ class TimelineCaptionsOverlay(
             return emptyBitmap
         }
 
-        val rendered = cache.get(activeCue.id) ?: renderCue(activeCue).also {
-            cache.put(activeCue.id, it)
+        val cacheKey = "${activeCue.id}_${activeCue.blueprintJson.hashCode()}"
+        val rendered = cache.get(cacheKey) ?: renderCue(activeCue).also {
+            cache.put(cacheKey, it)
         }
         lastRenderedCaption = rendered
         return rendered.bitmap
@@ -198,6 +199,9 @@ class TimelineCaptionsOverlay(
             val tShadowColor = parseColor(textStyle?.optString("shadowColor"), Color.TRANSPARENT)
             val fontFamily = textStyle?.optString("fontFamily") ?: "plain"
             val fontSize = textStyle?.optDouble("fontSize", 100.0)?.toFloat() ?: 100f
+            val tBackgroundColor = parseColor(textStyle?.optString("backgroundColor"), Color.TRANSPARENT)
+            val bgPadding = (textStyle?.optDouble("backgroundPadding", 24.0)?.toFloat() ?: 24f) * (width / 1000f).coerceAtLeast(0.5f)
+            val bgCornerRadius = (textStyle?.optDouble("backgroundCornerRadius", 16.0)?.toFloat() ?: 16f) * (width / 1000f).coerceAtLeast(0.5f)
 
             val tf = when (fontFamily) {
                 "comic" -> ResourcesCompat.getFont(context, R.font.bangers)
@@ -215,6 +219,8 @@ class TimelineCaptionsOverlay(
 
             if (tShadowRadius > 0 && tShadowColor != Color.TRANSPARENT) {
                 textPaint.setShadowLayer(tShadowRadius, 5f, 5f, tShadowColor)
+            } else if (tBackgroundColor != Color.TRANSPARENT) {
+                textPaint.clearShadowLayer()
             } else {
                 textPaint.setShadowLayer(4f, 0f, 2f, Color.argb(200, 0, 0, 0))
             }
@@ -253,6 +259,29 @@ class TimelineCaptionsOverlay(
 
             val textHeight = staticLayout.height
             val textY = cy - (textHeight / 2f)
+
+            // Draw Background Badge (if backgroundColor is specified)
+            if (tBackgroundColor != Color.TRANSPARENT) {
+                var maxLineWidth = 0f
+                for (i in 0 until staticLayout.lineCount) {
+                    val lw = staticLayout.getLineWidth(i)
+                    if (lw > maxLineWidth) maxLineWidth = lw
+                }
+                if (maxLineWidth <= 0f) maxLineWidth = staticLayout.width.toFloat()
+
+                val padX = bgPadding
+                val padY = bgPadding * 0.6f
+                val bgLeft = (cx - (maxLineWidth / 2f) - padX).coerceAtLeast(0f)
+                val bgRight = (cx + (maxLineWidth / 2f) + padX).coerceAtMost(width.toFloat())
+                val bgTop = textY - padY
+                val bgBottom = textY + textHeight + padY
+
+                val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.FILL
+                    color = tBackgroundColor
+                }
+                canvas.drawRoundRect(bgLeft, bgTop, bgRight, bgBottom, bgCornerRadius, bgCornerRadius, bgPaint)
+            }
 
             // Text Outline
             if (tStrokeColor != Color.TRANSPARENT && tStrokeWidth > 0) {

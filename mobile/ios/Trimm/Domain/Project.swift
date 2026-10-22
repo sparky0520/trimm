@@ -510,8 +510,22 @@ public struct TextNodeStyle: Codable, Equatable {
     public var scale: CGFloat?
     public var strokeColor: String?
     public var strokeWidth: CGFloat?
+    public var backgroundColor: String?
+    public var backgroundPadding: CGFloat?
+    public var backgroundCornerRadius: CGFloat?
     
-    public init(color: String? = nil, fontSize: CGFloat? = nil, posY: CGFloat? = nil, posX: CGFloat? = nil, scale: CGFloat? = nil, strokeColor: String? = nil, strokeWidth: CGFloat? = nil) {
+    public init(
+        color: String? = nil,
+        fontSize: CGFloat? = nil,
+        posY: CGFloat? = nil,
+        posX: CGFloat? = nil,
+        scale: CGFloat? = nil,
+        strokeColor: String? = nil,
+        strokeWidth: CGFloat? = nil,
+        backgroundColor: String? = nil,
+        backgroundPadding: CGFloat? = nil,
+        backgroundCornerRadius: CGFloat? = nil
+    ) {
         self.color = color
         self.fontSize = fontSize
         self.posY = posY
@@ -519,6 +533,9 @@ public struct TextNodeStyle: Codable, Equatable {
         self.scale = scale
         self.strokeColor = strokeColor
         self.strokeWidth = strokeWidth
+        self.backgroundColor = backgroundColor
+        self.backgroundPadding = backgroundPadding
+        self.backgroundCornerRadius = backgroundCornerRadius
     }
 }
 

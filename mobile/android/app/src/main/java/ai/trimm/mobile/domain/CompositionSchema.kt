@@ -113,7 +113,10 @@ data class TextNodeStyle(
     val posX: Float? = null,
     val scale: Float? = null,
     val strokeColor: String? = null,
-    val strokeWidth: Float? = null
+    val strokeWidth: Float? = null,
+    val backgroundColor: String? = null,
+    val backgroundPadding: Float? = null,
+    val backgroundCornerRadius: Float? = null
 )
 
 data class UndoTarget(

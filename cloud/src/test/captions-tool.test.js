@@ -261,5 +261,55 @@ test('mergeSchemaPatch: heals multiple video nodes without src by mapping to sou
   assert.equal(merged.timeline[2].src, 'content://media/clip3.mp4');
 });
 
+test('apply_schema_patch tool schema supports backgroundColor, backgroundPadding, and backgroundCornerRadius on text style', () => {
+  const tools = getAgentTools();
+  const patchTool = tools.find(t => t.name === 'apply_schema_patch');
+  assert.ok(patchTool, 'apply_schema_patch tool must be present');
+  
+  const styleProps = patchTool.parameters.properties.schema.properties.timeline.items.properties.style.properties;
+  assert.ok(styleProps.backgroundColor, 'backgroundColor property must exist in text style schema');
+  assert.equal(styleProps.backgroundColor.type, 'string');
+  assert.ok(styleProps.backgroundPadding, 'backgroundPadding property must exist in text style schema');
+  assert.equal(styleProps.backgroundPadding.type, 'number');
+  assert.ok(styleProps.backgroundCornerRadius, 'backgroundCornerRadius property must exist in text style schema');
+  assert.equal(styleProps.backgroundCornerRadius.type, 'number');
+});
+
+test('mergeSchemaPatch: preserves and merges text backgroundColor, backgroundPadding, and backgroundCornerRadius', async () => {
+  const { mergeSchemaPatch } = await import('../services/openai-agent.js');
+  const baseSchema = {
+    settings: { aspectRatio: '9:16', backgroundColor: '#000000', autoEnhance: false },
+    timeline: [
+      {
+        type: 'text',
+        id: 'c1',
+        text: 'Badge text',
+        startMs: 0,
+        endMs: 2000,
+        visible: true,
+        style: { color: '#FFFFFF', fontSize: 60 }
+      }
+    ]
+  };
+
+  const patchSchema = {
+    timeline: [
+      {
+        type: 'text',
+        id: 'c1',
+        style: { color: '#000000', backgroundColor: '#FFFFFF', backgroundPadding: 24, backgroundCornerRadius: 16 }
+      }
+    ]
+  };
+
+  const merged = mergeSchemaPatch(baseSchema, patchSchema);
+  const textNode = merged.timeline.find(n => n.id === 'c1');
+  assert.equal(textNode.style.color, '#000000');
+  assert.equal(textNode.style.backgroundColor, '#FFFFFF');
+  assert.equal(textNode.style.backgroundPadding, 24);
+  assert.equal(textNode.style.backgroundCornerRadius, 16);
+  assert.equal(textNode.style.fontSize, 60);
+});
+
 
 

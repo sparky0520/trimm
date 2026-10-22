@@ -188,7 +188,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val loadedMessages = mutableListOf<UiChatMessage>()
             loadedMessages.add(
                 UiChatMessage(
-                    text = "Transcription complete. What would you like to edit?",
+                    text = "Analysis complete. What would you like to edit?",
                     isUser = false
                 )
             )
@@ -258,7 +258,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 loadedMessages.clear()
                 loadedMessages.add(
                     UiChatMessage(
-                        text = "Transcription complete. What would you like to edit?",
+                        text = "Analysis complete. What would you like to edit?",
                         isUser = false
                     )
                 )
@@ -696,7 +696,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 } + if (transcriptionError != null) {
                     listOf(UiChatMessage(text = transcriptionError, isUser = false))
                 } else {
-                    listOf(UiChatMessage(text = "Video analysis complete. What would you like to edit?", isUser = false))
+                    listOf(UiChatMessage(text = "Analysis complete. What would you like to edit?", isUser = false))
                 }
                 state.copy(
                     project = projectWithSnapshot,
@@ -1056,7 +1056,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val updatedMessages = mutableListOf<UiChatMessage>()
-        updatedMessages.add(UiChatMessage(text = "Transcription complete. What would you like to edit?", isUser = false))
+        updatedMessages.add(UiChatMessage(text = "Analysis complete. What would you like to edit?", isUser = false))
         for (turn in remainingTurns) {
             updatedMessages.add(UiChatMessage(text = turn.request, isUser = true, turnId = turn.id))
             updatedMessages.add(UiChatMessage(text = turn.response, isUser = false, turnId = turn.id))
