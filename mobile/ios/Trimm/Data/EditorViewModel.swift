@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import AVFoundation
 import Photos
+import UIKit
 
 @Observable
 @MainActor
@@ -390,6 +391,90 @@ public class EditorViewModel {
         state.isProcessing = false
     }
     
+    private func calculateSamplingTimestamps(durationMs: Int64) -> [Int64] {
+        if durationMs <= 0 { return [] }
+        if durationMs <= 2500 {
+            return Array(Set([200, durationMs / 2, max(300, durationMs - 200)])).sorted()
+        }
+        if durationMs <= 6000 {
+            let count: Int64 = 4
+            let step = durationMs / (count + 1)
+            return (1...count).map { $0 * step }
+        }
+        if durationMs <= 15000 {
+            var list = [Int64]()
+            var t: Int64 = 500
+            while t < durationMs - 400 && list.count < 7 {
+                list.append(t)
+                t += 1800
+            }
+            return list
+        }
+        let count: Int64 = 7
+        let step = durationMs / (count + 1)
+        return (1...count).map { $0 * step }
+    }
+    
+    private func ensureVisualProfiles(project: MobileProject) async -> [String: VisualSourceProfile] {
+        var visualProfiles = project.analysis.visualProfiles
+        let missingSources = project.orderedSources.filter { visualProfiles[$0.fingerprint] == nil }
+        if missingSources.isEmpty { return visualProfiles }
+        
+        var visualRequests: [VisualSourceRequest] = []
+        
+        for (idx, source) in missingSources.enumerated() {
+            let progressMsg = missingSources.count > 1
+                ? "Analyzing video (2/2: Scanning visual scenes \(idx + 1)/\(missingSources.count))…"
+                : "Analyzing video (2/2: Scanning visual scenes)…"
+            await MainActor.run { state.jobMessage = progressMsg }
+            
+            guard let url = source.resolvedUrl else { continue }
+            let asset = AVURLAsset(url: url)
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: 640, height: 640)
+            generator.requestedTimeToleranceBefore = .zero
+            generator.requestedTimeToleranceAfter = .zero
+            
+            let timestamps = calculateSamplingTimestamps(durationMs: source.durationMs)
+            var framePayloads: [VisualFramePayload] = []
+            
+            for atMs in timestamps {
+                let cmTime = CMTime(value: CMTimeValue(atMs), timescale: 1000)
+                do {
+                    let cgImage = try generator.copyCGImage(at: cmTime, actualTime: nil)
+                    let uiImage = UIImage(cgImage: cgImage)
+                    if let jpegData = uiImage.jpegData(compressionQuality: 0.8) {
+                        let base64 = jpegData.base64EncodedString()
+                        framePayloads.append(VisualFramePayload(atMs: atMs, base64: base64, mimeType: "image/jpeg"))
+                    }
+                } catch {
+                    print("Failed to extract frame at \(atMs)ms for \(source.fingerprint): \(error)")
+                }
+            }
+            
+            if !framePayloads.isEmpty {
+                visualRequests.append(VisualSourceRequest(fingerprint: source.fingerprint, durationMs: source.durationMs, frames: framePayloads))
+            }
+        }
+        
+        if !visualRequests.isEmpty {
+            await MainActor.run { state.jobMessage = "Analyzing video (2/2: AI scene understanding)…" }
+            let totalFrames = visualRequests.reduce(0) { $0 + $1.frames.count }
+            print("Requesting visual scene analysis for \(visualRequests.count) sources (\(totalFrames) frames total)")
+            do {
+                let analyzed = try await ChatRepository.shared.analyzeVisuals(sources: visualRequests)
+                for (k, v) in analyzed {
+                    visualProfiles[k] = v
+                }
+            } catch {
+                print("Visual analysis failed: \(error)")
+            }
+        }
+        
+        return visualProfiles
+    }
+    
     public func initializeProject() {
         guard let firstSource = state.sources.first else {
             state.errorMessage = "Please import a video first."
@@ -412,13 +497,17 @@ public class EditorViewModel {
         )
         
         // Pre-flight Credit Check: Check before processing starts
-        let requiredCredits = BillingManager.shared.costs.transcriptionCost
-        if BillingManager.shared.balance < requiredCredits {
+        let transcriptionCredits = BillingManager.shared.costs.transcriptionCost
+        let estimatedFrames = project.orderedSources.reduce(0) { $0 + self.calculateSamplingTimestamps(durationMs: $1.durationMs).count }
+        let visualCredits = max(1, (estimatedFrames + 4) / 5) // 1 credit per 5 frames, min 1
+        let totalRequiredCredits = transcriptionCredits + visualCredits
+        
+        if BillingManager.shared.balance < totalRequiredCredits {
             BillingManager.shared.isStorePresented = true
             self.state.project = project
             self.state.messages = [
                 ChatMessage(
-                    text: "You need at least \(requiredCredits) credits to transcribe audio and start a new project. Please top up your credits to continue.",
+                    text: "You need at least \(totalRequiredCredits) credits to start video analysis (\(transcriptionCredits) for speech + \(visualCredits) for analyzing \(estimatedFrames) visual keyframes). Please top up your credits to continue.",
                     isUser: false
                 )
             ]
@@ -427,7 +516,8 @@ public class EditorViewModel {
         }
         
         self.state.project = project
-        self.state.messages = [ChatMessage(text: "Extracting audio and transcribing video. This may take a few moments...", isUser: false)]
+        self.state.messages = [ChatMessage(text: "Analyzing video footage (audio transcription & visual scenes). This may take a few moments...", isUser: false)]
+        self.state.jobMessage = "Analyzing video (1/2: Extracting audio)…"
         
         Task {
             await MainActor.run { state.isProcessing = true }
@@ -435,13 +525,17 @@ public class EditorViewModel {
             
             if let url = firstSource.resolvedUrl {
                 do {
+                    await MainActor.run { state.jobMessage = "Analyzing video (1/2: Transcribing speech)…" }
                     let words = try await TranscriptionService.shared.transcribe(url: url)
+                    let visualProfiles = await self.ensureVisualProfiles(project: project)
+                    
                     await MainActor.run {
                         if let currentProject = self.state.project {
                             let updatedAnalysis = Analysis(
                                 words: words,
                                 captions: currentProject.analysis.captions,
                                 speechHints: currentProject.analysis.speechHints,
+                                visualProfiles: visualProfiles,
                                 lowConfidenceFumbles: currentProject.analysis.lowConfidenceFumbles,
                                 takeGroups: currentProject.analysis.takeGroups,
                                 warnings: currentProject.analysis.warnings,
@@ -454,8 +548,9 @@ public class EditorViewModel {
                                 settledConstraints: currentProject.analysis.settledConstraints
                             )
                             
-                            self.state.messages.removeAll { $0.text == "Extracting audio and transcribing video. This may take a few moments..." }
-                            self.state.messages.append(ChatMessage(text: "Transcription complete. What would you like to edit?", isUser: false))
+                            self.state.messages.removeAll { $0.text.starts(with: "Analyzing video footage") || $0.text.starts(with: "Extracting audio") }
+                            self.state.messages.append(ChatMessage(text: "Video analysis complete. What would you like to edit?", isUser: false))
+                            self.state.jobMessage = nil
                             
                             let newTitle: String
                             if words.isEmpty {
@@ -652,8 +747,64 @@ public class EditorViewModel {
                 return
             }
             
+            let hasMissingProfiles = state.sources.contains { project.analysis.visualProfiles[$0.fingerprint] == nil }
+            let currentProfiles: [String: VisualSourceProfile]
+            if hasMissingProfiles && !state.sources.isEmpty {
+                currentProfiles = await self.ensureVisualProfiles(project: project)
+                if !currentProfiles.isEmpty {
+                    await MainActor.run {
+                        if let curr = self.state.project {
+                            let updatedAnalysis = Analysis(
+                                words: curr.analysis.words,
+                                captions: curr.analysis.captions,
+                                speechHints: curr.analysis.speechHints,
+                                visualProfiles: currentProfiles,
+                                lowConfidenceFumbles: curr.analysis.lowConfidenceFumbles,
+                                takeGroups: curr.analysis.takeGroups,
+                                warnings: curr.analysis.warnings,
+                                completedAtEpochMs: curr.analysis.completedAtEpochMs,
+                                activeTurnId: curr.analysis.activeTurnId,
+                                activeCheckpointId: curr.analysis.activeCheckpointId,
+                                editorialPlan: curr.analysis.editorialPlan,
+                                pendingProposal: curr.analysis.pendingProposal,
+                                chatHistory: curr.analysis.chatHistory,
+                                settledConstraints: curr.analysis.settledConstraints
+                            )
+                            let updated = MobileProject(
+                                schemaVersion: curr.schemaVersion,
+                                id: curr.id,
+                                title: curr.title,
+                                source: curr.source,
+                                sources: curr.sources,
+                                proxyUri: curr.proxyUri,
+                                preferences: curr.preferences,
+                                analysis: updatedAnalysis,
+                                evidenceGraphs: curr.evidenceGraphs,
+                                operations: curr.operations,
+                                undo: curr.undo,
+                                redo: curr.redo,
+                                export: curr.export,
+                                revision: curr.revision
+                            )
+                            self.state.project = updated
+                            Task { try? await ChatRepository.shared.syncProject(project: updated) }
+                        }
+                    }
+                }
+            } else {
+                currentProfiles = project.analysis.visualProfiles
+            }
+            
             let agentSources = state.sources.map {
-                AgentSourceInventory(id: $0.uri, fingerprint: $0.fingerprint, durationMs: $0.durationMs, width: $0.width, height: $0.height, hasAudio: $0.hasAudio)
+                AgentSourceInventory(
+                    id: $0.uri,
+                    fingerprint: $0.fingerprint,
+                    durationMs: $0.durationMs,
+                    width: $0.width,
+                    height: $0.height,
+                    hasAudio: $0.hasAudio,
+                    visual: currentProfiles[$0.fingerprint]
+                )
             }
             let transcriptWords = project.analysis.words.map {
                 AgentTranscriptWord(

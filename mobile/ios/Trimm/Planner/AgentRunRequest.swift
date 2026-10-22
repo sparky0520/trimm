@@ -35,14 +35,16 @@ public struct AgentSourceInventory: Codable, Equatable {
     public let width: Int
     public let height: Int
     public let hasAudio: Bool
+    public let visual: VisualSourceProfile?
     
-    public init(id: String, fingerprint: String, durationMs: Int64, width: Int, height: Int, hasAudio: Bool) {
+    public init(id: String, fingerprint: String, durationMs: Int64, width: Int, height: Int, hasAudio: Bool, visual: VisualSourceProfile? = nil) {
         self.id = id
         self.fingerprint = fingerprint
         self.durationMs = durationMs
         self.width = width
         self.height = height
         self.hasAudio = hasAudio
+        self.visual = visual
     }
 }
 

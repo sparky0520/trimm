@@ -19,6 +19,40 @@ public struct AgentExecuteResponse: Codable, Equatable {
     public let schema: CompositionSchema?
 }
 
+public struct VisualFramePayload: Codable, Equatable {
+    public let atMs: Int64
+    public let base64: String
+    public let mimeType: String
+    
+    public init(atMs: Int64, base64: String, mimeType: String = "image/jpeg") {
+        self.atMs = atMs
+        self.base64 = base64
+        self.mimeType = mimeType
+    }
+}
+
+public struct VisualSourceRequest: Codable, Equatable {
+    public let fingerprint: String
+    public let durationMs: Int64
+    public let frames: [VisualFramePayload]
+    
+    public init(fingerprint: String, durationMs: Int64, frames: [VisualFramePayload]) {
+        self.fingerprint = fingerprint
+        self.durationMs = durationMs
+        self.frames = frames
+    }
+}
+
+private struct VisualAnalyzeBody: Codable {
+    let sources: [VisualSourceRequest]
+}
+
+private struct VisualAnalyzeResponse: Codable {
+    let profiles: [String: VisualSourceProfile]?
+    let creditsDeducted: Int?
+    let totalFrames: Int?
+}
+
 public enum ChatRepositoryError: LocalizedError, Equatable {
     case unauthorized
     case insufficientCredits(balance: Int, required: Int)
@@ -93,6 +127,18 @@ public class ChatRepository {
             throw URLError(.badServerResponse)
         }
         return data
+    }
+    
+    public func analyzeVisuals(sources: [VisualSourceRequest]) async throws -> [String: VisualSourceProfile] {
+        guard !sources.isEmpty else { return [:] }
+        let bodyObj = VisualAnalyzeBody(sources: sources)
+        let bodyData = try JSONEncoder().encode(bodyObj)
+        let data = try await makeRequest(endpoint: "analyze/visual", method: "POST", body: bodyData)
+        let decoded = try JSONDecoder().decode(VisualAnalyzeResponse.self, from: data)
+        Task { @MainActor in
+            await BillingManager.shared.fetchCredits()
+        }
+        return decoded.profiles ?? [:]
     }
     
     public func executeAgentTask(request: AgentRunRequest, onStatus: ((String) -> Void)? = nil) async throws -> AgentExecuteResponse {
