@@ -136,10 +136,52 @@ public struct ExportSettings: Codable, Equatable {
     }
 }
 
+public struct VisualUsableRange: Codable, Equatable {
+    public let startMs: Int64
+    public let endMs: Int64
+    
+    public init(startMs: Int64 = 0, endMs: Int64 = 0) {
+        self.startMs = startMs
+        self.endMs = endMs
+    }
+}
+
+public struct VisualSourceProfile: Codable, Equatable {
+    public let summary: String
+    public let setting: String
+    public let shotScale: String
+    public let subjects: [String]
+    public let activity: String
+    public let cameraMotion: String
+    public let usableRange: VisualUsableRange?
+    public let narrativeTags: [String]
+    
+    public init(
+        summary: String = "",
+        setting: String = "other",
+        shotScale: String = "medium",
+        subjects: [String] = [],
+        activity: String = "",
+        cameraMotion: String = "static",
+        usableRange: VisualUsableRange? = nil,
+        narrativeTags: [String] = []
+    ) {
+        self.summary = summary
+        self.setting = setting
+        self.shotScale = shotScale
+        self.subjects = subjects
+        self.activity = activity
+        self.cameraMotion = cameraMotion
+        self.usableRange = usableRange
+        self.narrativeTags = narrativeTags
+    }
+}
+
 public struct Analysis: Codable, Equatable {
     public let words: [TranscriptWord]
     public let captions: [CaptionCue]
     public let speechHints: [FumbleCandidate]
+    public let visualProfiles: [String: VisualSourceProfile]
     public let lowConfidenceFumbles: [FumbleCandidate]
     public let takeGroups: [TakeGroup]
     public let warnings: [String]
@@ -151,10 +193,11 @@ public struct Analysis: Codable, Equatable {
     public let chatHistory: [EditorialConversationTurn]
     public let settledConstraints: [SettledEditorialConstraint]
     
-    public init(words: [TranscriptWord] = [], captions: [CaptionCue] = [], speechHints: [FumbleCandidate] = [], lowConfidenceFumbles: [FumbleCandidate] = [], takeGroups: [TakeGroup] = [], warnings: [String] = [], completedAtEpochMs: Int64? = nil, activeTurnId: String? = nil, activeCheckpointId: String? = nil, editorialPlan: StagedEditorialPlan? = nil, pendingProposal: PendingEditorialProposal? = nil, chatHistory: [EditorialConversationTurn] = [], settledConstraints: [SettledEditorialConstraint] = []) {
+    public init(words: [TranscriptWord] = [], captions: [CaptionCue] = [], speechHints: [FumbleCandidate] = [], visualProfiles: [String: VisualSourceProfile] = [:], lowConfidenceFumbles: [FumbleCandidate] = [], takeGroups: [TakeGroup] = [], warnings: [String] = [], completedAtEpochMs: Int64? = nil, activeTurnId: String? = nil, activeCheckpointId: String? = nil, editorialPlan: StagedEditorialPlan? = nil, pendingProposal: PendingEditorialProposal? = nil, chatHistory: [EditorialConversationTurn] = [], settledConstraints: [SettledEditorialConstraint] = []) {
         self.words = words
         self.captions = captions
         self.speechHints = speechHints
+        self.visualProfiles = visualProfiles
         self.lowConfidenceFumbles = lowConfidenceFumbles
         self.takeGroups = takeGroups
         self.warnings = warnings
@@ -246,6 +289,7 @@ public struct MobileProject: Codable, Equatable {
             words: analysis.words,
             captions: analysis.captions,
             speechHints: analysis.speechHints,
+            visualProfiles: analysis.visualProfiles,
             lowConfidenceFumbles: analysis.lowConfidenceFumbles,
             takeGroups: analysis.takeGroups,
             warnings: analysis.warnings,

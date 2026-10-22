@@ -5,7 +5,13 @@ export const CREDIT_COSTS = Object.freeze({
   BGM_GENERATION: 5,
   TRANSCRIPTION: 3,
   SFX_FETCH: 1,
+  VISUAL_ANALYSIS_FRAME_DIVISOR: 5, // 1 credit per 5 frames, minimum 1 credit
 });
+
+export function calculateVisualAnalysisCredits(frameCount) {
+  if (!frameCount || frameCount <= 0) return 0;
+  return Math.max(1, Math.ceil(frameCount / CREDIT_COSTS.VISUAL_ANALYSIS_FRAME_DIVISOR));
+}
 
 export const CREDIT_PACKAGES = Object.freeze({
   'ai.ctrlb.credits.100': { credits: 100, name: 'Starter Pack' },

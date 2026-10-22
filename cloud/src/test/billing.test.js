@@ -1,12 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BillingService, CREDIT_COSTS, CREDIT_PACKAGES } from '../services/billing.js';
+import { BillingService, CREDIT_COSTS, CREDIT_PACKAGES, calculateVisualAnalysisCredits } from '../services/billing.js';
 
 test('credit costs define required amounts for AI features', () => {
   assert.equal(CREDIT_COSTS.CHAT_COMPLETION, 2);
   assert.equal(CREDIT_COSTS.BGM_GENERATION, 5);
   assert.equal(CREDIT_COSTS.TRANSCRIPTION, 3);
   assert.equal(CREDIT_COSTS.SFX_FETCH, 1);
+  assert.equal(CREDIT_COSTS.VISUAL_ANALYSIS_FRAME_DIVISOR, 5);
+});
+
+test('calculateVisualAnalysisCredits calculates 1 credit per 5 frames with minimum 1 credit', () => {
+  assert.equal(calculateVisualAnalysisCredits(0), 0);
+  assert.equal(calculateVisualAnalysisCredits(-1), 0);
+  assert.equal(calculateVisualAnalysisCredits(1), 1);
+  assert.equal(calculateVisualAnalysisCredits(4), 1);
+  assert.equal(calculateVisualAnalysisCredits(5), 1);
+  assert.equal(calculateVisualAnalysisCredits(6), 2);
+  assert.equal(calculateVisualAnalysisCredits(10), 2);
+  assert.equal(calculateVisualAnalysisCredits(25), 5);
+  assert.equal(calculateVisualAnalysisCredits(26), 6);
 });
 
 test('credit package resolver identifies known and numbered packages', () => {

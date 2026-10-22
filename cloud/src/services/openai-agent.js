@@ -701,6 +701,19 @@ Use this reference table whenever modifying any numeric value in the schema:
 5. Respect user intent: If the user asks for trims only, DO NOT activate captions. If the user asks for captions, activate them.
 6. Only call finish_without_proposal as a last resort if the request cannot be fulfilled by any tool or edit.
 7. Only call ask_user_question if the user prompt is completely ambiguous and requires clarification before any action can be taken.
+8. EDITORIAL NARRATIVE & FILM GRAMMAR PRINCIPLES (MULTI-CLIP COMPILATIONS):
+   When arranging, compiling, or montaging multiple video clips, you MUST apply universal cinematic visual hierarchy and narrative pacing based on the visual metadata (shotScale, setting, cameraMotion, activity, usableRange) in AVAILABLE SOURCES:
+   a. Context Before Detail (Visual Hierarchy):
+      - Establish location and setting with wider shots (shotScale: "wide" or "medium") before cutting to close-up detail shots (shotScale: "close_up" or "macro"), unless intentionally starting in media res for a specific hook.
+   b. Contrast & Anti-Jump-Cut (Visual Diversity):
+      - Avoid placing identical shot scales of the same subject sequentially without significant variation in angle. Alternating scale (e.g. Wide -> Close-Up -> Medium) or subject keeps the viewer engaged.
+   c. Dynamic Pacing & Cutting on Action:
+      - Establishing shots: 3.0s - 4.5s. Detail / B-roll shots: 1.5s - 2.5s.
+      - Respect usableRange: if a clip has a camera shake or phone stabilization settle at the start, start playback from usableRange.startMs (e.g. sourceStartMs: 500).
+   d. Energy Arc & Narrative Progression:
+      - Hook/Opening: Lead with an engaging establishing scene or high-interest action.
+      - Body: Progression of action or thematic variety.
+      - Outro/Climax: Culminate on a satisfying payoff or visual resolution.
 ======================================================================
 # FEW-SHOT EXAMPLES (USAGE PATTERNS WITH EXACT JSON TOOL CALLS)
 
@@ -1016,8 +1029,22 @@ apply_schema_patch({
 ======================================================================
 # CURRENT VIDEO PROJECT CONTEXT (MEDIA, TRANSCRIPT & TIMINGS FOR THIS REQUEST)
 
-AVAILABLE SOURCES:
-${JSON.stringify(sources)}
+AVAILABLE SOURCES (WITH VISUAL CONTEXT):
+${sources.map((s, idx) => {
+  let line = `${idx + 1}. [id: "${s.id || s.uri}"] (duration: ${(s.durationMs / 1000).toFixed(1)}s)`;
+  if (s.visual) {
+    line += `\n   - Visual: ${s.visual.summary || 'N/A'}`;
+    line += `\n   - Shot: ${s.visual.shotScale || 'medium'} | Setting: ${s.visual.setting || 'other'} | Motion: ${s.visual.cameraMotion || 'static'}`;
+    if (s.visual.activity) line += `\n   - Action: ${s.visual.activity}`;
+    if (s.visual.subjects?.length) line += `\n   - Subjects: ${s.visual.subjects.join(', ')}`;
+    if (s.visual.narrativeTags?.length) line += `\n   - Tags: ${s.visual.narrativeTags.join(', ')}`;
+    if (s.visual.usableRange) line += `\n   - Safe Range: ${s.visual.usableRange.startMs}ms - ${s.visual.usableRange.endMs}ms`;
+  }
+  return line;
+}).join('\n\n')}
+
+RAW AVAILABLE SOURCES JSON:
+${JSON.stringify(sources, null, 2)}
 
 CURRENT COMPOSITION SCHEMA:
 ${JSON.stringify(promptSchema, null, 2)}

@@ -15,7 +15,8 @@ import { fromEnvironment as authenticationFromEnvironment } from './middleware/a
 import { IdentityRateLimiter, auditEvent, correlationId, requireScope } from './middleware/authorization.js';
 import { createOpenAIDecisionProvider } from './services/openai-agent.js';
 import { AudioCatalogueService } from './services/audio-catalogue.js';
-import { billingService, CREDIT_COSTS } from './services/billing.js';
+import { VisualAnalysisService } from './services/visual-analysis.js';
+import { billingService, CREDIT_COSTS, calculateVisualAnalysisCredits } from './services/billing.js';
 
 const port = Number(process.env.PORT || 8787);
 const apiKey = process.env.LLM_API_KEY;
@@ -31,12 +32,13 @@ const rateLimiter = new IdentityRateLimiter({ limit: Number(process.env.TRIMM_RA
 const agentDecisionProvider = createOpenAIDecisionProvider();
 
 const audioCatalogue = new AudioCatalogueService();
+const visualAnalysisService = new VisualAnalysisService();
 authentication.assertProductionConfigured();
 
 function policyFor(request, pathname) {
   if (pathname.startsWith('/v1/audio/assets/')) return null;
   if (pathname.startsWith('/v1/transcribe')) return { scope: 'transcribe:create', action: request.method === 'DELETE' ? 'cancel' : request.method === 'PUT' ? 'update' : 'create', resourceType: 'transcription' };
-  if (pathname.startsWith('/v1/audio') || pathname === '/v1/chat/completion') {
+  if (pathname.startsWith('/v1/audio') || pathname === '/v1/chat/completion' || pathname === '/v1/analyze/visual') {
     return { scope: 'plan:create', action: 'create', resourceType: 'plan' };
   }
   if (pathname.startsWith('/v1/billing')) {
@@ -310,6 +312,52 @@ const server = http.createServer(async (request, response) => {
         response.write(`event: error\ndata: ${JSON.stringify({ error: error?.message || 'Failed' })}\n\n`);
         return response.end();
       }
+    }
+  }
+
+  if (request.method === 'POST' && requestUrl.pathname === '/v1/analyze/visual') {
+    try {
+      const payload = await collect(request, 15 * 1024 * 1024);
+      const sources = payload?.sources || [];
+      if (!Array.isArray(sources) || sources.length === 0) {
+        return json(response, 400, { error: 'Missing or empty sources array' });
+      }
+
+      const totalFrames = sources.reduce((acc, s) => acc + (Array.isArray(s.frames) ? s.frames.length : 0), 0);
+      const requiredCredits = calculateVisualAnalysisCredits(totalFrames);
+
+      const creditCheck = await billingService.checkCredits(principal.id, requiredCredits);
+      if (!creditCheck.sufficient) {
+        return json(response, 402, {
+          error: 'You need more credits to complete visual analysis.',
+          code: 'insufficient_credits',
+          balance: creditCheck.balance,
+          required: requiredCredits,
+          totalFrames,
+        });
+      }
+
+      const profiles = await visualAnalysisService.analyzeSources(sources);
+
+      if (requiredCredits > 0) {
+        await billingService.deductCredits(
+          principal.id,
+          requiredCredits,
+          'visual_analysis',
+          `Visual scene analysis (${totalFrames} frames across ${sources.length} clips)`,
+          requestId
+        );
+      }
+
+      return json(response, 200, { profiles, creditsDeducted: requiredCredits, totalFrames });
+    } catch (error) {
+      console.error('[analyze-visual] request failed', { message: error?.message, status: error?.status, code: error?.code });
+      return json(response, Number.isInteger(error?.status) ? error.status : 500, {
+        error: error?.message || 'Visual analysis failed',
+        code: error?.code,
+        balance: error?.balance,
+        required: error?.required,
+      });
     }
   }
 

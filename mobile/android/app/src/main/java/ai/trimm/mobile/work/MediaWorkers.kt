@@ -136,7 +136,8 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : ProgressWorke
                             val display = source.displaySize()
                             AgentSourceInventory(
                                 "${source.fingerprint}-$index", source.fingerprint, source.durationMs,
-                                display.width, display.height, source.hasAudio
+                                display.width, display.height, source.hasAudio,
+                                visual = analyzed.analysis.visualProfiles[source.fingerprint]
                             )
                         },
                         transcript = sourceTranscript(analyzed.analysis.words, project.orderedSources),

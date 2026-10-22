@@ -12,6 +12,8 @@ import ai.trimm.mobile.auth.AuthTokenProvider
 import ai.trimm.mobile.network.ChatRepository
 import ai.trimm.mobile.network.ChatRepositoryException
 import ai.trimm.mobile.network.ChatSummary
+import ai.trimm.mobile.network.VisualFramePayload
+import ai.trimm.mobile.network.VisualSourceRequest
 import ai.trimm.mobile.network.supabase
 import android.app.Application
 import android.content.ContentValues
@@ -333,6 +335,112 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         initializeProject()
     }
 
+    private fun calculateSamplingTimestamps(durationMs: Long): List<Long> {
+        if (durationMs <= 0L) return emptyList()
+        if (durationMs <= 2500L) {
+            // Short clip (<= 2.5s): 3 frames (beginning, mid, end)
+            return listOf(200L, durationMs / 2, maxOf(300L, durationMs - 200L)).distinct()
+        }
+        if (durationMs <= 6000L) {
+            // 2.5s to 6s: 4-5 frames (every ~1.2s)
+            val count = 4
+            val step = durationMs / (count + 1)
+            return (1..count).map { it * step }
+        }
+        if (durationMs <= 15000L) {
+            // 6s to 15s: 5-7 frames (every ~1.8s)
+            val list = mutableListOf<Long>()
+            var t = 500L
+            while (t < durationMs - 400L && list.size < 7) {
+                list.add(t)
+                t += 1800L
+            }
+            if (list.size < 4) list.add(durationMs / 2)
+            return list.sorted().distinct()
+        }
+        // Long clip (> 15s): up to 8 evenly-spaced cinematic keyframes
+        val targetCount = 8
+        val step = durationMs / (targetCount + 1)
+        return (1..targetCount).map { it * step }
+    }
+
+    private suspend fun ensureVisualProfiles(project: MobileProject): Map<String, VisualSourceProfile> {
+        val visualProfiles = project.analysis.visualProfiles.toMutableMap()
+        val missingSources = project.orderedSources.filter { !visualProfiles.containsKey(it.fingerprint) }
+        if (missingSources.isEmpty()) return visualProfiles
+
+        val context = getApplication<Application>()
+        val visualRequests = mutableListOf<VisualSourceRequest>()
+
+        for ((idx, source) in missingSources.withIndex()) {
+            val progressMsg = if (missingSources.size > 1) {
+                "Analyzing video (2/2: Scanning visual scenes ${idx + 1}/${missingSources.size})…"
+            } else {
+                "Analyzing video (2/2: Scanning visual scenes)…"
+            }
+            mutable.update { it.copy(jobMessage = progressMsg) }
+
+            val retriever = MediaMetadataRetriever()
+            val framePayloads = mutableListOf<VisualFramePayload>()
+            try {
+                retriever.setDataSource(context, Uri.parse(source.uri))
+                val timestamps = calculateSamplingTimestamps(source.durationMs)
+                val isVertical = source.displaySize().height > source.displaySize().width
+                val dstW = if (isVertical) 360 else 640
+                val dstH = if (isVertical) 640 else 360
+
+                for (atMs in timestamps) {
+                    try {
+                        val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                            retriever.getScaledFrameAtTime(atMs * 1_000, MediaMetadataRetriever.OPTION_CLOSEST, dstW, dstH)
+                        } else {
+                            retriever.getFrameAtTime(atMs * 1_000, MediaMetadataRetriever.OPTION_CLOSEST)
+                        }
+                        if (bitmap != null) {
+                            val stream = java.io.ByteArrayOutputStream()
+                            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, stream)
+                            val bytes = stream.toByteArray()
+                            val base64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                            framePayloads.add(VisualFramePayload(atMs = atMs, base64 = base64, mimeType = "image/jpeg"))
+                            bitmap.recycle()
+                        }
+                    } catch (e: Exception) {
+                        Log.w("ChatViewModel", "Failed to extract frame at ${atMs}ms for ${source.fingerprint}: ${e.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("ChatViewModel", "MediaMetadataRetriever failed for ${source.fingerprint}: ${e.message}")
+            } finally {
+                runCatching { retriever.release() }
+            }
+
+            if (framePayloads.isNotEmpty()) {
+                visualRequests.add(
+                    VisualSourceRequest(
+                        fingerprint = source.fingerprint,
+                        durationMs = source.durationMs,
+                        frames = framePayloads
+                    )
+                )
+            }
+        }
+
+        if (visualRequests.isNotEmpty()) {
+            mutable.update { it.copy(jobMessage = "Analyzing video (2/2: AI scene understanding)…") }
+            val totalFrames = visualRequests.sumOf { it.frames.size }
+            Log.d("ChatViewModel", "Requesting visual scene analysis for ${visualRequests.size} sources ($totalFrames frames total)")
+            val analyzed = runCatching {
+                ChatRepository.shared.analyzeVisuals(visualRequests)
+            }.getOrElse {
+                Log.w("ChatViewModel", "Visual analysis failed: ${it.message}")
+                emptyMap()
+            }
+            visualProfiles.putAll(analyzed)
+        }
+
+        return visualProfiles
+    }
+
     fun initializeProject() {
         val firstSource = mutable.value.sources.firstOrNull() ?: run {
             mutable.update { it.copy(errorMessage = "Please import a video first.") }
@@ -355,12 +463,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         )
 
         // Pre-flight Credit Check: Check before any processing starts
-        val requiredCredits = BillingManager.costs.value.transcriptionCost
-        if (BillingManager.balance.value < requiredCredits) {
+        val transcriptionCredits = BillingManager.costs.value.transcriptionCost
+        val estimatedFrames = project.orderedSources.sumOf { calculateSamplingTimestamps(it.durationMs).size }
+        val visualCredits = maxOf(1, (estimatedFrames + 4) / 5) // 1 credit per 5 frames, min 1
+        val totalRequiredCredits = transcriptionCredits + visualCredits
+
+        if (BillingManager.balance.value < totalRequiredCredits) {
             BillingManager.setStorePresented(true)
             val noCreditMessages = listOf(
                 UiChatMessage(
-                    text = "You need at least $requiredCredits credits to transcribe audio and start a new project. Please top up your credits to continue.",
+                    text = "You need at least $totalRequiredCredits credits to start video analysis ($transcriptionCredits for speech + $visualCredits for analyzing $estimatedFrames visual keyframes). Please top up your credits to continue.",
                     isUser = false
                 )
             )
@@ -378,7 +490,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         val initialMessages = listOf(
             UiChatMessage(
-                text = "Extracting audio and transcribing video. This may take a few moments...",
+                text = "Analyzing video footage (audio transcription & visual scenes). This may take a few moments...",
                 isUser = false
             )
         )
@@ -388,7 +500,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 project = project,
                 messages = initialMessages,
                 isProcessing = true,
-                jobMessage = "Extracting audio…",
+                jobMessage = "Analyzing video (1/2: Extracting audio)…",
                 errorMessage = null
             )
         }
@@ -410,9 +522,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         try {
                             if (source.hasAudio) {
                                 val extractMsg = if (project.orderedSources.size > 1) {
-                                    "Extracting audio (${idx + 1}/${project.orderedSources.size})…"
+                                    "Analyzing video (1/2: Extracting audio ${idx + 1}/${project.orderedSources.size})…"
                                 } else {
-                                    "Extracting audio…"
+                                    "Analyzing video (1/2: Extracting audio)…"
                                 }
                                 mutable.update { it.copy(jobMessage = extractMsg) }
                                 runCatching {
@@ -427,9 +539,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                                 }
                             }
                             val transcribeMsg = if (project.orderedSources.size > 1) {
-                                "Transcribing audio (${idx + 1}/${project.orderedSources.size})…"
+                                "Analyzing video (1/2: Transcribing speech ${idx + 1}/${project.orderedSources.size})…"
                             } else {
-                                "Transcribing audio…"
+                                "Analyzing video (1/2: Transcribing speech)…"
                             }
                             mutable.update { it.copy(jobMessage = transcribeMsg) }
                             val words = if (audioFile.exists() && audioFile.length() > 0) {
@@ -553,8 +665,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 prefix.ifBlank { "Untitled Chat" }
             }
 
+            val visualProfiles = ensureVisualProfiles(project)
             val updatedAnalysis = Analysis(
                 words = transcribedWords,
+                visualProfiles = visualProfiles,
                 completedAtEpochMs = System.currentTimeMillis()
             )
 
@@ -578,11 +692,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
             mutable.update { state ->
                 val updatedMsgs = state.messages.filter {
-                    !it.text.startsWith("Extracting audio")
+                    !it.text.startsWith("Analyzing video footage") && !it.text.startsWith("Extracting audio")
                 } + if (transcriptionError != null) {
                     listOf(UiChatMessage(text = transcriptionError, isUser = false))
                 } else {
-                    listOf(UiChatMessage(text = "Transcription complete. What would you like to edit?", isUser = false))
+                    listOf(UiChatMessage(text = "Video analysis complete. What would you like to edit?", isUser = false))
                 }
                 state.copy(
                     project = projectWithSnapshot,
@@ -649,6 +763,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
+            val hasMissingProfiles = mutable.value.sources.any { !project.analysis.visualProfiles.containsKey(it.fingerprint) }
+            val currentProfiles = if (hasMissingProfiles && mutable.value.sources.isNotEmpty()) {
+                val resolved = ensureVisualProfiles(project)
+                if (resolved.isNotEmpty()) {
+                    val updated = project.copy(analysis = project.analysis.copy(visualProfiles = resolved))
+                    mutable.update { it.copy(project = updated) }
+                    runCatching { store.save(updated) }
+                }
+                resolved
+            } else {
+                project.analysis.visualProfiles
+            }
+
             val agentSources = mutable.value.sources.map {
                 AgentSourceInventory(
                     id = it.uri,
@@ -656,7 +783,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     durationMs = it.durationMs,
                     width = it.width,
                     height = it.height,
-                    hasAudio = it.hasAudio
+                    hasAudio = it.hasAudio,
+                    visual = currentProfiles[it.fingerprint] ?: currentProfiles[it.uri]
                 )
             }
 

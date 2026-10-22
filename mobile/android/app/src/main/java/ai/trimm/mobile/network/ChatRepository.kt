@@ -5,6 +5,7 @@ import ai.trimm.mobile.billing.BillingManager
 import ai.trimm.mobile.domain.CompositionSchema
 import ai.trimm.mobile.domain.EditInstruction
 import ai.trimm.mobile.domain.MobileProject
+import ai.trimm.mobile.domain.VisualSourceProfile
 import ai.trimm.mobile.planner.AgentRunRequest
 import ai.trimm.mobile.planner.ClarificationQuestion
 import android.content.Context
@@ -35,6 +36,30 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.util.concurrent.TimeUnit
+
+@Serializable
+data class VisualFramePayload(
+    val atMs: Long,
+    val base64: String,
+    val mimeType: String = "image/jpeg"
+)
+
+@Serializable
+data class VisualSourceRequest(
+    val fingerprint: String,
+    val durationMs: Long,
+    val frames: List<VisualFramePayload>
+)
+
+@Serializable
+data class VisualAnalysisBatchRequest(
+    val sources: List<VisualSourceRequest>
+)
+
+@Serializable
+data class VisualAnalysisBatchResponse(
+    val profiles: Map<String, VisualSourceProfile> = emptyMap()
+)
 
 @Serializable
 data class ChatSummary(
@@ -275,5 +300,61 @@ class ChatRepository {
             .filter { it.record["chat_id"]?.jsonPrimitive?.content == chatId }
             .filter { it.record["status"]?.jsonPrimitive?.content in listOf("completed", "failed") }
             .mapNotNull { it.record }
+    }
+
+    suspend fun analyzeVisuals(
+        sources: List<VisualSourceRequest>
+    ): Map<String, VisualSourceProfile> = withContext(Dispatchers.IO) {
+        if (sources.isEmpty()) return@withContext emptyMap()
+        val backendUrl = BuildConfig.PLANNER_URL.removeSuffix("/v1").trimEnd('/')
+        val url = "$backendUrl/v1/analyze/visual"
+
+        var token = runCatching { supabase.auth.currentAccessTokenOrNull() }.getOrNull()
+        if (token.isNullOrEmpty()) {
+            token = "development:anonymous"
+        }
+
+        val requestPayload = VisualAnalysisBatchRequest(sources)
+        val requestBodyJson = json.encodeToString(VisualAnalysisBatchRequest.serializer(), requestPayload)
+        val mediaType = "application/json; charset=utf-8".toMediaType()
+
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer $token")
+            .addHeader("Content-Type", "application/json")
+            .post(requestBodyJson.toRequestBody(mediaType))
+            .build()
+
+        val response = runCatching { httpClient.newCall(request).execute() }.getOrNull()
+        if (response == null || !response.isSuccessful) {
+            Log.w(TAG, "Visual analysis failed (code: ${response?.code})")
+            if (response?.code == 402) {
+                CoroutineScope(Dispatchers.Main).launch {
+                    BillingManager.setStorePresented(true)
+                    BillingManager.fetchCredits()
+                }
+            }
+            response?.close()
+            return@withContext emptyMap()
+        }
+
+        val responseBody = response.body?.string() ?: run {
+            response.close()
+            return@withContext emptyMap()
+        }
+        response.close()
+
+        // Refresh balance in background after credits deducted
+        CoroutineScope(Dispatchers.Main).launch {
+            BillingManager.fetchCredits()
+        }
+
+        try {
+            val parsed = json.decodeFromString(VisualAnalysisBatchResponse.serializer(), responseBody)
+            parsed.profiles
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to decode visual analysis response", e)
+            emptyMap()
+        }
     }
 }

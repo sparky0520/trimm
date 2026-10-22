@@ -192,10 +192,29 @@ fun List<SourceMedia>.renderSizeWithin(maxLongSide: Int, maxShortSide: Int): Dis
 
     init { require(exposure in -1f..1f && temperature in -1f..1f && contrast in .75f..1.35f && saturation in .7f..1.3f && highlights in -1f..1f && shadows in -1f..1f && skinProtection in 0f..1f) }
 }
+@Serializable
+data class VisualUsableRange(
+    val startMs: Long = 0L,
+    val endMs: Long = 0L
+)
+
+@Serializable
+data class VisualSourceProfile(
+    val summary: String = "",
+    val setting: String = "other",
+    val shotScale: String = "medium",
+    val subjects: List<String> = emptyList(),
+    val activity: String = "",
+    val cameraMotion: String = "static",
+    val usableRange: VisualUsableRange? = null,
+    val narrativeTags: List<String> = emptyList()
+)
+
 @Serializable data class Analysis(
     val words: List<TranscriptWord> = emptyList(),
     val captions: List<CaptionCue> = emptyList(),
     val speechHints: List<FumbleCandidate> = emptyList(),
+    val visualProfiles: Map<String, VisualSourceProfile> = emptyMap(),
     // Retained for decoding existing projects; new analysis writes speechHints.
     val lowConfidenceFumbles: List<FumbleCandidate> = emptyList(),
     val takeGroups: List<TakeGroup> = emptyList(),

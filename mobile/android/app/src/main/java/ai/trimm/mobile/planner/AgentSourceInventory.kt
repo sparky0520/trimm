@@ -22,11 +22,14 @@ import java.net.HttpURLConnection
 import java.net.URI
 import ai.trimm.mobile.planning.RequestShapedMediaIndex
 
+import ai.trimm.mobile.domain.VisualSourceProfile
+
 @Serializable data class AgentSourceInventory(
     val id: String,
     val fingerprint: String,
     val durationMs: Long,
     val width: Int,
     val height: Int,
-    val hasAudio: Boolean
+    val hasAudio: Boolean,
+    val visual: VisualSourceProfile? = null
 )
